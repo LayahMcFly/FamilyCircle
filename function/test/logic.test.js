@@ -1055,3 +1055,17 @@ test('roles: setAgeGroup saves a valid label and clears it', async () => {
   assert.equal(row().ageGroup, '');
   assert.equal((await s.call(s.alice, { action: 'setAgeGroup', familyId: 'famA', userId: 'carol', ageGroup: 'kid' })).status, 404);
 });
+
+test('adding a parent by relation keeps the kind (same five kinds for every parent) and rejects unknown kinds', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  const add = (b) => s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', ...b });
+  const meId = () => [...s.world.tables.people.values()].find((p) => p.userId === 'alice');
+  const first = await add({ name: 'Dad', relation: 'parent', parentKind: 'adoptive', gender: 'Male' });
+  assert.equal(first.status, 200);
+  assert.deepEqual(JSON.parse(meId().parentKinds), { [first.json.personId]: 'adoptive' });
+  const second = await add({ name: 'Mom', relation: 'parent', parentKind: 'step', gender: 'Female' });
+  assert.equal(second.status, 200);
+  assert.deepEqual(JSON.parse(meId().parentKinds), { [first.json.personId]: 'adoptive', [second.json.personId]: 'step' });
+  assert.equal((await add({ name: 'X', relation: 'parent', parentKind: 'cousin' })).status, 400);
+});
