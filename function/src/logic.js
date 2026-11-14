@@ -13,6 +13,7 @@
  */
 import { Query, Permission, Role, ID } from 'node-appwrite';
 import { createChat } from './chat.js';
+import { createBoard } from './board.js';
 
 export const TABLES = {
   families: 'families',
@@ -534,9 +535,13 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
   // Family chat (channels, direct messages, roles). See chat.js and CHAT-GUIDE.md.
   const chat = createChat({ claimFile, deleteFileQuiet, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, confirmedMemberships, idOf, textOf, bad, forbidden, missing, ApiError, sdkCode, now, db, databaseId, teams, profilesTable: TABLES.profiles , fetchPreview: cfg.fetchPreview, fetchSiteInfo: cfg.fetchSiteInfo, fetchPicture: cfg.fetchPicture, httpFetch: cfg.httpFetch, livekit: cfg.livekit });
 
+  // Family calendar, chores and shopping list. See board.js.
+  const board = createBoard({ teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, textOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable: TABLES.profiles });
+
   const actions = {
     addressGet, addressSave, addressDelete, addressView,
     ...chat.actions,
+    ...board.actions,
     /** Lists the caller's confirmed, registered families. Also keeps the `family` label in sync. */
     async listFamilies({ user }) {
       const mine = await confirmedMemberships(user);
