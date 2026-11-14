@@ -1965,3 +1965,6 @@ html, body { overflow-x: clip; }
 .bd-page { padding: 0 12px; }
 .bd-page .btn svg, .bd-dialog .btn svg, .bd-record svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
 .bd-page .bd-task input[type="checkbox"] { margin-left: 2px; }
+.mention-chips { position: fixed; z-index: 89; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; font-size: .9rem; }
+.mention-chips[hidden] { display: none; }
+.mention-chips-lab { color: var(--muted); font-size: .8rem; }

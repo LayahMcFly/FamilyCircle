@@ -83,8 +83,25 @@
     var list = document.createElement('ul'), shown = [], sel = 0, open = false, at = -1;
     list.className = 'mention-list'; list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', 'People in this family'); list.hidden = true;
     ta.setAttribute('aria-autocomplete', 'list');
+    // A text box cannot colour part of its own text, so people already named show as highlighted chips just above it.
+    var chips = document.createElement('div'); chips.className = 'mention-chips'; chips.setAttribute('aria-hidden', 'true'); chips.hidden = true;
 
-    function close() { open = false; list.hidden = true; if (list.parentNode) list.parentNode.removeChild(list); ta.removeAttribute('aria-activedescendant'); }
+    function chipsOff() { chips.hidden = true; if (chips.parentNode) chips.parentNode.removeChild(chips); }
+    function chipsUpdate() {
+      if (open) return chipsOff();
+      var seen = {}, found = parse(ta.value).filter(function (p) { if (!p.m || seen[p.userId]) return false; seen[p.userId] = 1; return true; });
+      if (!found.length) return chipsOff();
+      while (chips.firstChild) chips.removeChild(chips.firstChild);
+      var lab = document.createElement('span'); lab.className = 'mention-chips-lab'; lab.textContent = 'Mentioning'; chips.appendChild(lab);
+      found.forEach(function (p) { var c = document.createElement('span'); c.className = 'mention'; c.textContent = p.m; chips.appendChild(c); });
+      if (!chips.parentNode) document.body.appendChild(chips);
+      chips.hidden = false;
+      var r = ta.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+      chips.style.left = Math.max(8, Math.min(r.left, vw - 120)) + 'px';
+      chips.style.maxWidth = Math.min(360, vw - 16) + 'px';
+      chips.style.top = Math.max(8, r.top - chips.offsetHeight - 6) + 'px';
+    }
+    function close() { open = false; list.hidden = true; if (list.parentNode) list.parentNode.removeChild(list); ta.removeAttribute('aria-activedescendant'); chipsUpdate(); }
     function place() {
       var r = ta.getBoundingClientRect(), vw = document.documentElement.clientWidth;
       var w = Math.min(320, vw - 16);
@@ -122,7 +139,7 @@
         .sort(function (a, b) { return a.name.localeCompare(b.name); }).slice(0, 6);
       if (!shown.length) return close();
       at = q.start; sel = Math.min(sel, shown.length - 1);
-      if (!open) { open = true; document.body.appendChild(list); list.hidden = false; }
+      if (!open) { open = true; chipsOff(); document.body.appendChild(list); list.hidden = false; }
       paint(); place();
     }
     function pick(n) {
@@ -134,10 +151,11 @@
       sel = 0; close();
       ta.dispatchEvent(new Event('input', { bubbles: true }));
     }
-    ta.addEventListener('input', function () { sel = 0; update(); });
+    ta.addEventListener('input', function () { sel = 0; update(); chipsUpdate(); });
     ta.addEventListener('click', update);
     ta.addEventListener('keyup', function (ev) { if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' || ev.key === 'Home' || ev.key === 'End') update(); });
-    ta.addEventListener('blur', function () { setTimeout(close, 150); });
+    ta.addEventListener('blur', function () { setTimeout(function () { close(); chipsOff(); }, 150); });
+    ta.addEventListener('focus', chipsUpdate);
     ta.addEventListener('keydown', function (ev) {
       if (!open) return;
       if (ev.key === 'ArrowDown') { ev.preventDefault(); ev.stopImmediatePropagation(); sel = (sel + 1) % shown.length; paint(); }
@@ -145,8 +163,8 @@
       else if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); ev.stopImmediatePropagation(); pick(sel); }
       else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); close(); }
     }, true);
-    window.addEventListener('resize', function () { if (open) place(); });
-    window.addEventListener('scroll', function () { if (open) place(); }, true);
+    window.addEventListener('resize', function () { if (open) place(); else if (!chips.hidden) chipsUpdate(); });
+    window.addEventListener('scroll', function () { if (open) place(); else if (!chips.hidden) chipsUpdate(); }, true);
   }
 
   window.FCMentions = { install: install, attach: attach, nodes: nodes, parse: parse, ids: ids, mentionsMe: mentionsMe };

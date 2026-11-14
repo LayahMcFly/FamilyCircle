@@ -70,6 +70,19 @@ const now = new Date().toISOString();
   await page.locator('.mention-opt').first().click();
   check('Tapping a person picks them', (await ta.inputValue()) === '@Ann Marie Cole ', await ta.inputValue());
 
+  // Highlight while typing: chips above the box
+  await page.waitForTimeout(100);
+  const chip1 = await page.$$eval('.mention-chips .mention', els => els.map(e => e.textContent));
+  check('After picking, the named person shows highlighted above the box', JSON.stringify(chip1) === JSON.stringify(['@Ann Marie Cole']), JSON.stringify(chip1));
+  const chipBox = await page.evaluate(() => { const c = document.querySelector('.mention-chips').getBoundingClientRect(), t = document.querySelector('.comment-input').getBoundingClientRect(); return { above: c.bottom <= t.top + 1, inView: c.left >= 0 && c.right <= innerWidth && c.top >= 0 }; });
+  check('The chip bar sits above the text box and inside the screen', chipBox.above && chipBox.inView, JSON.stringify(chipBox));
+  await page.screenshot({ path: path.join(OUT, 'mention-typing-390.png') });
+  await ta.fill(''); await ta.pressSequentially('hi @Ann');
+  check('While the list is open the chip bar is hidden', (await page.$('.mention-chips')) === null, '');
+  await ta.fill(''); await ta.pressSequentially('no names here');
+  check('No chips when nobody is named', (await page.$('.mention-chips')) === null, '');
+  await ta.fill(''); await ta.pressSequentially('@Ann M'); await page.locator('.mention-opt').first().click();
+
   // Posting shows the highlight
   await ta.pressSequentially('thanks'); await page.click('.comment-send'); await page.waitForTimeout(500);
   const last = await page.$$eval('.comment-body', els => { const e = els[els.length - 1]; return { text: e.textContent, m: Array.from(e.querySelectorAll('.mention')).map(x => x.textContent) }; });
