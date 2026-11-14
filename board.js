@@ -393,6 +393,7 @@
     function paint() {
       var root = B.root;
       if (!root || !root.isConnected) return;
+      var oldTabs = root.querySelector('.bd-tabs'), keep = oldTabs ? oldTabs.scrollLeft : 0, keepY = window.pageYOffset;   // the section row scrolls sideways on a phone: keep it where it was
       root.textContent = '';
       var u = unread();
       var bell = h('button', { type: 'button', class: 'btn secondary small bd-bell', 'aria-label': 'Alerts' + (u ? ', ' + u + ' new' : ''), onclick: openBell }, icon('bell'), u ? h('span', { class: 'bd-badge', text: String(u > 99 ? '99+' : u) }) : null);
@@ -402,8 +403,13 @@
         return h('button', { type: 'button', role: 'tab', class: 'bd-tab' + (on ? ' on' : ''), 'aria-selected': String(on), onclick: function () { B.tab = t[0]; paint(); } }, t[1] + (n && me().manager ? ' (' + n + ')' : ''));
       }));
       root.appendChild(tabs);
+      tabs.scrollLeft = keep;
+      var on = tabs.querySelector('.bd-tab.on');
+      if (on && (on.offsetLeft < keep || on.offsetLeft + on.offsetWidth > keep + tabs.clientWidth)) tabs.scrollLeft = Math.max(0, on.offsetLeft - 12);   // the chosen section is always in view
       if (B.tab === 'month' || B.tab === 'week' || B.tab === 'tasks') root.appendChild(filters());
-      root.appendChild(B.tab === 'month' ? monthView() : B.tab === 'week' ? weekView() : B.tab === 'tasks' ? tasksView() : B.tab === 'shop' ? shopView() : B.tab === 'groups' ? groupsView() : requestsView());
+      var body = (B.tab === 'month' ? monthView() : B.tab === 'week' ? weekView() : B.tab === 'tasks' ? tasksView() : B.tab === 'shop' ? shopView() : B.tab === 'groups' ? groupsView() : requestsView());
+      root.appendChild(body);
+      if (keepY && Math.abs(window.pageYOffset - keepY) > 2) window.scrollTo(0, keepY);
     }
 
     X.VIEWS.calendar = async function (main, token) {

@@ -115,6 +115,16 @@ async function newPage(ctx, mock, who, manager, errors) {
   check('7 tasks tab lists the task', (await page.locator('.bd-list .bd-task').count()) === 1, '');
   await page.screenshot({ path: path.join(shots, 'calendar-tasks.png') });
 
+  // the section row scrolls sideways on a phone and must not jump back when a section is chosen
+  await page.click('.bd-tab:has-text("Month")');
+  const over2 = await page.evaluate(() => { const t = document.querySelector('.bd-tabs'); t.scrollLeft = t.scrollWidth; return { sw: t.scrollWidth, cw: t.clientWidth, left: t.scrollLeft }; });
+  check('13 the section row really scrolls sideways at 390px', over2.sw > over2.cw && over2.left > 0, JSON.stringify(over2));
+  await page.click('.bd-tab:has-text("Requests")'); await page.waitForTimeout(150);
+  const after2 = await page.evaluate(() => { const t = document.querySelector('.bd-tabs'), on = t.querySelector('.bd-tab.on'), r = on.getBoundingClientRect(), tr = t.getBoundingClientRect(); return { left: t.scrollLeft, tab: on.textContent, visible: r.left >= tr.left - 1 && r.right <= tr.right + 1 }; });
+  check('13 choosing a section keeps the row where it was (no jump back to the left)', after2.left > 0, JSON.stringify(after2));
+  check('13 the chosen section stays fully in view', after2.visible, JSON.stringify(after2));
+  await page.click('.bd-tab:has-text("Groups")'); await page.waitForTimeout(150);
+  check('13 choosing another section from the scrolled row still keeps it', (await page.evaluate(() => document.querySelector('.bd-tabs').scrollLeft)) > 0, '');
   // groups (owner)
   await page.click('.bd-tab:has-text("Groups")'); await page.click('main .btn:has-text("New group")'); await page.waitForSelector('dialog[open]');
   await page.fill('dialog input[type="text"]', 'Chores'); await page.click('dialog button[type="submit"]'); await page.waitForSelector('.bd-chip.bd-group');
