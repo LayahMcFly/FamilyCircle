@@ -92,9 +92,9 @@
       return new Promise(function (res, rej) {
         var img = new Image(), u = URL.createObjectURL(file);
         img.onload = function () {
-          var k = Math.min(1, max / Math.max(img.width, img.height));
-          var c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u);
+          var side = Math.min(img.width, img.height), out = Math.min(side, max);   // always a centered square
+          var c = document.createElement('canvas'); c.width = out; c.height = out;
+          c.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, out, out); URL.revokeObjectURL(u);
           c.toBlob(function (b) { b ? res(b) : rej(new Error('image')); }, 'image/jpeg', 0.86);
         };
         img.onerror = function () { URL.revokeObjectURL(u); rej(new Error('image')); };

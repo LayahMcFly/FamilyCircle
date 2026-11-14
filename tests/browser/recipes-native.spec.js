@@ -210,6 +210,11 @@ const go = async (p, hash) => { await p.evaluate(h => { location.hash = h; }, ha
   check('8d no leftover style hints, none blocked', hintsLeft === 0, String(hintsLeft));
   // walk the steps and make a PDF
   const stepBtns = await page.locator('.cb .steps button').count();
+  await page.locator('.cb .steps button').nth(3).click(); await page.waitForSelector('.cb .pg .sheet', { timeout: 20000 });
+  const dim = await page.evaluate(() => { const e = document.querySelector('.cb .pg .sheet'); const c = getComputedStyle(e); return { pos: c.position, shadow: c.boxShadow, before: getComputedStyle(e, '::before').content, h: Math.round(e.getBoundingClientRect().height) }; });
+  check('8d preview pages are plain pages: not fixed, no dimming shadow over the screen', dim.pos === 'static' && !/\b\d{3,}px/.test(dim.shadow) && dim.h < 700, JSON.stringify(dim));
+  const dark = await page.evaluate(() => { const px = []; const e = document.elementFromPoint(20, 400); return e ? getComputedStyle(e).backgroundColor : ''; });
+  await page.locator('.cb .steps button').nth(0).click();
   check('8d the maker has its steps', stepBtns >= 4, String(stepBtns));
   for (let i = 1; i < stepBtns; i++) { await page.locator('.cb .steps button').nth(i).click(); await page.waitForTimeout(250); if (i === 2) await page.screenshot({ path: path.join(shots, 'recipes-cookbook-step3.png') }); if (i === 3) { await page.waitForTimeout(1500); await page.screenshot({ path: path.join(shots, 'recipes-cookbook-step4.png'), fullPage: true }); } }
   const forms = await page.evaluate(() => Array.from(document.querySelectorAll('.cb input, .cb select, .cb textarea')).filter(el => !['checkbox', 'radio', 'color', 'hidden', 'file'].includes(el.type)).map(el => { const c = getComputedStyle(el); return (c.borderTopWidth === '0px' && c.backgroundColor === 'rgba(0, 0, 0, 0)') ? el.tagName + '.' + el.type + '#' + el.id + '[' + (el.getAttribute('data-set') || el.getAttribute('data-name') || '') + ']' + ' ' + c.borderTopStyle : ''; }).filter(Boolean));

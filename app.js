@@ -1227,7 +1227,11 @@
     var rows = await listAllRows('profiles', [Query.equal('familyId', [fid]), Query.orderAsc('$createdAt')], 500);
     if (gen !== S.famGen) return;
     var m = new Map();
-    rows.forEach(function (r) { m.set(r.userId, r); });
+    var tn = new Map();   // a name given in the family tree wins over the profile name wherever a person is shown
+    try { (await listAllRows('people', [Query.equal('familyId', [fid])], 400)).forEach(function (x) { if (x.userId && x.name) tn.set(x.userId, String(x.name)); }); } catch (e) { /* tree not readable: keep profile names */ }
+    if (gen !== S.famGen) return;
+    rows.forEach(function (r) { var t = tn.get(r.userId); if (t && t !== r.displayName) { r.profileName = r.displayName; r.displayName = t; } m.set(r.userId, r); });
+    S.treeNames = tn;
     S.profiles = m; S.profilesAt = Date.now();
     S.profile = m.get(S.user.$id) || null; applyRingTheme();
   }
@@ -1641,13 +1645,24 @@
     return sel;
   }
 
+  function applyNavSide(hubSide) {
+    var a = document.querySelector('.nav .nav-swap a');
+    if (a) {
+      var want = hubSide ? 'shop' : 'shorts';
+      if (a.getAttribute('data-route') !== want) {
+        a.setAttribute('data-route', want); a.setAttribute('href', hubSide ? '#/shop' : '#/shorts');
+        clear(a); a.appendChild(icon(hubSide ? 'bag' : 'shorts')); a.appendChild(h('span', { text: hubSide ? 'Shop' : 'Shorts' }));
+      }
+    }
+    var top = document.getElementById('shop-btn'); if (top) top.hidden = !!hubSide;
+  }
   function shopEnabled() { return !!(window.FCShop && CFG.shopFunctionId && CFG.shopEnabled !== false); }
   function renderShell() {
     S.main = h('main', { id: 'main', class: 'main', tabindex: '-1' });
     var chatOn = !!(window.FCChat && CFG.chatEnabled !== false);
     var nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, h('ul', null, NAV.map(function (n) {
       if (n.id === 'create' && chatOn) return h('li', { class: 'nav-create' }, window.FCChat.navItem());   // the center item of the same five: its small handle opens the quick-actions panel
-      var li = h('li', n.id === 'saved' ? { class: 'nav-saved' } : null, h('a', { href: n.href || '#/' + n.id, 'data-route': n.id }, icon(n.icon), h('span', { text: n.label })));
+      var li = h('li', n.id === 'saved' ? { class: 'nav-saved' } : n.id === 'shorts' ? { class: 'nav-swap' } : null, h('a', { href: n.href || '#/' + n.id, 'data-route': n.id }, icon(n.icon), h('span', { text: n.label })));
       return li;
     })));
     if (chatOn) window.FCChat.mountPanel();
@@ -1691,7 +1706,10 @@
     S.main.setAttribute('data-view', name || '');
     document.body.classList.remove('sheet-open', 'chat-mode');
     if (window.FCChat && name !== 'chat' && name !== 'dms') window.FCChat.stop();   // leaving chat closes its realtime connection
-    var navName = name === 'settings' ? 'profile' : (name === 'chat' || name === 'dms') ? 'create' : (name === 'tree' || name === 'shop' || name === 'orders' || name === 'recipes') ? 'hub' : name;   // Tree and Shop are Hub modules
+    // In the Hub the second bottom button is Shop (Shorts lives in the community); in the community it is Shorts and Shop sits at the top.
+    var hubSide = shopEnabled() && (name === 'hub' || name === 'tree' || name === 'shop' || name === 'orders' || name === 'recipes');
+    applyNavSide(hubSide);
+    var navName = name === 'settings' ? 'profile' : (name === 'chat' || name === 'dms') ? 'create' : name === 'shop' && hubSide ? 'shop' : (name === 'tree' || name === 'shop' || name === 'orders' || name === 'recipes') ? 'hub' : name;   // Tree, Orders and Recipes are Hub modules
     var savedBtn = document.getElementById('saved-btn');
     if (savedBtn) { if (name === 'saved') savedBtn.setAttribute('aria-current', 'page'); else savedBtn.removeAttribute('aria-current'); }
     Array.prototype.forEach.call(document.querySelectorAll('.nav [data-route]'), function (a) {
@@ -4773,9 +4791,10 @@
     var saveBtn = h('button', { class: 'btn', type: 'submit', text: 'Save profile' });
     var removeAv = h('button', { class: 'icon-del', type: 'button', 'aria-label': 'Remove picture', title: 'Remove picture' }, icon('trash'));
     async function saveProfile(extra) {
-      var r = await api('saveProfile', Object.assign({ familyId: fid, displayName: S.profile.displayName }, extra));
+      var r = await api('saveProfile', Object.assign({ familyId: fid, displayName: S.profile.profileName || S.profile.displayName }, extra));
       if (fid !== S.familyId) return;
-      S.profile = Object.assign({}, S.profile, r.profile); S.profiles.set(S.user.$id, S.profile);
+      var tnm = S.treeNames && S.treeNames.get(S.user.$id);
+      S.profile = Object.assign({}, S.profile, r.profile); if (tnm && tnm !== S.profile.displayName) { S.profile.profileName = S.profile.displayName; S.profile.displayName = tnm; } S.profiles.set(S.user.$id, S.profile);
     }
     async function useAvatar(f) {   // shared by "Choose file" and "Use a picture from a web link": adjust (crop), upload, save
       showAlert(pmsg, 'error', '');
@@ -5820,7 +5839,7 @@
           else {
             id = (await api('treeAddPerson', payload)).personId;
           }
-          close(); toast(res && res.pendingName ? 'Request sent. ' + p.name + ' will be asked to approve the new name. It stays the same until they accept.' : 'Saved.'); done(id);
+          S.profilesAt = 0; loadProfiles().catch(function () {}); close(); toast(res && res.pendingName ? 'Request sent. ' + p.name + ' will be asked to approve the new name. It stays the same until they accept.' : 'Saved.'); done(id);
         } catch (e) { showAlert(msg, 'error', errText(e)); }
       }, 'Saving…');
     } }, h('h2', { id: 'dlg-title', text: p ? 'Edit ' + p.name : (preset && preset.of ? 'Add ' + ({ parent: 'a parent', child: 'a child', partner: 'a partner', sibling: 'a sibling' }[preset.relation] || 'a relative') + ' of ' + preset.of.name : 'Add a person') }),

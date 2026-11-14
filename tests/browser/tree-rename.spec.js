@@ -135,6 +135,15 @@ async function openEdit(page, personName) {
     const { ctx, page, errors } = await open(browser, mock, '#/activity'); await page.waitForTimeout(600);
     check('table missing or failing: Activity still opens, no errors, no name entries', (await page.locator('h1:has-text("Activity")').count()) === 1 && (await page.locator('.act-name').count()) === 0 && errors.length === 0, errors.join('|')); await ctx.close(); }
 
+  // 7b. Everywhere a person is shown (feed posts here) the tree name wins over the old profile name
+  { const mock = world('u-owner', 'owner'); mock.tables.people.push(person('pm', 'Mom Jane Renamed', { userId: 'u-mom', confirmed: true }));
+    mock.tables.profiles.push(prof('u-mom', 'Parent of Leia (add their name)'));
+    mock.tables.posts = [{ $id: 'pp1', familyId: 'famA', authorId: 'u-mom', kind: 'text', body: 'hello from mom', $createdAt: '2026-11-01T10:00:00.000+00:00' }];
+    const { ctx, page } = await open(browser, mock, '#/home'); await page.waitForTimeout(900);
+    const txt = await page.locator('main').innerText();
+    check('7b feed shows the renamed tree name for the author', txt.includes('Mom Jane Renamed'), txt.slice(0, 160));
+    check('7b feed no longer shows the placeholder profile name', !txt.includes('add their name'), txt.slice(0, 160)); await ctx.close(); }
+
   // 8. Family and members shows the tree name for a member linked to their tree entry (the tree was renamed, the profile name was not)
   { const mock = world('u-owner', 'owner'); mock.tables.people.push(person('pm', 'Cara Renamed Smith', { userId: 'u-cara2', confirmed: true, birthday: '1985-04-02' }));
     mock.tables.profiles.push(prof('u-cara2', 'Old Profile Name'));
