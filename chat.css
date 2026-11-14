@@ -936,3 +936,16 @@ dialog.designer .pd-actions > .btn { margin: 0 !important; height: 42px; min-hei
 /* the "not a member" panel's Back to Hub button: one chevron icon, then the text */
 .chat-back-hub { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .chat-back-hub svg { width: 18px; height: 18px; flex: none; }
+
+/* ---------- online / last active ---------- */
+.presence { display: inline-flex; align-items: center; gap: 6px; }
+.presence[hidden] { display: none; }
+.presence .pdot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--muted, #8a8f98); opacity: .7; box-sizing: border-box; }
+.presence.is-on .pdot { background: #2e9e4f; opacity: 1; animation: fc-pulse 2s ease-out infinite; }
+.presence.is-on .ptext { color: #2e9e5b; font-weight: 600; }
+.online-dot { animation: fc-pulse 2s ease-out infinite; }
+@keyframes fc-pulse { 0% { box-shadow: 0 0 0 0 rgba(46,158,79,.55); } 70% { box-shadow: 0 0 0 7px rgba(46,158,79,0); } 100% { box-shadow: 0 0 0 0 rgba(46,158,79,0); } }
+@media (prefers-reduced-motion: reduce) { .presence.is-on .pdot, .online-dot { animation: none; } }
+.pslot:empty { display: none; }
+.hovercard { position: fixed; z-index: 90; display: flex; gap: 10px; align-items: center; max-width: 280px; padding: 10px 12px; border-radius: var(--radius, 14px); background: var(--surface, #fff); color: var(--text, inherit); border: 1px solid var(--line, rgba(0,0,0,.12)); box-shadow: 0 6px 20px rgba(0,0,0,.18); pointer-events: none; }
+.hovercard .hc-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }

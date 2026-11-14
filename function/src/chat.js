@@ -386,20 +386,23 @@ export function createChat(c) {
       return { ok: true, shown: true };
     },
 
-    /** "Online now": one row per person (convId "presence"), refreshed by a heartbeat while the chat is open and visible.
-     *  The row expires on its own (about 100 seconds), so nothing needs cleaning up. Everyone in the family can read it. */
+    /** "Online now" and "last active": one row per person (convId "presence"), refreshed by a heartbeat while the app is open and visible.
+     *  The row expires on its own (about 100 seconds); the last heartbeat time (until minus 100 seconds) is what "last active" shows.
+     *  A person who turned the status off sends hidden: true; the row then says "hidden", expires at once, and nobody sees a status for them.
+     *  Everyone in the family can read the row. */
     async chatPresence({ user, body }) {
       const ctx = await requireMember(user, body.familyId);
-      if (!softLimit('presence', user.$id, 6, 60)) return { ok: true, shown: false };
+      if (!softLimit('presence', user.$id, 6, 60)) return { ok: true, shown: false, v: 2 };
+      const hidden = body.hidden === true;
       const typingKey = `p_${ctx.familyId}_${user.$id}`;
-      const until = iso(now() + 100000);
+      const until = iso(hidden ? now() : now() + 100000), text = hidden ? 'hidden' : '';
       const ex = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]);
-      if (ex) await updateRow(T.typing, ex.$id, { until });
+      if (ex) await updateRow(T.typing, ex.$id, { until, text });
       else {
-        try { await createRow(T.typing, ID.unique(), { familyId: ctx.familyId, convId: 'presence', userId: user.$id, typingKey, text: '', until }, channelPerms(ctx.familyId)); }
-        catch (e) { if (sdkCode(e) !== 409) throw e; const again = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]); if (again) await updateRow(T.typing, again.$id, { until }); }
+        try { await createRow(T.typing, ID.unique(), { familyId: ctx.familyId, convId: 'presence', userId: user.$id, typingKey, text, until }, channelPerms(ctx.familyId)); }
+        catch (e) { if (sdkCode(e) !== 409) throw e; const again = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]); if (again) await updateRow(T.typing, again.$id, { until, text }); }
       }
-      return { ok: true, shown: true };
+      return { ok: true, shown: !hidden, v: 2 };
     },
 
     /** Calls. A call is a LiveKit room named after the conversation. Only people who can open the conversation get a pass,

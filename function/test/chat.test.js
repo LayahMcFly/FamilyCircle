@@ -427,6 +427,20 @@ test('presence: one expiring row per person, readable by the whole family', asyn
   await w.fail('zed', 'chatPresence', { familyId: 'famA' }, 403);
 });
 
+test('presence: hidden marks the row hidden and expired at once, and a later heartbeat shows it again', async () => {
+  const { w } = await setup();
+  const rows = () => [...w.world.tables.chatTyping.values()].filter((r) => r.convId === 'presence');
+  const first = await w.ok('ann', 'chatPresence', { familyId: 'famA' });
+  assert.equal(first.v, 2); assert.equal(rows()[0].text, ''); assert.ok(Date.parse(rows()[0].until) >= w.world.clock + 90000);
+  const hid = await w.ok('ann', 'chatPresence', { familyId: 'famA', hidden: true });
+  assert.equal(hid.shown, false); assert.equal(rows().length, 1); assert.equal(rows()[0].text, 'hidden'); assert.ok(Date.parse(rows()[0].until) <= w.world.clock + 60000);
+  await w.ok('ann', 'chatPresence', { familyId: 'famA' });
+  assert.equal(rows()[0].text, ''); assert.ok(Date.parse(rows()[0].until) >= w.world.clock + 90000);
+  await w.ok('ann', 'chatPresence', { familyId: 'famA', hidden: 'yes' });   // only a real true hides
+  assert.equal(rows()[0].text, '');
+  await w.fail('zed', 'chatPresence', { familyId: 'famA', hidden: true }, 403);
+});
+
 test('calls: pass only for people in the conversation, signed, and a call row for the banner', async () => {
   EXTRA_CFG.livekit = { url: 'wss://x.livekit.cloud', key: 'APIkey', secret: 'sekret' };
   try {

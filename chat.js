@@ -464,7 +464,7 @@
     if (!me && X.relationFor) X.relationFor(uid).then(function (t) { if (t) rel.textContent = t; });   // for example: Your older sister
     var ban = X.bannerFor ? X.bannerFor(uid) : null, topWrap = body;
     if (ban) { topWrap = h('div', { class: 'profile-hero has-banner in-sheet' }, ban); body.appendChild(topWrap); }   // the banner sits behind the picture and name
-    topWrap.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), rel, h('div', { class: 'small muted', text: onlineNow(uid) ? 'Online now' : 'Offline' }))));
+    topWrap.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), rel, presenceSlot(uid))));
     var acts = h('div', { class: 'pf-actions' });
     if (!me) {
       acts.appendChild(h('button', { class: 'btn', type: 'button', text: 'Message', onclick: function () { s.close(); startDm(c, uid).catch(function (e) { toast(msgOf(e)); }); } }));
@@ -674,7 +674,7 @@
       fm.forEach(function (p) {
         var on = isHere(c, p.userId);
         fmDet.appendChild(h('button', { class: 'fm-row', type: 'button', title: 'Message ' + (p.displayName || 'this person'), onclick: function () { startDm(c, p.userId).catch(function (e) { toast(msgOf(e)); }); } },
-          avWrap(c, p.userId, 'sm'), h('span', { class: 'grow clamp', text: p.displayName || 'Family member' }), h('span', { class: 'fm-state small' + (on ? ' is-on' : ' muted'), text: on ? 'Online' : 'Offline' })));
+          avWrap(c, p.userId, 'sm'), h('span', { class: 'grow clamp', text: p.displayName || 'Family member' }), (function () { var pl = presenceLine(p.userId); return h('span', { class: 'fm-state small' + (on ? ' is-on' : ' muted') }, pl || ''); })()));
       });
       sc.appendChild(fmDet);
       sc.appendChild(h('div', { class: 'row side-actions' }, h('a', { class: 'btn secondary small', href: '#/dms' }, icon('send'), ' Go to direct messages')));
@@ -706,7 +706,7 @@
     var head = h('header', { class: 'conv-head' },
       h('a', { class: 'btn secondary small only-narrow', href: c.route.mode === 'dms' ? '#/dms' : '#/chat', 'aria-label': 'Back to ' + (c.route.mode === 'dms' ? 'direct messages' : 'channels') }, icon('back')),
       dm ? openable(avWrap(c, dm.otherId, 'sm'), c, dm.otherId, 'Open ' + title + '’s profile') : null,
-      h('div', { class: 'grow ct' }, h('h1', { text: title }), h('div', { class: 'small muted clamp', text: (dm ? '' : famLabel() + ' · ') + sub })),
+      h('div', { class: 'grow ct' }, h('h1', { text: title }), h('div', { class: 'small muted clamp', text: (dm ? '' : famLabel() + ' · ') + sub }), dm ? presenceSlot(dm.otherId) : null),
       convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a voice call', title: 'Voice call', onclick: function () { startCall(c, cv, false); } }, icon('phone')) : null,
       convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a video call', title: 'Video call', onclick: function () { startCall(c, cv, true); } }, icon('video')) : null,
       dm ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Conversation options', onclick: function () { dmOptions(c, dm); } }, icon('more')) : h('button', { class: 'btn secondary small', type: 'button', text: 'Members', onclick: function () { membersSheet(c); } }));
@@ -1121,11 +1121,21 @@
   }
 
   /* ---------- "online now" (a heartbeat while the chat is open and the page is visible; it expires by itself) ---------- */
-  function presenceOn() { return lsGet('fc_chat_presence', true) !== false; }
+  function presenceOn() {
+    var pr = X && X.S.user && X.S.user.prefs;   // the choice lives on the account, so it holds on every device; the old per-device value is the fallback
+    if (pr && typeof pr.presence === 'boolean') return pr.presence;
+    return lsGet('fc_chat_presence', true) !== false;
+  }
+  function setPresenceOn(v) {
+    lsSet('fc_chat_presence', !!v);
+    var done = X.setPrefs ? X.setPrefs({ presence: !!v }) : Promise.resolve();
+    return Promise.resolve(done).catch(function () { /* the device value still works */ }).then(function () { presenceSend(true); });
+  }
   function isHere(c, uid) { if (uid === c.uid) return presenceOn(); var u = c.here[uid]; return !!u && u > Date.now(); }
   function hereCount(c) { return memberList(c).filter(function (p) { return p.userId !== c.uid && isHere(c, p.userId); }).length + (presenceOn() ? 1 : 0); }
   function onPresenceEvent(c, kind, row) {
     if (row.userId === c.uid) return;
+    if (kind !== 'delete') ingestPresence([row]);
     if (kind === 'delete') delete c.here[row.userId];
     else { var u = Date.parse(row.until || ''); if (u > Date.now()) c.here[row.userId] = u; else delete c.here[row.userId]; }
     repaintHere(c);
@@ -1134,6 +1144,7 @@
   async function loadPresence(c) {
     try {
       var r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.equal('convId', ['presence']), X.Query.limit(100)] });
+      ingestPresence(r.rows || r.documents || []);
       (r.rows || r.documents || []).forEach(function (row) { if (row.familyId === c.famId && row.userId !== c.uid) { var u = Date.parse(row.until || ''); if (u > Date.now()) c.here[row.userId] = u; } });
       repaintHere(c);
     } catch (e) { /* the dots simply stay off until the next event */ }
@@ -1141,7 +1152,8 @@
   function beat(c) {
     if (C !== c || document.hidden || !presenceOn() || c.online === false) return;
     if (Date.now() - (c.beatAt || 0) < 30000) return; c.beatAt = Date.now();
-    api('chatPresence', {}).then(function () { c.presErr = ''; c.presOkAt = Date.now(); }, function (e) { c.presErr = (e && (e.apiCode || e.code)) ? String(e.apiCode || e.code) + ': ' + msgOf(e) : msgOf(e); });   // never a pop-up
+    var sendP = presenceSend(true); if (!sendP) return;
+    sendP.then(function () { c.presErr = ''; c.presOkAt = Date.now(); }, function (e) { c.presErr = (e && (e.apiCode || e.code)) ? String(e.apiCode || e.code) + ': ' + msgOf(e) : msgOf(e); });   // never a pop-up
   }
   function startPresence(c) {
     if (c.presenceOn) return; c.presenceOn = true;
@@ -1166,10 +1178,114 @@
 
 
   /* ---------- who is online, shown on the circles at the top of Home (works without opening chat) ---------- */
-  var GP = { here: {}, t: null, beatAt: 0 };
+  var GP = { here: {}, info: {}, fid: '', loadedAt: 0, t: null, beatAt: 0, hiddenFor: '' };
   function onlineNow(uid) {
     if (uid === me()) return presenceOn();
     var u = GP.here[uid] || (C && C.here && C.here[uid]) || 0; return u > Date.now();
+  }
+  /* ---------- online / last active (rows come from the same presence rows as the green dots) ---------- */
+  function ingestPresence(rows) {
+    if (GP.fid !== famId()) { GP.fid = famId(); GP.info = {}; }
+    rows.forEach(function (row) {
+      if (row.familyId !== famId()) return;
+      var until = Date.parse(row.until || '') || 0;
+      GP.info[row.userId] = { hidden: row.text === 'hidden', until: until, last: until ? until - 100000 : 0 };
+    });
+    GP.loadedAt = Date.now();
+  }
+  function presenceState(uid) {
+    if (uid === me()) return { state: presenceOn() ? 'online' : 'hidden' };
+    var i = GP.info[uid];
+    if (i && i.hidden) return { state: 'hidden' };
+    if (onlineNow(uid) || (i && i.until > Date.now())) return { state: 'online' };
+    return i && i.last ? { state: 'offline', at: i.last } : { state: 'offline' };
+  }
+  function agoLong(ms) {
+    var m = Math.max(0, Math.floor((Date.now() - ms) / 60000));
+    if (m < 1) return 'just now';
+    if (m < 60) return m + (m === 1 ? ' min ago' : ' mins ago');
+    var hr = Math.floor(m / 60); return hr + (hr === 1 ? ' hr ago' : ' hrs ago');
+  }
+  function presenceText(uid) {
+    var st = presenceState(uid);
+    if (st.state === 'hidden') return '';
+    if (st.state === 'online') return 'Online';
+    return st.at ? 'Active ' + agoLong(st.at) : 'Offline';
+  }
+  /** A small line: a green dot that pulses when online, or a grey dot and "Active 5 mins ago". Nothing at all for someone who turned the status off. */
+  function presenceLine(uid) {
+    var st = presenceState(uid); if (st.state === 'hidden') return null;
+    var el = h('span', { class: 'presence' + (st.state === 'online' ? ' is-on' : ''), 'data-presence-uid': uid }, h('span', { class: 'pdot', 'aria-hidden': 'true' }), h('span', { class: 'ptext', text: presenceText(uid) }));
+    return el;
+  }
+  function repaintPresenceLines(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll('[data-presence-uid]'), function (el) {
+      var uid = el.getAttribute('data-presence-uid'), st = presenceState(uid);
+      if (st.state === 'hidden') { el.hidden = true; return; } el.hidden = false;
+      el.classList.toggle('is-on', st.state === 'online'); var t = el.querySelector('.ptext'); if (t) t.textContent = presenceText(uid);
+    });
+  }
+  async function presenceRefresh(force) {
+    if (!X || !enabled() || !famId()) return;
+    if (!force && GP.fid === famId() && Date.now() - GP.loadedAt < 15000) return;
+    try {
+      var r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.equal('convId', ['presence']), X.Query.limit(100)] });
+      ingestPresence(r.rows || r.documents || []);
+    } catch (e) { /* the last known status stays */ }
+  }
+  /** The one place that tells the server I am here (every 45 seconds while the app is open and visible), or that I want to be hidden. */
+  function presenceSend(force) {
+    if (!X || !enabled() || !famId() || !X.S.user || document.hidden || (typeof navigator !== 'undefined' && navigator.onLine === false)) return null;
+    if (!force && Date.now() - GP.beatAt < 30000) return null;
+    var on = presenceOn();
+    if (!on) { if (!force && GP.hiddenFor === famId()) return null; GP.hiddenFor = famId(); } else GP.hiddenFor = '';
+    GP.beatAt = Date.now();
+    return api('chatPresence', on ? {} : { hidden: true });
+  }
+  function startGlobalBeat() {
+    setInterval(function () { var p = presenceSend(); if (p) p.catch(function () { /* the next beat tries again */ }); }, 45000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { var p = presenceSend(); if (p) p.catch(function () {}); } });
+    setTimeout(function () { var p = presenceSend(); if (p) p.catch(function () {}); }, 4000);
+  }
+  /** A presence line that fills in after a fresh read of the family's presence rows, then keeps itself current. */
+  function presenceSlot(uid) {
+    var slot = h('div', { class: 'small muted pslot' });
+    function paint() { slot.textContent = ''; var l = presenceLine(uid); if (l) slot.appendChild(l); }
+    paint(); presenceRefresh(false).then(paint);
+    return slot;
+  }
+  /* ---------- hover card on a person's link in community (mouse only; touch keeps the tap-to-open profile) ---------- */
+  var HC = { el: null, timer: null, uid: '', on: false };
+  function hoverHide() { clearTimeout(HC.timer); HC.uid = ''; if (HC.el) { HC.el.remove(); HC.el = null; } }
+  function hoverShow(a, uid) {
+    hoverHide(); HC.uid = uid;
+    var card = h('div', { class: 'hovercard', role: 'tooltip' });
+    var prof = X.S.profiles && X.S.profiles.get(uid), name = realName(uid);
+    var relEl = h('div', { class: 'small muted' });
+    if (uid !== me()) X.relationFor(uid).then(function (t) { if (t) relEl.textContent = t; }); else relEl.textContent = 'You';
+    card.appendChild(h('span', { class: 'av-wrap' }, avatar(uid, 'sm')));
+    card.appendChild(h('div', { class: 'hc-text' }, h('strong', { class: 'clamp', text: name }), relEl, presenceSlot(uid)));
+    document.body.appendChild(card); HC.el = card;
+    var r = a.getBoundingClientRect(), w = card.offsetWidth, hh = card.offsetHeight;
+    var left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8), top = r.bottom + 6;
+    if (top + hh > window.innerHeight - 8) top = Math.max(8, r.top - hh - 6);
+    card.style.left = left + 'px'; card.style.top = top + 'px';
+  }
+  function hoverCards() {
+    if (HC.on) return; HC.on = true;
+    var fine = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)');
+    function link(t) { var a = t && t.closest ? t.closest('.main a[href^="#/profile/"]') : null; return a && !a.closest('.hovercard') ? a : null; }
+    function uidOf(a) { return decodeURIComponent((a.getAttribute('href') || '').replace('#/profile/', '').split(/[/?]/)[0]); }
+    function start(e) {
+      if (!fine || !fine.matches) return; var a = link(e.target); if (!a) return;
+      var uid = uidOf(a); if (!uid || uid === HC.uid) return;
+      clearTimeout(HC.timer); HC.timer = setTimeout(function () { presenceRefresh(false).then(function () { if (a.isConnected) hoverShow(a, uid); }); }, 400);
+    }
+    function stop(e) { var a = link(e.target); if (a || HC.el) { if (e.relatedTarget && link(e.relatedTarget) === a) return; hoverHide(); } }
+    document.addEventListener('mouseover', start); document.addEventListener('focusin', start);
+    document.addEventListener('mouseout', stop); document.addEventListener('focusout', stop);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hoverHide(); });
+    window.addEventListener('scroll', hoverHide, { passive: true, capture: true }); window.addEventListener('hashchange', hoverHide);
   }
   function paintStoryDots(root) {
     Array.prototype.forEach.call(root.querySelectorAll('[data-online-uid]'), function (el) {
@@ -1183,10 +1299,11 @@
     async function tick() {
       if (!root.isConnected) { clearInterval(GP.t); GP.t = null; return; }
       if (document.hidden) return;
-      if (presenceOn() && Date.now() - GP.beatAt > 30000) { GP.beatAt = Date.now(); api('chatPresence', {}).catch(function () { /* the next check tries again */ }); }
+      var sp = presenceSend(); if (sp) sp.catch(function () { /* the next check tries again */ });
       try {
         var r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.equal('convId', ['presence']), X.Query.limit(100)] });
         var here = {};
+        ingestPresence(r.rows || r.documents || []);
         (r.rows || r.documents || []).forEach(function (row) { if (row.familyId === famId() && row.userId !== me()) { var u = Date.parse(row.until || ''); if (u > Date.now()) here[row.userId] = u; } });
         GP.here = here;
       } catch (e) { /* the dots keep their last state until the next check */ }
@@ -1596,11 +1713,11 @@
     body.appendChild(h('p', { class: 'small muted', text: 'A preview is made by the family server visiting the link, so your device never contacts that website. GIFs load straight from GIPHY, which can see your internet address. Turn this off to see plain links only.' }));
     body.appendChild(h('h3', { text: 'Online status' }));
     var pOn = h('input', { type: 'checkbox' }); pOn.checked = presenceOn();
-    pOn.addEventListener('change', function () { lsSet('fc_chat_presence', pOn.checked); if (pOn.checked) { c.beatAt = 0; beat(c); } repaintHere(c); toast(pOn.checked ? 'Others can see when you are online.' : 'Others will see you as offline within about two minutes.'); });
+    pOn.addEventListener('change', function () { setPresenceOn(pOn.checked); if (pOn.checked) { c.beatAt = 0; } repaintHere(c); toast(pOn.checked ? 'Others can see when you are online.' : 'Others will see no online status for you.'); });
     body.appendChild(h('label', { class: 'check' }, pOn, ' Show family when I am online'));
-    var pStat = !presenceOn() ? 'You are hidden: others see you as offline.' : c.presErr ? 'Your online signal did not reach the server (' + c.presErr + '). Upload the newest family-api zip (CHAT-GUIDE.md, "Online status"), then reopen chat.' : c.presOkAt ? 'Your online signal is reaching the server. Others see a green dot while their chat is open and you have chat or the app open.' : 'Waiting for the first online signal…';
+    var pStat = !presenceOn() ? 'Your status is hidden: others see nothing about whether you are online.' : c.presErr ? 'Your online signal did not reach the server (' + c.presErr + '). Upload the newest family-api zip (CHAT-GUIDE.md, "Online status"), then reopen chat.' : c.presOkAt ? 'Your online signal is reaching the server. Others see a green dot while their chat is open and you have chat or the app open.' : 'Waiting for the first online signal…';
     body.appendChild(h('p', { class: 'small ' + (c.presErr ? 'err' : 'muted'), role: 'status', text: pStat }));
-    body.appendChild(h('p', { class: 'small muted', text: 'While chat is open on your device, a small signal tells the family server you are here. It expires after about 100 seconds and nothing is kept.' }));
+    body.appendChild(h('p', { class: 'small muted', text: 'While the app is open on your device, a small signal tells the family server you are here, and the time of your last signal is kept so family can see "Active 5 mins ago". Turn this off and the family sees nothing about you, not even a last active time.' }));
     body.appendChild(h('h3', { text: 'Typing hint' }));
     var tOn = h('input', { type: 'checkbox' }); tOn.checked = typingOn();
     tOn.addEventListener('change', function () { lsSet('fc_chat_typing', tOn.checked); });
@@ -1754,7 +1871,7 @@
 
   function install(ctx) {
     X = ctx; h = X.h; clear = X.clear; icon = X.icon; toast = X.toast;
-    X.VIEWS.chat = function (main, token, id) { return view(main, token, 'channels', id); };
+    startGlobalBeat(); hoverCards(); X.VIEWS.chat = function (main, token, id) { return view(main, token, 'channels', id); };
     X.VIEWS.dms = function (main, token, id) { return view(main, token, 'dms', id); };
     globalListeners(); startPeek();
   }
@@ -1772,5 +1889,5 @@
     var first = splitLinks(String(text || '')).filter(function (p) { return p.u; })[0];
     return first ? previewCard(first.u) : null;
   }
-  window.FCChat = { profileFor: function (uid) { profileSheet(C || { uid: me(), here: GP.here, dms: [], calls: {}, blocked: [], standalone: true }, uid); }, presenceWatch: presenceWatch, shareToDm: shareToDm, linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
+  window.FCChat = { presenceLine: presenceLine, presenceSlot: presenceSlot, presenceRefresh: presenceRefresh, hoverCards: hoverCards, profileFor: function (uid) { profileSheet(C || { uid: me(), here: GP.here, dms: [], calls: {}, blocked: [], standalone: true }, uid); }, presenceWatch: presenceWatch, shareToDm: shareToDm, linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
 })();
