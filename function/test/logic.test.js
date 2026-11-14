@@ -1069,3 +1069,18 @@ test('adding a parent by relation keeps the kind (same five kinds for every pare
   assert.deepEqual(JSON.parse(meId().parentKinds), { [first.json.personId]: 'adoptive', [second.json.personId]: 'step' });
   assert.equal((await add({ name: 'X', relation: 'parent', parentKind: 'cousin' })).status, 400);
 });
+
+test('familyMembers: ids and names for members of the family only; emails and invitations for owners only', async () => {
+  const s = await setup();
+  const t = s.world.teams.famA;
+  t.members.push({ userId: 'pending', roles: ['member'], confirm: false });
+  const asMember = await s.call(s.bob, { action: 'familyMembers', familyId: 'famA' });
+  assert.equal(asMember.status, 200);
+  const ids = asMember.json.members.map((m) => m.userId);
+  assert.ok(ids.includes('alice') && ids.includes('bob'));
+  assert.ok(!ids.includes('pending'), 'a member does not see invitations that were not accepted');
+  assert.ok(asMember.json.members.every((m) => m.id && m.userEmail === '' && m.confirm === true));
+  const asOwner = await s.call(s.alice, { action: 'familyMembers', familyId: 'famA' });
+  assert.ok(asOwner.json.members.some((m) => m.userId === 'pending' && m.confirm === false));
+  assert.equal((await s.call(s.dave, { action: 'familyMembers', familyId: 'famA' })).status, 403);
+});

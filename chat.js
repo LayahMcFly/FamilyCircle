@@ -1632,7 +1632,7 @@
   /* ----- members, new DM, DM options ----- */
   function memberList(c) { return Array.from(X.S.profiles.values()).sort(function (a, b) { return String(a.displayName).localeCompare(String(b.displayName)); }); }
   async function owners(c) {
-    try { var res = await X.teams.listMemberships({ teamId: c.famId, queries: [X.Query.limit(100)] }); var o = {}; res.memberships.forEach(function (m) { if (m.confirm && m.roles.indexOf('owner') >= 0) o[m.userId] = true; }); return o; } catch (e) { return {}; }
+    try { var res = X.listMembers ? await X.listMembers(c.famId) : await X.teams.listMemberships({ teamId: c.famId, queries: [X.Query.limit(100)] }); var o = {}; res.memberships.forEach(function (m) { if (m.confirm && m.roles.indexOf('owner') >= 0) o[m.userId] = true; }); return o; } catch (e) { return {}; }
   }
   async function membersSheet(c) {
     var body = h('div', { class: 'cs-list' }, X.spinnerLine('Loading…', 'site')); var s = sheet('Family members', body);
