@@ -3604,11 +3604,10 @@
   function ageGroupLabel(v) { var a = AGE_GROUPS.filter(function (x) { return x[0] === v; })[0]; return a && v ? a[1] : ''; }
   function renderRolesAndGroups(joined) {
     var card = h('section', { class: 'card roles-groups', 'aria-label': 'Roles and age groups' }, h('h2', { text: 'Roles and age groups' }),
-      h('p', { class: 'muted small', text: 'Give people roles and mark who is a kid, teen or adult. Keep at least two owners so someone can always fix things if one owner steps away. Age groups are labels for now; they do not limit anything yet.' }));
+      h('p', { class: 'muted small', text: joined.length + (joined.length === 1 ? ' member' : ' members') + ' have joined. Give people roles and mark who is a kid, teen or adult. Keep at least two owners so someone can always fix things if one owner steps away. Age groups are labels for now; they do not limit anything yet.' }));
     var ownerCount = joined.filter(function (m) { return m.roles.indexOf('owner') >= 0; }).length;
     joined.forEach(function (m) {
-      var p = S.profiles.get(m.userId) || null;
-      if (!p) return;
+      var real = S.profiles.get(m.userId) || null, p = real || { userId: m.userId, displayName: m.userName || 'Family member' };   // someone who has not set up a profile yet is still listed
       var isOwner = m.roles.indexOf('owner') >= 0, isMe = m.userId === S.user.$id, name = treeNameOf(p.userId) || p.displayName;
       var badges = h('span', { class: 'rg-badges' });
       function paintBadges() {
@@ -3640,6 +3639,7 @@
       var chatBtn = toggle(p.chatAdmin === true ? 'Remove chat admin' : 'Make chat admin', p.chatAdmin === true, async function () {
         try { var r = await api('chatSetAdmin', { familyId: S.familyId, userId: m.userId, admin: p.chatAdmin !== true }); p.chatAdmin = r.admin; paintBadges(); route(false); toast(r.admin ? name + ' is now a chat admin.' : 'Chat admin removed.'); } catch (e) { toast(errText(e)); }
       });
+      if (!real) { [treeBtn, chatBtn, sel].forEach(function (el) { el.disabled = true; el.title = 'Available once they have opened the app and set up their profile.'; }); }
       var ctl = h('div', { class: 'rg-controls' }, ownerBtn, isOwner ? null : treeBtn, isOwner ? null : chatBtn, h('label', { class: 'rg-age', for: 'ag-' + m.userId }, h('span', { class: 'small muted', text: 'Age group' }), sel));
       card.appendChild(h('div', { class: 'member rg-member' }, h('div', { class: 'rg-top' }, avatarEl(p), h('div', { class: 'grow' }, h('strong', { text: name + (isMe ? ' (you)' : '') }), badges)), ctl));
     });
@@ -3722,12 +3722,6 @@
             avatarEl(prof0 || { displayName: label }),
             h('div', { class: 'grow' }, h('strong', { text: label }),
               h('div', { class: 'small muted', text: (m.userEmail && m.userName ? m.userEmail + ' · ' : '') + (m.confirm ? 'Joined' : 'Invited, not accepted yet') + (isOwnerRow ? ' · Owner' : '') })),
-            (m.confirm && !isOwnerRow) ? h('button', { class: 'btn secondary small', type: 'button', text: 'Make owner', 'aria-label': 'Make ' + label + ' an owner', onclick: async function () {
-              var ok = await confirmDialog('Make ' + label + ' an owner?', 'Owners can invite and remove people, delete any post, and delete the whole family.', 'Make owner');
-              if (!ok) return;
-              try { await teams.updateMembership({ teamId: fid, membershipId: m.$id, roles: ['owner'] }); toast('Done.'); loadMemberships(); }
-              catch (e) { toast(friendly(e)); }
-            } }) : null,
             self ? null : h('button', { class: 'btn secondary small', type: 'button', text: m.confirm ? 'Remove' : 'Cancel invite', 'aria-label': (m.confirm ? 'Remove ' : 'Cancel the invitation for ') + label, onclick: async function () {
               var ok = await confirmDialog(m.confirm ? 'Remove this person?' : 'Cancel this invitation?', m.confirm ? 'They lose access to all of this family\'s posts and media right away. Their own posts stay unless deleted.' : 'The invitation link will stop working.', m.confirm ? 'Remove' : 'Cancel invite');
               if (!ok) return;

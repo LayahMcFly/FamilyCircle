@@ -45,11 +45,11 @@ async function open(browser, mock, hash, w, h) {
   const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
   const sent = [];
   const mem = (u, roles) => ({ $id: 'm-' + u, userId: u, confirm: true, roles, userName: u });
-  const mock = world('u-owner', 'owner', { log: [], members: [mem('u-owner', ['owner']), mem('u-cara', ['member']), mem('u-teen', ['member'])],
+  const mock = world('u-owner', 'owner', { log: [], members: [mem('u-owner', ['owner']), mem('u-cara', ['member']), mem('u-teen', ['member']), mem('u-noprof', ['member'])],
     api: { setAgeGroup: b => { return { ageGroup: b.ageGroup }; }, setOwner: b => ({ owner: b.owner !== false }), setTreeAdmin: b => ({ admin: b.admin !== false }), chatSetAdmin: b => ({ admin: b.admin !== false }) } });
   const { ctx, page, errors } = await open(browser, mock, '#/settings/family', 420, 1400); await page.waitForTimeout(1200);
   const rows = await page.evaluate(() => Array.from(document.querySelectorAll('.rg-member')).map(r => r.textContent.replace(/\s+/g, ' ').trim()));
-  check('Roles and age groups card lists every member', rows.length === 3, JSON.stringify(rows));
+  check('Roles and age groups card lists every member', rows.length === 4, JSON.stringify(rows));
   check('Owner row shows Owner badge', /Alice Owner.*Owner/.test(rows[0] || '') || rows.some(r => /Owner/.test(r) && /\(you\)/.test(r)), JSON.stringify(rows));
   // owner with only one owner: cannot remove
   const dis = await page.evaluate(() => { const b = Array.from(document.querySelectorAll('.rg-member button')).find(x => /Remove owner/.test(x.textContent)); return b && b.disabled; });
@@ -63,10 +63,16 @@ async function open(browser, mock, hash, w, h) {
   // make owner / tree admin / chat admin buttons exist for a member
   const btns = await page.evaluate(() => Array.from(document.querySelectorAll('.rg-member')[1].querySelectorAll('button')).map(b => b.textContent.trim()));
   check('Member row offers Make owner, Make tree admin and Make chat admin', ['Make owner', 'Make tree admin', 'Make chat admin'].every(t => btns.includes(t)), JSON.stringify(btns));
+  const noprof = await page.evaluate(() => { const r = Array.from(document.querySelectorAll('.rg-member')).find(x => /u-noprof/.test(x.innerHTML) || /u-noprof/.test(x.textContent)); return r ? { dis: r.querySelector('select').disabled, owner: !r.querySelector('button').disabled } : null; });
+  check('A member with no profile is still listed; owner button works, age group waits for their profile', noprof && noprof.dis && noprof.owner, JSON.stringify(noprof));
+  const box = await page.evaluate(() => { const r = document.querySelectorAll('.rg-member')[1]; const bs = Array.from(r.querySelectorAll('.rg-controls .btn')).map(b => b.getBoundingClientRect()); const sel = r.querySelector('select').getBoundingClientRect(); return { lefts: bs.map(b => Math.round(b.left)), widths: bs.map(b => Math.round(b.width)), selRight: Math.round(sel.right), btnRight: Math.round(Math.max(...bs.map(b => b.right))) }; });
+  check('Buttons sit in an even grid and the age group select matches their width', box.widths.every(w => Math.abs(w - box.widths[0]) < 3) && Math.abs(box.selRight - box.btnRight) < 4, JSON.stringify(box));
   await page.screenshot({ path: path.join(OUT, 'roles-groups.png'), fullPage: true });
   await page.locator('.rg-member').nth(1).getByRole('button', { name: /^Make chat admin/ }).click(); await page.waitForTimeout(600);
   const chatCalls = await page.evaluate(() => window.__MOCK.log.filter(l => l.indexOf('api chatSetAdmin') === 0).length);
   check('Make chat admin calls the server', chatCalls === 1, String(chatCalls));
+  const oldOwnerBtns = await page.evaluate(() => Array.from(document.querySelectorAll('.mem-row button')).filter(b => /owner/i.test(b.textContent)).length);
+  check('The member list above no longer has Make owner buttons (roles are managed in the Roles card)', oldOwnerBtns === 0, String(oldOwnerBtns));
   check('No page errors', errors.length === 0, JSON.stringify(errors));
   await ctx.close(); await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

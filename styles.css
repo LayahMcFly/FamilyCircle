@@ -1628,7 +1628,8 @@ button.hub-card { box-sizing: border-box; font: inherit; text-align: left; width
 .sync-report summary { cursor: pointer; font-weight: 600; }
 
 /* Settings: roles and powers table */
-.roles-wrap { overflow-x: auto; margin: .5rem 0; }
+.roles-wrap { position: relative; overflow-x: auto; max-width: 100%; min-width: 0; margin: .5rem 0; }   /* position: relative so the hidden screen-reader text in far columns is clipped here and cannot widen the page */
+.roles-groups, section.card[aria-label="What each role can do"] { min-width: 0; max-width: 100%; }
 .roles-table { width: 100%; min-width: 440px; border-collapse: collapse; font-size: .9rem; }
 .roles-table th, .roles-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: center; vertical-align: top; }
 .roles-table thead th { font-size: .8rem; }
@@ -1658,7 +1659,7 @@ button.hub-card { box-sizing: border-box; font: inherit; text-align: left; width
 .rc-fav svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; }
 .rc-empty { text-align: center; }
 .rc-backup { margin-top: 24px; }
-.rc-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.rc-file { position: absolute !important; width: 1px !important; height: 1px !important; min-width: 0 !important; padding: 0 !important; margin: -1px !important; border: 0 !important; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); }
 .rc-pick { cursor: pointer; margin-top: 8px; }
 .rc-file:focus-visible + .rc-pick, .rc-file:focus-visible ~ .rc-pick { outline: 3px solid var(--accent-text); outline-offset: 2px; }
 
@@ -1873,8 +1874,12 @@ input[type="range"] { accent-color: var(--accent); }
 .shop-btn[hidden] { display: none !important; }
 
 /* Settings > Family and members: roles and age groups */
-.rg-member { display: block; padding: 12px 0; border-top: 1px solid var(--line, rgba(0,0,0,.1)); }
-.rg-top { display: flex; align-items: center; gap: 10px; }
-.rg-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
-.rg-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 8px; }
-.rg-age { display: flex; flex-direction: column; gap: 2px; min-width: 140px; }
+.rg-member { display: block; padding: 12px 0; border-top: 1px solid var(--border); border-bottom: 0; }
+.rg-top { display: flex; align-items: center; gap: 12px; }
+.rg-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.rg-badges .badge, .member .rg-badges .badge { margin-left: 0; }
+.rg-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; align-items: stretch; }
+.rg-controls .btn { width: 100%; justify-content: center; text-align: center; min-height: 42px; }
+.rg-age { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+.rg-age span { flex: none; }
+.rg-age select { flex: 1; min-width: 0; }
