@@ -4694,6 +4694,7 @@
       h('div', { class: 'profile-avatar' }, avatarEl(prof, 'lg')),
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
         relLine,
+        window.FCChat && window.FCChat.presenceSlot ? window.FCChat.presenceSlot(uid) : null,
         prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
     if (mine) (hero || main).appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/profile/edit' }, icon('edit'), h('span', { text: 'Edit profile' })));
     if (mine) main.appendChild(h('button', { class: 'btn secondary block bb-t', type: 'button', onclick: function () { pageDesigner(S.profile, main); } }, icon('palette'), h('span', { text: 'Customize my page' })));
@@ -5896,6 +5897,7 @@
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query,
       avatarUrl: avatarUrl, bannerFor: function (uid) { return bannerEl(S.profiles.get(uid), 'hero-bg'); }, profileFacts: profileFacts, relationFor: relationFor,
       uploadPicture: async function (file) { var f = await avatarFile(file, 'family.jpg'); if (!f) throw new Error('Picture not changed.'); var up = await uploadFile(f); return up.$id; },
+      setPrefs: async function (patch) { S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, patch) }); },
       deletePicture: function (id) { return storage.deleteFile({ bucketId: CFG.bucketId, fileId: id }).catch(function () {}); } });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, noteDenied: noteDenied, route: route,
