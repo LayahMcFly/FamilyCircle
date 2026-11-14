@@ -2100,6 +2100,18 @@
       var others = (c.likedBy || []).filter(function (u) { return u !== me; });
       if (others.length) items.push({ type: 'clike', postId: c.postId, at: c.$updatedAt, text: (others.length === 1 ? nm(others[0]) : nm(others[0]) + ' and ' + (others.length - 1) + ' more') + ' liked your comment' });
     });
+    // Mentions: someone wrote @my name in a recent comment or in a family channel.
+    try {
+      var FM = window.FCMentions;
+      if (FM) {
+        var rc = (await listRows('comments', [Query.equal('familyId', [S.familyId]), Query.orderDesc('$createdAt'), Query.limit(100)])).rows.filter(function (c) { return c.authorId !== me && FM.mentionsMe(c.body); });
+        var rm = [];
+        try { rm = (await db.listRows({ databaseId: CFG.databaseId, tableId: 'chatMessages', queries: [Query.equal('familyId', [S.familyId]), Query.equal('kind', ['channel']), Query.orderDesc('$createdAt'), Query.limit(100)] })).rows.filter(function (m) { return m.authorId !== me && FM.mentionsMe(m.body); }); } catch (e) { /* chat not readable: comments still show */ }
+        await ensureProfiles(rc.map(function (c) { return c.authorId; }).concat(rm.map(function (m) { return m.authorId; })));
+        rc.forEach(function (c) { items.push({ type: 'mention', postId: c.postId, at: c.$createdAt, text: nm(c.authorId) + ' mentioned you in a comment: ' + String(c.body).slice(0, 80) }); });
+        rm.forEach(function (m) { items.push({ type: 'mention', href: '#/chat', at: m.$createdAt, text: nm(m.authorId) + ' mentioned you in the family chat: ' + String(m.body).slice(0, 80) }); });
+      }
+    } catch (e) { /* mentions could not be read right now; the other entries still show */ }
     trend.items.forEach(function (it) { if (mine[it.post.$id]) items.push({ type: 'trend', postId: it.post.$id, at: it.at, text: 'Your post is trending in the family' }); });
     // New members: someone accepted their invitation and joined this family in the last 30 days.
     try {
@@ -2186,7 +2198,7 @@
       var fresh = it.urgent || new Date(it.at).getTime() > seen;
       if (it.type === 'namereq' || it.type === 'namewait') { box.appendChild(nameRequestItem(it, fresh)); return; }
       box.appendChild(h('a', { class: 'act-item' + (fresh ? ' fresh' : ''), href: it.href || ('#/post/' + it.postId) },
-        h('span', { class: 'act-ico' }, icon(it.type === 'comment' ? 'comment' : it.type === 'trend' ? 'flame' : it.type === 'join' ? 'users' : it.type === 'namedone' ? 'pencil' : 'heart')),
+        h('span', { class: 'act-ico' }, icon(it.type === 'comment' || it.type === 'mention' ? 'comment' : it.type === 'trend' ? 'flame' : it.type === 'join' ? 'users' : it.type === 'namedone' ? 'pencil' : 'heart')),
         h('span', { class: 'act-text', text: it.text }),
         h('span', { class: 'small muted', text: timeAgo(it.at) })));
     });
@@ -2858,6 +2870,7 @@
     }
     ta.addEventListener('input', fitComment);
     ta.addEventListener('focus', fitComment);
+    if (window.FCMentions) window.FCMentions.attach(ta);   // typing @ lists the people in this family
     if (window.ResizeObserver) { var fitRO = new ResizeObserver(function () { fitComment(); }); fitRO.observe(ta); }
     else setTimeout(fitComment, 50);
     var send = h('button', { class: 'btn small comment-send', type: 'submit', text: 'Post' });
@@ -5959,6 +5972,7 @@
       ], h('ul', { style: null }, problems.map(function (p) { return h('li', { text: p }); })));
     }
     initAppwrite();
+    if (window.FCMentions) window.FCMentions.install({ S: S, avatarEl: avatarEl });
     if (window.FCChat) window.FCChat.install({ S: S, listMembers: listMembers, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query,
       avatarUrl: avatarUrl, bannerFor: function (uid) { return bannerEl(S.profiles.get(uid), 'hero-bg'); }, profileFacts: profileFacts, relationFor: relationFor,
