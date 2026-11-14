@@ -2004,6 +2004,20 @@
    * except the time I last opened Activity, kept in my account prefs as notifSeen)
    * ===================================================================== */
 
+  // The project can hide other members' ids, names and emails from the browser (Appwrite "membership privacy"). When ids come back blank, ask the family
+  // service, which can see them, and fill them in. Emails are only filled in for owners. If the service is old or unreachable the list simply stays as it was.
+  async function listMembers(teamId) {
+    var res = await teams.listMemberships({ teamId: teamId, queries: [Query.limit(100)] });
+    if (res.memberships.some(function (m) { return !m.userId; })) {
+      try {
+        var r = await api('familyMembers', { familyId: teamId }), by = {};
+        (r.members || []).forEach(function (x) { by[x.id] = x; });
+        res.memberships.forEach(function (m) { var f = by[m.$id]; if (f) { m.userId = m.userId || f.userId; m.userName = m.userName || f.userName; m.userEmail = m.userEmail || f.userEmail; } });
+      } catch (e) { /* keep what the browser could see */ }
+    }
+    return res;
+  }
+
   async function memberCount() {
     var c = S.memberCache;
     if (c && c.fid === S.familyId && Date.now() - c.at < 5 * 60 * 1000) return c.n;
@@ -2089,7 +2103,7 @@
     trend.items.forEach(function (it) { if (mine[it.post.$id]) items.push({ type: 'trend', postId: it.post.$id, at: it.at, text: 'Your post is trending in the family' }); });
     // New members: someone accepted their invitation and joined this family in the last 30 days.
     try {
-      var ms = (await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] })).memberships;
+      var ms = (await listMembers(S.familyId)).memberships;
       var mine0 = ms.filter(function (m) { return m.userId === me && m.joined; })[0];
       var cutoff = Math.max(Date.now() - 30 * 86400000, mine0 ? new Date(mine0.joined).getTime() : 0);   // only people who joined after I did
       var joined = ms.filter(function (m) { return m.confirm && m.userId !== me && m.joined && new Date(m.joined).getTime() > cutoff; });
@@ -3517,6 +3531,7 @@
   // The name to show for a member in the Family and members screens: the name on their own tree entry when they are linked to one
   // (so a tree rename shows here), otherwise the name from their profile.
   function treeNameOf(userId) {
+    if (!userId) return '';   // a blank id must never match the tree entries that are not linked to an account yet
     var ps = (S.tree && S.tree.people) || [];
     var hit = ps.filter(function (x) { return x.userId === userId && x.name; })[0];
     return hit ? String(hit.name) : '';
@@ -3525,7 +3540,7 @@
   async function familyMembers(main, token) {
     var listBox = h('div', { class: 'card' }, spinnerLine('Loading…'));
     main.appendChild(listBox);
-    var res = await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] });
+    var res = await listMembers(S.familyId);
     if (token !== S.nav) return;
     await loadProfiles();
     if (token !== S.nav) return;
@@ -3538,7 +3553,7 @@
     if (token !== S.nav) return;
     var tpeople = (S.tree && S.tree.people) || [];
     function treeMatch(m) {   // the tree entry that belongs to this membership: by account, by the invitation, or (last) by the same name
-      var hit = tpeople.filter(function (x) { return x.userId === m.userId || (x.inviteMembershipId && x.inviteMembershipId === m.$id); })[0];
+      var hit = tpeople.filter(function (x) { return (m.userId && x.userId === m.userId) || (x.inviteMembershipId && x.inviteMembershipId === m.$id); })[0];
       if (!hit && m.userName) hit = tpeople.filter(function (x) { return x.userId && String(x.name).trim().toLowerCase() === String(m.userName).trim().toLowerCase(); })[0];
       return hit || null;
     }
@@ -3599,7 +3614,7 @@
     main.appendChild(h('p', { class: 'muted small', text: 'For ' + famName() + '. Each family you belong to has its own settings.' }));
     var holder = h('div', null, spinnerLine('Loading\u2026'));
     main.appendChild(holder);
-    var res = await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] });
+    var res = await listMembers(S.familyId);
     if (token !== S.nav) return;
     await loadProfiles();
     try { if (!S.tree) await loadTree(true); } catch (e) { /* only used to fill in names and pictures */ }
@@ -3737,12 +3752,12 @@
     async function loadMemberships() {
       clear(memberBox); memberBox.appendChild(h('h2', { text: 'Invitations and members' })); memberBox.appendChild(spinnerLine('Loading…'));
       try {
-        var res = await teams.listMemberships({ teamId: fid, queries: [Query.limit(100)] });
+        var res = await listMembers(fid);
         if (token !== S.nav) return;
         clear(memberBox); memberBox.appendChild(h('h2', { text: 'Invitations and members' }));
         res.memberships.forEach(function (m) {
           var self = m.userId === S.user.$id;
-          var tp0 = ((S.tree && S.tree.people) || []).filter(function (x) { return x.userId === m.userId || (x.inviteMembershipId && x.inviteMembershipId === m.$id); })[0] || null;
+          var tp0 = ((S.tree && S.tree.people) || []).filter(function (x) { return (m.userId && x.userId === m.userId) || (x.inviteMembershipId && x.inviteMembershipId === m.$id); })[0] || null;
           var prof0 = S.profiles.get(m.userId) || (tp0 && tp0.userId ? S.profiles.get(tp0.userId) : null) || null;
           var label = treeNameOf(m.userId) || (prof0 && prof0.displayName) || m.userName || (tp0 && tp0.name) || m.userEmail || 'Family member';
           var isOwnerRow = m.roles.indexOf('owner') >= 0;
@@ -4132,7 +4147,7 @@
     if (!force && c && c.fid === S.familyId && Date.now() - c.at < 20000) return c;
     var fid = S.familyId, gen = S.famGen;
     var people = await listAllRows('people', [Query.equal('familyId', [fid])], 400);
-    try { var ml = (await teams.listMemberships({ teamId: fid, queries: [Query.limit(100)] })).memberships.filter(function (m) { return m.confirm; }); if (gen === S.famGen) S.memberList = ml; } catch (e) { if (gen === S.famGen) S.memberList = S.memberList || []; }
+    try { var ml = (await listMembers(fid)).memberships.filter(function (m) { return m.confirm; }); if (gen === S.famGen) S.memberList = ml; } catch (e) { if (gen === S.famGen) S.memberList = S.memberList || []; }
     if (canEditTree() && people.some(function (x) { return x.inviteMembershipId && !x.userId; }) && !S.syncing && gen === S.famGen) {   // someone joined: connect their invitation entry
       S.syncing = true;
       try { var sy = await api('treeSyncInvites', { familyId: fid }); if (sy && sy.linked) people = await listAllRows('people', [Query.equal('familyId', [fid])], 400); } catch (e) { /* older server: ignore */ }
@@ -5944,7 +5959,7 @@
       ], h('ul', { style: null }, problems.map(function (p) { return h('li', { text: p }); })));
     }
     initAppwrite();
-    if (window.FCChat) window.FCChat.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
+    if (window.FCChat) window.FCChat.install({ S: S, listMembers: listMembers, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query,
       avatarUrl: avatarUrl, bannerFor: function (uid) { return bannerEl(S.profiles.get(uid), 'hero-bg'); }, profileFacts: profileFacts, relationFor: relationFor,
       uploadPicture: async function (file) { var f = await avatarFile(file, 'family.jpg'); if (!f) throw new Error('Picture not changed.'); var up = await uploadFile(f); return up.$id; },

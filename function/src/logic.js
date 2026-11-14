@@ -665,6 +665,15 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       return { admin: on };
     },
 
+    /** The people of a family with their account ids and names. The browser may not see these when the project hides membership details, so the app asks here.
+     *  Members get the people who have joined; owners also get invitations that were not accepted yet and email addresses. */
+    async familyMembers({ user, body }) {
+      const { familyId, isOwner } = await requireMember(user, body.familyId);
+      const res = await teams.listMemberships({ teamId: familyId, queries: [Query.limit(100)] });
+      const list = res.memberships.filter((m) => isOwner || m.confirm === true);
+      return { members: list.map((m) => ({ id: m.$id, userId: m.userId || '', userName: m.userName || '', userEmail: isOwner ? (m.userEmail || '') : '', confirm: m.confirm === true, joined: m.joined || '', roles: Array.isArray(m.roles) ? m.roles : [] })) };
+    },
+
     /** Owners can make another member an owner (so there is always a backup), or step an owner back down. The last owner can never be removed. */
     async setOwner({ user, body }) {
       const { familyId, isOwner } = await requireMember(user, body.familyId);
