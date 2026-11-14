@@ -1676,7 +1676,24 @@
       h('a', { class: 'bell saved-btn', id: 'saved-btn', href: '#/saved', 'aria-label': 'Saved posts', title: 'Saved' }, icon('bookmark'))));
     clear(root).appendChild(h('div', { class: 'shell' }, nav, h('div', { class: 'shell-body' }, top, S.main)));
     var n = takeNotice(); if (n) toast(n.textContent);
+    fitBrandSoon();
   }
+
+  // The header name: "Family Circle" when it fits, "Circle" when it does not, "FC" when even that does not.
+  function fitBrand() {
+    var brand = document.querySelector('.topbar .brand'), sp = brand && brand.querySelector('span'), inner = brand && brand.parentElement; if (!sp || !inner) return;
+    var full = CFG.appName || 'Family Circle', words = full.split(/\s+/), tries = [full, words[words.length - 1], words.map(function (w) { return w.charAt(0).toUpperCase(); }).join('')];
+    var kids = Array.prototype.slice.call(inner.children);
+    kids.forEach(function (c) { c.style.flex = 'none'; });   // while measuring, nothing shrinks, so any shortage shows up as overflow of the bar
+    var pick = tries[tries.length - 1];
+    for (var i = 0; i < tries.length; i++) { sp.textContent = tries[i]; if (inner.scrollWidth <= inner.clientWidth + 0.5) { pick = tries[i]; break; } }
+    sp.textContent = pick; kids.forEach(function (c) { c.style.flex = ''; });
+  }
+  var fitTimer = null;
+  function fitBrandSoon() { clearTimeout(fitTimer); fitTimer = setTimeout(fitBrand, 60); }
+  window.addEventListener('resize', fitBrandSoon);
+  window.addEventListener('orientationchange', fitBrandSoon);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitBrandSoon);
 
   var REVALIDATE_MS = 5 * 60 * 1000;
 
@@ -1698,6 +1715,7 @@
     var segs = (location.hash.replace(/^#\/?/, '') || 'hub').split('?')[0].split('/');
     var name = segs[0], param = segs[1] || '', param2 = segs[2] || '', param3 = segs[3] || '';
     if (!VIEWS[name]) name = 'hub';
+    fitBrandSoon();
     S.nav++;
     var token = S.nav;
     revokeBlobs();
@@ -4481,7 +4499,7 @@
       if (lib.length) {
         var grid = h('div', { class: 'pd-lib' });
         lib.forEach(function (it) {
-          var mini = h('div', { class: 'profile-page pd-mini', 'aria-hidden': 'true' }, h('div', { class: 'card' }, h('span', { class: 'pd-bar' }), h('span', { class: 'pd-bar short' }), h('span', { class: 'btn small' })));
+          var mini = h('div', { class: 'profile-page pd-mini', 'aria-hidden': 'true' }, h('div', { class: 'card' }, h('span', { class: 'pd-bar' }), h('span', { class: 'pd-bar short' }), h('span', { class: 'pd-row' }, h('span', { class: 'btn small' }), h('span', { class: 'pd-aa', text: 'Aa' }))));   // Aa wears the saved font, so the tile shows the whole look
           applyPageStyle(mini, it.st);
           var use = h('button', { class: 'pd-tile', type: 'button', 'aria-label': 'Use the look ' + it.name, onclick: function () { st = Object.assign({}, it.st); live(); paint(); toast('Look "' + it.name + '" is on. Press Save my page to keep it.'); } }, mini, h('span', { class: 'pd-tile-name', text: it.name }));
           var del = h('button', { class: 'pd-tile-del', type: 'button', 'aria-label': 'Delete the look ' + it.name, title: 'Delete', onclick: async function () {
