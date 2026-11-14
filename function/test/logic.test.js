@@ -113,6 +113,9 @@ function makeWorld() {
       const t = world.teams[teamId];
       return { memberships: t ? t.members.map((m) => ({ $id: 'm_' + teamId + '_' + m.userId, teamId, userId: m.userId, roles: m.roles, confirm: m.confirm })) : [] };
     },
+    async updateMembership({ teamId, membershipId, roles }) {
+      const m = world.teams[teamId].members.find((x) => 'm_' + teamId + '_' + x.userId === membershipId); if (!m) throw err(404, 'nomember'); m.roles = roles; return {};
+    },
     async delete({ teamId }) {
       if (!world.teams[teamId]) throw err(404, 'noteam');
       delete world.teams[teamId];
@@ -1021,4 +1024,34 @@ test('names: if the adult is unlinked before answering, the request expires and 
   assert.equal(res.status, 409);
   assert.equal(s.reqs()[0].status, 'expired');
   assert.equal(s.world.tables.people.get(s.ids.cara).name, 'Cara Smith');
+});
+
+test('roles: owners make and remove owners (never the last), and set age groups', async () => {
+  const s = await setup();
+  const roles = (u) => s.world.teams.famA.members.find((m) => m.userId === u).roles;
+  // members cannot
+  assert.equal((await s.call(s.bob, { action: 'setOwner', familyId: 'famA', userId: 'bob' })).status, 403);
+  assert.equal((await s.call(s.bob, { action: 'setAgeGroup', familyId: 'famA', userId: 'bob', ageGroup: 'teen' })).status, 403);
+  // the last owner cannot step down
+  assert.equal((await s.call(s.alice, { action: 'setOwner', familyId: 'famA', userId: 'alice', owner: false })).status, 409);
+  // a second owner as backup, then the first can step down
+  assert.equal((await s.call(s.alice, { action: 'setOwner', familyId: 'famA', userId: 'bob' })).status, 200);
+  assert.ok(roles('bob').includes('owner'));
+  assert.equal((await s.call(s.bob, { action: 'setOwner', familyId: 'famA', userId: 'alice', owner: false })).status, 200);
+  assert.ok(!roles('alice').includes('owner') && roles('alice').length > 0);
+  // someone outside the family is refused
+  assert.equal((await s.call(s.bob, { action: 'setOwner', familyId: 'famA', userId: 'dave' })).status, 404);
+  // age groups: valid values only; owners only
+  assert.equal((await s.call(s.bob, { action: 'setAgeGroup', familyId: 'famA', userId: 'bob', ageGroup: 'vampire' })).status, 400);
+});
+
+test('roles: setAgeGroup saves a valid label and clears it', async () => {
+  const s = await setup();
+  await s.call(s.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' });
+  const row = () => [...s.world.tables.profiles.values()].find((r) => r.profileKey === 'famA_bob');
+  assert.equal((await s.call(s.alice, { action: 'setAgeGroup', familyId: 'famA', userId: 'bob', ageGroup: 'teen' })).status, 200);
+  assert.equal(row().ageGroup, 'teen');
+  assert.equal((await s.call(s.alice, { action: 'setAgeGroup', familyId: 'famA', userId: 'bob', ageGroup: '' })).status, 200);
+  assert.equal(row().ageGroup, '');
+  assert.equal((await s.call(s.alice, { action: 'setAgeGroup', familyId: 'famA', userId: 'carol', ageGroup: 'kid' })).status, 404);
 });
