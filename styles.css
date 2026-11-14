@@ -1871,3 +1871,10 @@ input[type="range"] { accent-color: var(--accent); }
 /* The maker's page thumbnails must not take on the app's pop-up sheet look (dark dim, fixed position); the app uses !important there, so these do too. */
 .cb .pg .sheet { position: static !important; z-index: auto !important; box-shadow: 0 2px 8px rgba(0, 0, 0, .3) !important; opacity: 1 !important; filter: none !important; transform: none !important; height: auto !important; max-height: none !important; display: block !important; }
 .shop-btn[hidden] { display: none !important; }
+
+/* Settings > Family and members: roles and age groups */
+.rg-member { display: block; padding: 12px 0; border-top: 1px solid var(--line, rgba(0,0,0,.1)); }
+.rg-top { display: flex; align-items: center; gap: 10px; }
+.rg-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.rg-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 8px; }
+.rg-age { display: flex; flex-direction: column; gap: 2px; min-width: 140px; }

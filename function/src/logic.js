@@ -28,7 +28,8 @@ export const TABLES = {
   shopDesigns: 'shopDesigns'   // optional shop: its print files share this bucket, so the cleanup must not delete them
 };
 
-export const LIMITS = {
+export const AGE_GROUPS = ['kid', 'teen', 'adult', 'grandparent', 'other'];
+const LIMITS = {
   bodyMax: 2000,
   commentMax: 500,
   nameMax: 60,
@@ -651,6 +652,41 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         throw e;
       }
       return { admin: on };
+    },
+
+    /** Owners can make another member an owner (so there is always a backup), or step an owner back down. The last owner can never be removed. */
+    async setOwner({ user, body }) {
+      const { familyId, isOwner } = await requireMember(user, body.familyId);
+      if (!isOwner) throw forbidden('Only a family owner can choose owners.');
+      const targetId = idOf(body.userId, 'userId');
+      const res = await teams.listMemberships({ teamId: familyId, queries: [Query.limit(100)] });
+      const joined = res.memberships.filter((m) => m.confirm === true);
+      const target = joined.find((m) => m.userId === targetId);
+      if (!target) throw missing('That person is not a member of this family.');
+      const on = body.owner !== false, was = Array.isArray(target.roles) && target.roles.includes('owner');
+      if (!on && was && joined.filter((m) => Array.isArray(m.roles) && m.roles.includes('owner')).length <= 1) throw new ApiError(409, 'last_owner', 'A family needs at least one owner. Make someone else an owner first.');
+      if (on !== was) {
+        const roles = on ? [...new Set([...(target.roles || []), 'owner'])] : (target.roles || []).filter((r) => r !== 'owner');
+        await teams.updateMembership({ teamId: familyId, membershipId: target.$id, roles: roles.length ? roles : ['member'] });
+      }
+      return { owner: on };
+    },
+
+    /** An age group is a label (kid, teen, adult, grandparent, other) that only owners set. It does not limit anything yet. */
+    async setAgeGroup({ user, body }) {
+      const { familyId, isOwner } = await requireMember(user, body.familyId);
+      if (!isOwner) throw forbidden('Only a family owner can set age groups.');
+      const group = body.ageGroup === '' || body.ageGroup == null ? '' : String(body.ageGroup);
+      if (group && !AGE_GROUPS.includes(group)) throw bad('That age group is not valid.');
+      const target = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${familyId}_${idOf(body.userId, 'userId')}`])]);
+      if (!target) throw missing('That person has no profile in this family yet.');
+      try {
+        await updateRow(TABLES.profiles, target.$id, { ageGroup: group });
+      } catch (e) {
+        if (sdkCode(e) === 400) throw bad('Age groups need one more setup step: add the ageGroup column to the profiles table.');
+        throw e;
+      }
+      return { ageGroup: group };
     },
 
     async treeAddPerson({ user, body }) {

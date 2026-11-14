@@ -3569,7 +3569,7 @@
       }));
     });
     main.appendChild(h('section', { class: 'card', 'aria-label': 'What each role can do' }, h('h2', { text: 'What each role can do' }),
-      h('p', { class: 'muted small', text: 'Use this when you choose who gets extra powers. Roles can be combined: tree admin and chat admin are add-ons that an owner gives to a member, and one person can have both. Owners already have everything in both columns. There is no separate parent or adult role, so give powers to the people you trust with them. This table only explains what already exists. It does not change anyone’s access.' }),
+      h('p', { class: 'muted small', text: 'Use this when you choose who gets extra powers. Roles can be combined: tree admin and chat admin are add-ons that an owner gives to a member, and one person can have both. Owners already have everything in both columns. There is no separate parent or adult role, so give powers to the people you trust with them. Age groups (kid, teen, adult) are labels for now and do not change anyone’s powers. This table only explains what already exists. It does not change anyone’s access.' }),
       h('div', { class: 'roles-wrap' }, h('table', { class: 'roles-table' }, h('caption', { class: 'sr-only', text: 'Powers by family role' }), h('thead', null, head), h('tbody', null, rows))),
       h('p', { class: 'muted small', text: 'Managing the shop (products, orders, Printify sync) is separate from family roles. It is set up on the site by whoever runs the shop, so it is not a column here and nothing on this page grants it. The author of a post can also delete comments on their own post.' })));
   }
@@ -3591,30 +3591,59 @@
     if (S.isOwner) {
       renderAdminTools(main, token);
       renderRolesTable(main);
-      var ta = h('section', { class: 'card', 'aria-label': 'Family tree admins' }, h('h2', { text: 'Family tree admins' }),
-        h('p', { class: 'muted small', text: 'Tree admins can change the family tree, the same as owners. They do not get any other owner powers.' }));
-      var others = joined.filter(function (m) { return m.roles.indexOf('owner') < 0; });
-      if (!others.length) ta.appendChild(h('p', { class: 'muted small', text: 'No other members yet.' }));
-      others.forEach(function (m) {
-        var p = S.profiles.get(m.userId) || null;
-        if (!p) return;
-        var isTA = p.treeAdmin === true;
-        ta.appendChild(h('div', { class: 'member' }, avatarEl(p), h('div', { class: 'grow' }, h('strong', { text: treeNameOf(p.userId) || p.displayName }), isTA ? h('span', { class: 'badge', text: ' Tree admin' }) : null),
-          h('button', { class: 'btn secondary small', type: 'button', text: isTA ? 'Remove' : 'Make tree admin', 'aria-label': (isTA ? 'Remove tree admin from ' : 'Make tree admin: ') + (treeNameOf(p.userId) || p.displayName), onclick: function (ev) {
-            busy(ev.currentTarget, async function () {
-              try {
-                var r = await api('setTreeAdmin', { familyId: S.familyId, userId: m.userId, admin: !isTA });
-                p.treeAdmin = r.admin; toast(r.admin ? p.displayName + ' can now manage the family tree.' : 'Tree admin removed.'); route(false);
-              } catch (e) { toast(errText(e)); }
-            });
-          } })));
-      });
-      main.appendChild(ta);
+      main.appendChild(renderRolesAndGroups(joined));
     } else {
       main.appendChild(h('div', { class: 'card' }, h('p', { text: 'Only family owners can invite or remove people. To add a relative, ask an owner to invite their email address.' })));
       renderRolesTable(main);
     }
     renderLeaveAndDelete(main, me, joined);
+  }
+
+  // Settings > Family and members (owners): one place to give roles and set age groups. Everything here is owner-only on the server too.
+  var AGE_GROUPS = [['', 'Not set'], ['kid', 'Kid'], ['teen', 'Teen'], ['adult', 'Adult'], ['grandparent', 'Grandparent'], ['other', 'Other']];
+  function ageGroupLabel(v) { var a = AGE_GROUPS.filter(function (x) { return x[0] === v; })[0]; return a && v ? a[1] : ''; }
+  function renderRolesAndGroups(joined) {
+    var card = h('section', { class: 'card roles-groups', 'aria-label': 'Roles and age groups' }, h('h2', { text: 'Roles and age groups' }),
+      h('p', { class: 'muted small', text: 'Give people roles and mark who is a kid, teen or adult. Keep at least two owners so someone can always fix things if one owner steps away. Age groups are labels for now; they do not limit anything yet.' }));
+    var ownerCount = joined.filter(function (m) { return m.roles.indexOf('owner') >= 0; }).length;
+    joined.forEach(function (m) {
+      var p = S.profiles.get(m.userId) || null;
+      if (!p) return;
+      var isOwner = m.roles.indexOf('owner') >= 0, isMe = m.userId === S.user.$id, name = treeNameOf(p.userId) || p.displayName;
+      var badges = h('span', { class: 'rg-badges' });
+      function paintBadges() {
+        clear(badges);
+        if (isOwner) badges.appendChild(h('span', { class: 'badge', text: 'Owner' }));
+        if (p.treeAdmin === true) badges.appendChild(h('span', { class: 'badge', text: 'Tree admin' }));
+        if (p.chatAdmin === true) badges.appendChild(h('span', { class: 'badge', text: 'Chat admin' }));
+        if (ageGroupLabel(p.ageGroup)) badges.appendChild(h('span', { class: 'badge', text: ageGroupLabel(p.ageGroup) }));
+      }
+      paintBadges();
+      var sel = h('select', { id: 'ag-' + m.userId, name: 'ag-' + m.userId, 'aria-label': 'Age group for ' + name }, AGE_GROUPS.map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+      sel.value = p.ageGroup || '';
+      sel.addEventListener('change', async function () {
+        var old = p.ageGroup || '';
+        try { var r = await api('setAgeGroup', { familyId: S.familyId, userId: m.userId, ageGroup: sel.value }); p.ageGroup = r.ageGroup; paintBadges(); toast(name + (r.ageGroup ? ' is marked as ' + ageGroupLabel(r.ageGroup).toLowerCase() + '.' : ' has no age group.')); }
+        catch (e) { sel.value = old; toast(errText(e)); }
+      });
+      function toggle(label, on, act) {
+        return h('button', { class: 'btn secondary small', type: 'button', text: label, 'aria-pressed': on ? 'true' : 'false', 'aria-label': label + ': ' + name, onclick: function (ev) { busy(ev.currentTarget, act); } });
+      }
+      var ownerBtn = toggle(isOwner ? 'Remove owner' : 'Make owner', isOwner, async function () {
+        if (isOwner && isMe && !(await confirmDialog('Step down as owner?', 'You will no longer be able to manage the family. Another owner will need to give it back.', 'Step down'))) return;
+        try { var r = await api('setOwner', { familyId: S.familyId, userId: m.userId, owner: !isOwner }); S.validatedAt = 0; toast(r.owner ? name + ' is now an owner.' : name + ' is no longer an owner.'); route(false); } catch (e) { toast(errText(e)); }
+      });
+      if (isOwner && ownerCount < 2) { ownerBtn.disabled = true; ownerBtn.title = 'A family needs at least one owner.'; }
+      var treeBtn = toggle(p.treeAdmin === true ? 'Remove tree admin' : 'Make tree admin', p.treeAdmin === true, async function () {
+        try { var r = await api('setTreeAdmin', { familyId: S.familyId, userId: m.userId, admin: p.treeAdmin !== true }); p.treeAdmin = r.admin; paintBadges(); route(false); toast(r.admin ? name + ' can now manage the family tree.' : 'Tree admin removed.'); } catch (e) { toast(errText(e)); }
+      });
+      var chatBtn = toggle(p.chatAdmin === true ? 'Remove chat admin' : 'Make chat admin', p.chatAdmin === true, async function () {
+        try { var r = await api('chatSetAdmin', { familyId: S.familyId, userId: m.userId, admin: p.chatAdmin !== true }); p.chatAdmin = r.admin; paintBadges(); route(false); toast(r.admin ? name + ' is now a chat admin.' : 'Chat admin removed.'); } catch (e) { toast(errText(e)); }
+      });
+      var ctl = h('div', { class: 'rg-controls' }, ownerBtn, isOwner ? null : treeBtn, isOwner ? null : chatBtn, h('label', { class: 'rg-age', for: 'ag-' + m.userId }, h('span', { class: 'small muted', text: 'Age group' }), sel));
+      card.appendChild(h('div', { class: 'member rg-member' }, h('div', { class: 'rg-top' }, avatarEl(p), h('div', { class: 'grow' }, h('strong', { text: name + (isMe ? ' (you)' : '') }), badges)), ctl));
+    });
+    return card;
   }
 
   function renderAdminTools(main, token) {

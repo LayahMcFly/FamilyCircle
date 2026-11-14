@@ -107,7 +107,7 @@ let PORT;
     check('4 ' + role + ': says roles can be combined and shop management is separate', /Roles can be combined/.test(await page.locator('[aria-label="What each role can do"]').innerText()) && /Managing the shop[^.]*is separate from family roles/.test(await page.locator('[aria-label="What each role can do"]').innerText()), '');
     check('4 ' + role + ': the table is read-only (no buttons or inputs inside it)', (await page.locator('[aria-label="What each role can do"] button, [aria-label="What each role can do"] input, [aria-label="What each role can do"] select').count()) === 0, '');
     check('4 ' + role + ': says there is no parent/adult role', /no separate parent or adult role/.test(await page.locator('[aria-label="What each role can do"]').innerText()), '');
-    if (role === 'owner') { const t = await page.locator('body').innerText(); check('4 owner: table sits above the Tree admins list', t.indexOf('What each role can do') > -1 && t.indexOf('What each role can do') < t.indexOf('Family tree admins'), ''); await page.locator('[aria-label="What each role can do"]').screenshot({ path: path.join(shots, 'roles-table-mobile.png') }); }
+    if (role === 'owner') { const t = await page.locator('body').innerText(); check('4 owner: table sits above the Roles and age groups card', t.indexOf('What each role can do') > -1 && t.indexOf('What each role can do') < t.indexOf('Roles and age groups'), ''); await page.locator('[aria-label="What each role can do"]').screenshot({ path: path.join(shots, 'roles-table-mobile.png') }); }
     check('4 ' + role + ': no page errors', errors.length === 0, errors.join('|'));
     await ctx.close();
   }
