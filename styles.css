@@ -1895,3 +1895,73 @@ html, body { overflow-x: clip; }
 .mention-opt .avatar { width: 30px; height: 30px; flex: none; }
 .mention-opt.on, .mention-opt:hover { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
 .mention-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Calendar and chores (board.js) ---- */
+.bd-page { max-width: 760px; margin: 0 auto; }
+.bd-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.bd-head h1 { margin: 0; font-size: 1.5rem; }
+.bd-bell { position: relative; }
+.bd-badge { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: .75rem; font-weight: 700; display: grid; place-content: center; }
+.bd-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 10px; scrollbar-width: none; }
+.bd-tab { flex: none; min-height: 40px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--text); font-weight: 600; cursor: pointer; }
+.bd-tab.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.bd-filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.bd-filters select { margin-bottom: 0; width: auto; min-width: 150px; }
+.bd-check { display: flex; gap: 10px; align-items: center; min-height: 36px; cursor: pointer; }
+.bd-nav { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; }
+.bd-title { flex: 1; margin: 0; font-size: 1.15rem; text-align: center; }
+.bd-dow, .bd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.bd-dow span { text-align: center; font-size: .75rem; color: var(--muted); font-weight: 700; padding-bottom: 4px; }
+.bd-cell { position: relative; min-height: 54px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); padding: 4px 2px; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; font: inherit; }
+.bd-cell.blank { border-color: transparent; background: transparent; cursor: default; }
+.bd-cell.today { border-color: var(--accent); }
+.bd-cell.picked { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border-color: var(--accent); }
+.bd-cell.special .bd-num::after { content: "★"; font-size: .6rem; margin-left: 2px; color: var(--accent-text); }
+.bd-num { font-weight: 700; font-size: .95rem; }
+.bd-dots { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.bd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--g, var(--accent)); display: inline-block; }
+.bd-dot.done { opacity: .35; }
+.bd-more { font-size: .65rem; color: var(--muted); }
+.bd-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.bd-day { margin-top: 12px; }
+.bd-day-head { justify-content: space-between; margin-bottom: 8px; }
+.bd-day-head h3 { margin: 0; font-size: 1.05rem; }
+.bd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bd-task, .bd-prod, .bd-note { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.bd-prod { justify-content: space-between; flex-wrap: wrap; }
+.bd-prod.low { border-color: var(--accent); }
+.bd-prod-main { display: grid; gap: 2px; min-width: 0; flex: 1 1 160px; }
+.bd-note { justify-content: space-between; flex-wrap: wrap; }
+.bd-note.new { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.bd-task-main { flex: 1; min-width: 0; display: grid; gap: 2px; text-align: left; background: none; border: 0; padding: 4px 0; color: var(--text); font: inherit; cursor: pointer; }
+.bd-task-title { font-weight: 700; overflow-wrap: anywhere; color: var(--text); }
+.bd-task-title.is-done, .is-done { text-decoration: line-through; color: var(--muted); }
+.bd-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; border: 1px solid var(--g, var(--border)); color: var(--text); background: color-mix(in srgb, var(--g, var(--accent)) 18%, var(--surface)); }
+.bd-empty { margin: 6px 0; }
+.bd-dialog { max-width: min(560px, calc(100vw - 24px)); width: 100%; max-height: calc(100vh - 24px); overflow-y: auto; }
+.bd-dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bd-dlg-head h2 { margin: 0; font-size: 1.2rem; overflow-wrap: anywhere; }
+.bd-form { display: grid; gap: 4px; }
+.bd-field { display: grid; gap: 4px; }
+.bd-lab { font-weight: 700; font-size: .9rem; }
+.bd-fieldset { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px 10px; margin: 0 0 14px; }
+.bd-fieldset legend { font-weight: 700; font-size: .9rem; padding: 0 6px; }
+.bd-people { display: grid; gap: 2px; }
+.bd-step-row { flex-wrap: nowrap; }
+.bd-step-row input { flex: 1; margin-bottom: 0; }
+.bd-steps-edit { display: grid; gap: 8px; }
+.bd-error { color: var(--danger); font-weight: 600; margin: 0 0 10px; }
+.bd-error[hidden] { display: none; }
+.bd-detail { display: grid; gap: 10px; }
+.bd-desc { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.bd-record { display: flex; gap: 8px; align-items: center; margin: 0; font-weight: 600; }
+.bd-record svg { width: 20px; height: 20px; fill: none; stroke: currentColor; flex: none; }
+.bd-hist ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.bd-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.bd-swatch { width: 36px; height: 36px; border-radius: 50%; border: 3px solid var(--surface); background: var(--g); box-shadow: 0 0 0 1px var(--border); cursor: pointer; }
+.bd-swatch.on { box-shadow: 0 0 0 3px var(--text); }
+.main[data-view="calendar"] { max-width: 760px; }
+.main[data-view="calendar"] > .hub-back { margin-bottom: 8px; }
+.bd-page { padding: 0 12px; }
+.bd-page .btn svg, .bd-dialog .btn svg, .bd-record svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
+.bd-page .bd-task input[type="checkbox"] { margin-left: 2px; }

@@ -6,7 +6,7 @@ const ROOT = path.resolve(__dirname, '../..'), SUB = '/FamilyCircle/';
 const T = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.woff2': 'font/woff2' };
 const srv = http.createServer((q, r) => { const u = decodeURIComponent(q.url.split('?')[0]); let f = path.join(ROOT, u.slice(SUB.length) || 'index.html'); if (f.endsWith('/')) f += 'index.html'; fs.readFile(f, (e, d) => { if (e) { r.writeHead(404); return r.end(); } r.writeHead(200, { 'content-type': T[path.extname(f)] || 'application/octet-stream' }); r.end(d); }); });
 const FAKE = fs.readFileSync(path.join(__dirname, 'fake-appwrite.js'), 'utf8');
-const ROUTES = ['#/recipes', '#/recipes/new', '#/recipes/edit/grandmas-banana-bread', '#/recipes/cookbook', '#/settings/family', '#/home', '#/hub', '#/tree', '#/chat'];
+const ROUTES = ['#/recipes', '#/recipes/new', '#/recipes/edit/grandmas-banana-bread', '#/recipes/cookbook', '#/settings/family', '#/home', '#/hub', '#/tree', '#/chat', '#/calendar'];
 let pass = 0, fail = 0;
 (async () => {
   await new Promise(r => srv.listen(0, '127.0.0.1', r)); const port = srv.address().port;

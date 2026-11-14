@@ -12,7 +12,7 @@ const user = { $id: 'uA', name: 'Alex Tester', email: 'a@example.com', emailVeri
 const world = { signedIn: true, user, families: [{ id: 'famA', name: 'Alpha Family', role: 'owner' }], canCreateFamily: true,
   tables: { profiles: [{ $id: 'pA', userId: 'uA', familyId: 'famA', displayName: 'Alex Tester', bio: '', about: '[]', $createdAt: '2026-01-01' }], people: [], posts: [] },
   members: [{ $id: 'm1', userId: 'uA', confirm: true, roles: ['owner'], userName: 'Alex Tester' }] };
-const ROUTES = ['#/recipes', '#/recipes/new', '#/recipes/edit/grandmas-banana-bread', '#/settings', '#/settings/family', '#/settings/profile', '#/settings/tree', '#/create', '#/chat', '#/shop', '#/home', '#/tree'];
+const ROUTES = ['#/recipes', '#/recipes/new', '#/recipes/edit/grandmas-banana-bread', '#/settings', '#/settings/family', '#/settings/profile', '#/settings/tree', '#/create', '#/chat', '#/shop', '#/home', '#/tree', '#/calendar'];
 let pass = 0, fail = 0; const out = [];
 (async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); const PORT = server.address().port;

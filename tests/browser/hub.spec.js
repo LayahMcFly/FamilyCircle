@@ -55,16 +55,13 @@ let PORT;
     await page.screenshot({ path: path.join(shots, 'hub-mobile-light.png'), fullPage: true });
     check('B no page errors', errors.length === 0, errors.join('|')); await ctx.close(); }
 
-  // D. Recipes is now inside Family Circle; Calendar & Chores is still the original app in a new tab
+  // D. Recipes and Calendar & Chores are both inside Family Circle
   { const { ctx, page } = await open(browser, world(), '#/hub'); await settle(page);
     const rec = page.locator('a[data-hub="recipes"]'), cal = page.locator('a[data-hub="calendar"]');
     check('D Recipes is an in-app link', (await rec.getAttribute('href')) === '#/recipes' && (await rec.getAttribute('target')) === null, await rec.getAttribute('href'));
     check('D Recipes carries no original-app label', (await rec.locator('.hub-orig').count()) === 0, '');
-    check('D Calendar URL', (await cal.getAttribute('href')) === 'https://layahmcfly.github.io/ZenfulOutput/family-board/', '');
-    for (const [n, l] of [['Calendar', cal]]) {
-      check('D ' + n + ' opens in new tab safely', (await l.getAttribute('target')) === '_blank' && /noopener/.test(await l.getAttribute('rel')), '');
-      check('D ' + n + ' has the exact label', (await l.locator('.hub-orig').innerText()) === 'Original app — separate sign-in may be required.', await l.locator('.hub-orig').innerText());
-    }
+    check('D Calendar is an in-app link', (await cal.getAttribute('href')) === '#/calendar' && (await cal.getAttribute('target')) === null, await cal.getAttribute('href'));
+    check('D Calendar carries no original-app label', (await cal.locator('.hub-orig').count()) === 0, '');
     check('D inside cards stay in this tab', (await page.locator('a[data-hub="tree"]').getAttribute('target')) === null && (await page.locator('a[data-hub="community"]').getAttribute('target')) === null, '');
     check('D no card claims Appwrite/migrated', !/appwrite|migrat|integrat/i.test(await page.locator('.hub-grid').innerText()), '');
     await ctx.close(); }

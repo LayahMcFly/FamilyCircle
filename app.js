@@ -1627,7 +1627,7 @@
     { id: 'profile', label: 'Profile', icon: 'user' }
   ];
   var VIEWS = {};
-  var HUB_MODULES = { home: 1, tree: 1, shop: 1, orders: 1, recipes: 1 };   // screens that get a Back to Hub link at the top (chat has its own layout and its own link)
+  var HUB_MODULES = { home: 1, tree: 1, shop: 1, orders: 1, recipes: 1, calendar: 1 };   // screens that get a Back to Hub link at the top (chat has its own layout and its own link)
 
   function familySwitcher() {
     var cur = currentFamily();
@@ -1727,16 +1727,16 @@
     document.body.classList.remove('sheet-open', 'chat-mode');
     if (window.FCChat && name !== 'chat' && name !== 'dms') window.FCChat.stop();   // leaving chat closes its realtime connection
     // In the Hub the second bottom button is Shop (Shorts lives in the community); in the community it is Shorts and Shop sits at the top.
-    var hubSide = shopEnabled() && (name === 'hub' || name === 'tree' || name === 'shop' || name === 'orders' || name === 'recipes');
+    var hubSide = shopEnabled() && (name === 'hub' || name === 'tree' || name === 'shop' || name === 'orders' || name === 'recipes' || name === 'calendar');
     applyNavSide(hubSide);
-    var navName = name === 'settings' ? 'profile' : (name === 'chat' || name === 'dms') ? 'create' : name === 'shop' && hubSide ? 'shop' : (name === 'tree' || name === 'shop' || name === 'orders' || name === 'recipes') ? 'hub' : name;   // Tree, Orders and Recipes are Hub modules
+    var navName = name === 'settings' ? 'profile' : (name === 'chat' || name === 'dms') ? 'create' : name === 'shop' && hubSide ? 'shop' : (name === 'tree' || name === 'shop' || name === 'orders' || name === 'recipes' || name === 'calendar') ? 'hub' : name;   // Tree, Orders, Recipes and Calendar are Hub modules
     var savedBtn = document.getElementById('saved-btn');
     if (savedBtn) { if (name === 'saved') savedBtn.setAttribute('aria-current', 'page'); else savedBtn.removeAttribute('aria-current'); }
     Array.prototype.forEach.call(document.querySelectorAll('.nav [data-route]'), function (a) {
       if (a.getAttribute('data-route') === navName) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     var meta = NAV.filter(function (n) { return n.id === name; })[0];
-    document.title = ((window.FC_UNREAD > 0) ? '(' + (window.FC_UNREAD > 99 ? '99+' : window.FC_UNREAD) + ') ' : '') + (meta ? meta.label : ({ hub: 'Hub', tree: 'Family Tree', shop: 'Shop', activity: 'Activity', post: 'Post', recipes: 'Recipes', settings: 'Settings', chat: 'Family chat', dms: 'Direct messages' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
+    document.title = ((window.FC_UNREAD > 0) ? '(' + (window.FC_UNREAD > 99 ? '99+' : window.FC_UNREAD) + ') ' : '') + (meta ? meta.label : ({ hub: 'Hub', tree: 'Family Tree', shop: 'Shop', activity: 'Activity', post: 'Post', recipes: 'Recipes', calendar: 'Calendar & chores', settings: 'Settings', chat: 'Family chat', dms: 'Direct messages' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
     if (HUB_MODULES[name]) S.main.appendChild(h('p', { class: 'hub-back' }, h('a', { class: 'link-btn back-btn', href: '#/hub' }, h('span', { text: 'Back to Hub' }))));
     Promise.resolve().then(function () { return VIEWS[name](S.main, token, param, param2, param3); }).catch(function (e) {
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
@@ -5983,6 +5983,7 @@
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, noteDenied: noteDenied, route: route,
       functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });
     if (window.FCRecipes) window.FCRecipes.install({ S: S, VIEWS: VIEWS, h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, reroute: function () { route(false); } });
+    if (window.FCBoard) window.FCBoard.install({ S: S, VIEWS: VIEWS, h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, api: api, route: route });
     if (window.FCHub) window.FCHub.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, icon: icon, famName: famName, familySwitcher: familySwitcher, shopEnabled: shopEnabled });
     var action = readActionParams();
     if (action) await handleAction(action);

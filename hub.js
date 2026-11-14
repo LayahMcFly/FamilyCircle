@@ -75,7 +75,7 @@
       cards.push({ id: 'tree', title: 'Family Tree', desc: 'See how everyone is connected.', icon: 'tree', href: '#/tree' });
       if (X.shopEnabled()) cards.push({ id: 'shop', title: 'Shop', desc: 'Turn family photos into gifts.', icon: 'bag', href: '#/shop' });
       cards.push({ id: 'recipes', title: 'Recipes', desc: 'The family recipe book, kept on this device.', icon: 'book', href: '#/recipes' });
-      cards.push({ id: 'calendar', title: 'Calendar & Chores', desc: 'The family calendar and chore board.', icon: 'calendar', href: BOARD_URL, external: true });
+      cards.push({ id: 'calendar', title: 'Calendar & Chores', desc: 'Tasks, chores, special days and the shopping list.', icon: 'calendar', href: '#/calendar' });
 
       main.appendChild(h('nav', { 'aria-label': 'Family Hub' }, h('ul', { class: 'hub-grid' }, cards.map(card).concat(PLANNED.map(plannedCard)))));
     };
