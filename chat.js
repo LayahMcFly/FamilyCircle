@@ -704,11 +704,11 @@
       return;
     }
     var title = curTitle(c), ch = cv.kind === 'channel' ? channelById(c, cv.id) : null, dm = cv.kind === 'dm' ? dmById(c, cv.id) : null;
-    var sub = ch ? (ch.description || '') : (dm ? 'Direct message · only you and ' + realName(dm.otherId) + ' can read this' : '');
+    var sub = ch ? (ch.description || '') : '';   // a direct message needs no label: it shows the person's picture, and the status line below the name
     var head = h('header', { class: 'conv-head' },
       h('a', { class: 'btn secondary small only-narrow', href: c.route.mode === 'dms' ? '#/dms' : '#/chat', 'aria-label': 'Back to ' + (c.route.mode === 'dms' ? 'direct messages' : 'channels') }, icon('back')),
       dm ? openable(avWrap(c, dm.otherId, 'sm'), c, dm.otherId, 'Open ' + title + '’s profile') : null,
-      h('div', { class: 'grow ct' }, h('h1', { text: title }), h('div', { class: 'small muted clamp', text: (dm ? '' : famLabel() + ' · ') + sub }), dm ? presenceSlot(dm.otherId) : null),
+      h('div', { class: 'grow ct' }, h('h1', { text: title }), dm ? null : h('div', { class: 'small muted clamp', text: famLabel() + ' · ' + sub }), dm ? presenceSlot(dm.otherId) : null),
       convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a voice call', title: 'Voice call', onclick: function () { startCall(c, cv, false); } }, icon('phone')) : null,
       convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a video call', title: 'Video call', onclick: function () { startCall(c, cv, true); } }, icon('video')) : null,
       dm ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Conversation options', onclick: function () { dmOptions(c, dm); } }, icon('more')) : h('button', { class: 'btn secondary small', type: 'button', text: 'Members', onclick: function () { membersSheet(c); } }));
