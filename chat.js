@@ -863,7 +863,7 @@
     if (gifOf(m) && previewsOn()) { el.classList.add('is-gif'); return el; }
     splitLinks(String(m.body || '')).forEach(function (p) {
       if (p.u) el.appendChild(h('a', { href: p.u, target: '_blank', rel: 'noopener noreferrer nofollow ugc', class: 'msg-link', text: p.u }));
-      else el.appendChild(document.createTextNode(p.t));
+      else el.appendChild(window.FCMentions ? window.FCMentions.nodes(p.t) : document.createTextNode(p.t));
     });
     return el;
   }
@@ -1392,6 +1392,7 @@
     function setReply(m) { reply = m; replyBar.hidden = !m; clear(replyBar); if (m) { replyBar.appendChild(h('span', { class: 'clamp' }, 'Replying to ', h('strong', { text: realName(m.authorId) }), ': ' + m.body)); replyBar.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Cancel reply', text: '×', onclick: function () { setReply(null); ta.focus(); } })); ta.focus(); } }
     cv.setReply = setReply;
     ta.addEventListener('input', grow);
+    if (window.FCMentions) window.FCMentions.attach(ta);   // typing @ lists the people in this family
     // Keyboard mode: while the message box has focus the newest messages stay in view, until the keyboard is closed.
     function toBottom() { var l = listScroller(); if (l) l.scrollTop = l.scrollHeight; }
     ta.addEventListener('focus', function () { c.kbd = true; c.stick = true; toBottom(); setTimeout(toBottom, 120); setTimeout(toBottom, 350); setTimeout(toBottom, 700); });
@@ -1631,7 +1632,7 @@
   /* ----- members, new DM, DM options ----- */
   function memberList(c) { return Array.from(X.S.profiles.values()).sort(function (a, b) { return String(a.displayName).localeCompare(String(b.displayName)); }); }
   async function owners(c) {
-    try { var res = await X.teams.listMemberships({ teamId: c.famId, queries: [X.Query.limit(100)] }); var o = {}; res.memberships.forEach(function (m) { if (m.confirm && m.roles.indexOf('owner') >= 0) o[m.userId] = true; }); return o; } catch (e) { return {}; }
+    try { var res = X.listMembers ? await X.listMembers(c.famId) : await X.teams.listMemberships({ teamId: c.famId, queries: [X.Query.limit(100)] }); var o = {}; res.memberships.forEach(function (m) { if (m.confirm && m.roles.indexOf('owner') >= 0) o[m.userId] = true; }); return o; } catch (e) { return {}; }
   }
   async function membersSheet(c) {
     var body = h('div', { class: 'cs-list' }, X.spinnerLine('Loading…', 'site')); var s = sheet('Family members', body);
@@ -1882,7 +1883,7 @@
     var frag = document.createDocumentFragment();
     splitLinks(String(text || '')).forEach(function (p) {
       if (p.u) frag.appendChild(h('a', { href: p.u, target: '_blank', rel: 'noopener noreferrer nofollow ugc', class: 'msg-link', text: p.u }));
-      else frag.appendChild(document.createTextNode(p.t));
+      else frag.appendChild(window.FCMentions ? window.FCMentions.nodes(p.t) : document.createTextNode(p.t));
     });
     return frag;
   }
