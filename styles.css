@@ -1883,3 +1883,6 @@ input[type="range"] { accent-color: var(--accent); }
 .rg-age { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
 .rg-age span { flex: none; }
 .rg-age select { flex: 1; min-width: 0; }
+
+/* A single wide element must never make a phone zoom out and leave empty space on the right: clip, do not scroll. Scrollers inside the page (tables, chips) still scroll on their own. */
+html, body { overflow-x: clip; }
