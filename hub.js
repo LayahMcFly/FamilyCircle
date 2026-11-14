@@ -4,8 +4,6 @@
  * Installed by app.js with FCHub.install({ S, VIEWS, CFG, h, icon, famName, familySwitcher, shopEnabled }). */
 (function () {
   'use strict';
-  var RECIPES_URL = 'https://layahmcfly.github.io/ZenfulOutput/recipe-book/';
-  var BOARD_URL = 'https://layahmcfly.github.io/ZenfulOutput/family-board/';
   var ORIGINAL_NOTE = 'Original app — separate sign-in may be required.';
 
   function install(X) {
@@ -81,5 +79,5 @@
     };
   }
 
-  window.FCHub = { install: install, RECIPES_URL: RECIPES_URL, BOARD_URL: BOARD_URL };
+  window.FCHub = { install: install };
 })();
