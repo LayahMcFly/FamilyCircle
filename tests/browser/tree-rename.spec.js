@@ -135,6 +135,16 @@ async function openEdit(page, personName) {
     const { ctx, page, errors } = await open(browser, mock, '#/activity'); await page.waitForTimeout(600);
     check('table missing or failing: Activity still opens, no errors, no name entries', (await page.locator('h1:has-text("Activity")').count()) === 1 && (await page.locator('.act-name').count()) === 0 && errors.length === 0, errors.join('|')); await ctx.close(); }
 
+  // 8. Family and members shows the tree name for a member linked to their tree entry (the tree was renamed, the profile name was not)
+  { const mock = world('u-owner', 'owner'); mock.tables.people.push(person('pm', 'Cara Renamed Smith', { userId: 'u-cara2', confirmed: true, birthday: '1985-04-02' }));
+    mock.tables.profiles.push(prof('u-cara2', 'Old Profile Name'));
+    mock.members = [{ $id: 'm1', userId: 'u-owner', confirm: true, roles: ['owner'], userName: 'Alice Owner' }, { $id: 'm2', userId: 'u-cara2', confirm: true, roles: [], userName: 'Old Profile Name' }];
+    const { ctx, page } = await open(browser, mock, '#/settings/family'); await page.waitForTimeout(800);
+    const txt = await page.locator('main').innerText();
+    check('Members list shows the renamed tree name', txt.includes('Cara Renamed Smith'), txt.slice(0, 200));
+    check('Members list no longer shows the stale profile name', !txt.includes('Old Profile Name'), txt.split('\n').filter(l => l.includes('Old Profile')).join(' / '));
+    await page.screenshot({ path: path.join(OUT, 'members-tree-name.png') }); await ctx.close(); }
+
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

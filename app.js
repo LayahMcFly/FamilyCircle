@@ -3476,6 +3476,14 @@
     return settingsFamily(main, token);
   }
 
+  // The name to show for a member in the Family and members screens: the name on their own tree entry when they are linked to one
+  // (so a tree rename shows here), otherwise the name from their profile.
+  function treeNameOf(userId) {
+    var ps = (S.tree && S.tree.people) || [];
+    var hit = ps.filter(function (x) { return x.userId === userId && x.name; })[0];
+    return hit ? String(hit.name) : '';
+  }
+
   async function familyMembers(main, token) {
     var listBox = h('div', { class: 'card' }, spinnerLine('Loading…'));
     main.appendChild(listBox);
@@ -3503,9 +3511,11 @@
       var isTA = !!(p && p.treeAdmin === true);
       // Someone who joined but has not finished "Set up your profile" has no saved name or picture. Show the best name we know.
       var treeName = (tp && tp.name) || '';
-      var shownName = (p && p.displayName) || m.userName || treeName || '';
+      // A member who is linked to their own tree entry shows the tree name, so renaming them in the tree is what you see here.
+      var linkedTreeName = (tp && tp.userId === m.userId && tp.name) ? String(tp.name) : '';
+      var shownName = linkedTreeName || (p && p.displayName) || m.userName || treeName || '';
       listBox.appendChild(h('div', { class: 'member' }, avatarEl(p || { displayName: shownName || '?' }),
-        h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + (p.userId || m.userId) }, h('strong', { text: p.displayName })) : h('strong', { text: shownName || 'Family member' }),
+        h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + (p.userId || m.userId) }, h('strong', { text: linkedTreeName || p.displayName })) : h('strong', { text: shownName || 'Family member' }),
           m.userId === S.user.$id ? h('span', { class: 'badge', text: ' You' }) : null,
           isOwnerRow ? h('span', { class: 'badge', text: ' Owner' }) : null,
           isTA && !isOwnerRow ? h('span', { class: 'badge', text: ' Tree admin' }) : null,
@@ -3571,8 +3581,8 @@
         var p = S.profiles.get(m.userId) || null;
         if (!p) return;
         var isTA = p.treeAdmin === true;
-        ta.appendChild(h('div', { class: 'member' }, avatarEl(p), h('div', { class: 'grow' }, h('strong', { text: p.displayName }), isTA ? h('span', { class: 'badge', text: ' Tree admin' }) : null),
-          h('button', { class: 'btn secondary small', type: 'button', text: isTA ? 'Remove' : 'Make tree admin', 'aria-label': (isTA ? 'Remove tree admin from ' : 'Make tree admin: ') + p.displayName, onclick: function (ev) {
+        ta.appendChild(h('div', { class: 'member' }, avatarEl(p), h('div', { class: 'grow' }, h('strong', { text: treeNameOf(p.userId) || p.displayName }), isTA ? h('span', { class: 'badge', text: ' Tree admin' }) : null),
+          h('button', { class: 'btn secondary small', type: 'button', text: isTA ? 'Remove' : 'Make tree admin', 'aria-label': (isTA ? 'Remove tree admin from ' : 'Make tree admin: ') + (treeNameOf(p.userId) || p.displayName), onclick: function (ev) {
             busy(ev.currentTarget, async function () {
               try {
                 var r = await api('setTreeAdmin', { familyId: S.familyId, userId: m.userId, admin: !isTA });
@@ -3659,7 +3669,7 @@
           var self = m.userId === S.user.$id;
           var tp0 = ((S.tree && S.tree.people) || []).filter(function (x) { return x.userId === m.userId || (x.inviteMembershipId && x.inviteMembershipId === m.$id); })[0] || null;
           var prof0 = S.profiles.get(m.userId) || (tp0 && tp0.userId ? S.profiles.get(tp0.userId) : null) || null;
-          var label = (prof0 && prof0.displayName) || m.userName || (tp0 && tp0.name) || m.userEmail || 'Family member';
+          var label = treeNameOf(m.userId) || (prof0 && prof0.displayName) || m.userName || (tp0 && tp0.name) || m.userEmail || 'Family member';
           var isOwnerRow = m.roles.indexOf('owner') >= 0;
           memberBox.appendChild(h('div', { class: 'member mem-row' },
             avatarEl(prof0 || { displayName: label }),
