@@ -1683,17 +1683,19 @@
   function fitBrand() {
     var brand = document.querySelector('.topbar .brand'), sp = brand && brand.querySelector('span'), inner = brand && brand.parentElement; if (!sp || !inner) return;
     var full = CFG.appName || 'Family Circle', words = full.split(/\s+/), tries = [full, words[words.length - 1], words.map(function (w) { return w.charAt(0).toUpperCase(); }).join('')];
-    var kids = Array.prototype.slice.call(inner.children);
-    kids.forEach(function (c) { c.style.flex = 'none'; });   // while measuring, nothing shrinks, so any shortage shows up as overflow of the bar
+    // Judge the bar exactly as it is drawn: a name that the browser cut with "..." or that pushes the bar wider than the screen does not fit.
+    var fits = function () { return sp.scrollWidth <= sp.clientWidth + 1 && inner.scrollWidth <= inner.clientWidth + 1; };
     var pick = tries[tries.length - 1];
-    for (var i = 0; i < tries.length; i++) { sp.textContent = tries[i]; if (inner.scrollWidth <= inner.clientWidth + 0.5) { pick = tries[i]; break; } }
-    sp.textContent = pick; kids.forEach(function (c) { c.style.flex = ''; });
+    for (var i = 0; i < tries.length; i++) { if (sp.textContent !== tries[i]) sp.textContent = tries[i]; if (fits()) { pick = tries[i]; break; } }
+    if (sp.textContent !== pick) sp.textContent = pick;
   }
   var fitTimer = null;
   function fitBrandSoon() { clearTimeout(fitTimer); fitTimer = setTimeout(fitBrand, 60); }
   window.addEventListener('resize', fitBrandSoon);
   window.addEventListener('orientationchange', fitBrandSoon);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitBrandSoon);
+  if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', fitBrandSoon);
+  if (window.ResizeObserver) { var brandRO = new ResizeObserver(fitBrandSoon); var watchBar = function () { var inn = document.querySelector('.topbar-inner'); if (inn && !inn.__fitWatch) { inn.__fitWatch = 1; brandRO.observe(inn); Array.prototype.forEach.call(inn.children, function (c) { if (c !== inn.querySelector('.brand')) brandRO.observe(c); }); } }; setInterval(watchBar, 1500); }
 
   var REVALIDATE_MS = 5 * 60 * 1000;
 
