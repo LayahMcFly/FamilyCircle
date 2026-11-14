@@ -1638,7 +1638,140 @@ button.hub-card { box-sizing: border-box; font: inherit; text-align: left; width
 .roles-yes { font-weight: 700; color: var(--accent-text, var(--text)); }
 .roles-no { color: var(--muted); }
 
-/* Recipes: the adapted Recipe Book shown inside Family Circle (recipes-app/, same origin). It fills the space under the Back to Hub link and above the bottom bar. */
-.main[data-view="recipes"] { max-width: 960px; padding-left: 0; padding-right: 0; padding-bottom: 0; }
-.main[data-view="recipes"] > .hub-back { margin-left: 16px; }
-.recipes-frame { display: block; width: 100%; height: calc(100vh - var(--nav-h) - 96px - env(safe-area-inset-bottom)); height: calc(100dvh - var(--nav-h) - 96px - env(safe-area-inset-bottom)); min-height: 420px; border: 0; background: #ecdfc8; }
+/* Recipes (recipes.js): built from the app's own cards, buttons, chips and theme colors, so it follows whichever theme is chosen. */
+.rc-crumb { margin: 0 0 8px; }
+.rc-controls { display: grid; gap: 10px; margin: 14px 0 10px; }
+.rc-controls input[type="search"] { width: 100%; }
+.rc-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.rc-chips .chip, .rc-controls .chip, .rc-presets .chip { min-height: 40px; }
+.rc-grid { list-style: none; margin: 14px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.rc-card { display: block; padding: 0; overflow: hidden; text-decoration: none; color: var(--text); height: 100%; }
+.rc-card h3 { margin: 10px 12px 2px; font-size: 1rem; display: flex; gap: 6px; align-items: center; }
+.rc-card p { margin: 0 12px 12px; }
+.rc-card:hover { border-color: var(--accent); }
+.rc-photo { aspect-ratio: 4 / 3; background: var(--surface-2); display: grid; place-items: center; overflow: hidden; border-radius: var(--radius-sm); }
+.rc-card .rc-photo { border-radius: 0; }
+.rc-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rc-ph { color: var(--muted); display: grid; place-items: center; }
+.rc-ph svg { width: 38px; height: 38px; fill: none; stroke: currentColor; }
+.rc-fav { display: inline-flex; color: var(--danger); }
+.rc-fav svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; }
+.rc-empty { text-align: center; }
+.rc-backup { margin-top: 24px; }
+.rc-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.rc-pick { cursor: pointer; margin-top: 8px; }
+.rc-file:focus-visible + .rc-pick, .rc-file:focus-visible ~ .rc-pick { outline: 3px solid var(--accent-text); outline-offset: 2px; }
+
+.rc-recipe header h1 { margin-bottom: 6px; }
+.rc-desc { font-size: 1.05rem; margin: 0 0 12px; }
+.rc-facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 12px 0; }
+.rc-facts div { min-width: 70px; }
+.rc-facts dt { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.rc-facts dd { margin: 0; font-weight: 700; }
+.rc-actions { margin: 14px 0; }
+.rc-actions .btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; }
+.rc-actions .btn[aria-pressed="true"] svg { fill: var(--danger); stroke: var(--danger); }
+.rc-hero { margin: 14px 0; }
+.rc-hero .rc-photo { aspect-ratio: 16 / 10; max-height: 420px; }
+.rc-parts ul { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.rc-pcard { display: flex; gap: 10px; align-items: center; text-decoration: none; color: var(--text); background: var(--surface-2); border-radius: 999px; padding: 4px 14px 4px 4px; font-weight: 600; }
+.rc-pcard .rc-photo { width: 40px; height: 40px; aspect-ratio: 1; border-radius: 50%; }
+.rc-pcard .rc-ph svg { width: 20px; height: 20px; }
+.rc-cols { display: grid; gap: 18px; margin-top: 10px; }
+@media (min-width: 760px) { .rc-cols { grid-template-columns: minmax(240px, 5fr) 7fr; align-items: start; } }
+.rc-ing-sec, .rc-steps { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.rc-scaler { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; }
+.rc-scaler output { min-width: 2ch; text-align: center; font-weight: 800; font-size: 1.2rem; }
+.rc-ings { list-style: none; margin: 0; padding: 0; }
+.rc-ings li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.rc-ings li:last-child { border-bottom: 0; }
+.rc-grp { font-weight: 800; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding-top: 12px !important; }
+.rc-chk { display: flex; gap: 10px; align-items: flex-start; margin: 0; font-weight: 400; cursor: pointer; }
+.rc-chk input { width: 22px; height: 22px; margin: 1px 0 0; flex: none; accent-color: var(--accent); }
+.rc-chk input:checked + span { text-decoration: line-through; color: var(--muted); }
+.rc-steps ol { margin: 0; padding-left: 1.3rem; }
+.rc-steps li { margin: 0 0 12px; padding-left: 4px; }
+.rc-steps li p { margin: 0; }
+.rc-dur { font: inherit; font-weight: 700; color: var(--accent-text); background: var(--tint, var(--surface-2)); border: 1px solid var(--border); border-radius: 8px; padding: 0 6px; cursor: pointer; }
+.rc-note { margin: 18px 0; padding: 12px 16px; border-left: 4px solid var(--accent); background: var(--surface-2); border-radius: var(--radius-sm); }
+.rc-note p { margin: 4px 0 0; white-space: pre-wrap; }
+
+.rc-form .rc-field { margin: 0 0 14px; }
+.rc-form .rc-field > label, .rc-lab { display: block; font-weight: 600; margin: 0 0 4px; }
+.rc-form input[type="text"], .rc-form input[type="search"], .rc-form textarea { width: 100%; }
+.rc-form .rc-photo { max-width: 260px; margin-bottom: 4px; }
+.rc-two { display: grid; gap: 0 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.rc-pchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.rc-pchip { display: inline-flex; gap: 6px; align-items: center; background: var(--surface-2) !important; color: var(--text) !important; padding: 4px 10px !important; border: 1px solid var(--border) !important; }
+.rc-pchip button { border: 0; background: none; color: inherit; font-size: 1.1rem; cursor: pointer; line-height: 1; min-width: 24px; min-height: 24px; }
+.rc-partres { list-style: none; margin: 6px 0 0; padding: 0; max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.rc-partres li { padding: 0; }
+.rc-partres li.muted { padding: 8px 12px; }
+.rc-partadd { display: flex; justify-content: space-between; width: 100%; padding: 10px 12px; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; text-align: left; }
+.rc-partadd:hover, .rc-partadd:focus-visible { background: var(--surface-2); }
+
+dialog.rc-dinner { max-width: 420px; }
+dialog.rc-dinner .rc-photo { margin: 8px 0; }
+.rc-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+
+/* timers: a small tray above the bottom bar, on every screen while any timer exists */
+.rc-tray { position: fixed; left: 12px; right: 12px; bottom: calc(var(--nav-h) + 12px + env(safe-area-inset-bottom)); z-index: 55; display: grid; gap: 8px; max-width: 520px; margin: 0 auto; }
+.rc-tmr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px 12px; }
+.rc-tmr.done { border-color: var(--danger); }
+.rc-tt { font-weight: 800; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.rc-tl { flex: 1; min-width: 80px; color: var(--muted); }
+.rc-tb { display: flex; gap: 6px; }
+
+/* cook mode: one step at a time, large type */
+body.rc-lock { overflow: hidden; }
+.rc-cook { position: fixed; inset: 0; z-index: 70; background: var(--bg); color: var(--text); overflow: auto; }
+.rc-cook-wrap { max-width: 720px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+.rc-cook-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.rc-cook-top p { margin: 0; }
+.rc-cook-count { font-size: 1.15rem; font-weight: 800; }
+.rc-bar { height: 8px; border-radius: 99px; background: var(--surface-2); margin: 12px 0; overflow: hidden; }
+.rc-bar-fill { display: block; height: 100%; background: var(--accent); }
+.rc-cook-main { flex: 1; padding: 10px 0 18px; }
+.rc-cook-step { font-size: clamp(1.4rem, 5vw, 2rem); line-height: 1.4; margin: 0; }
+.rc-from { display: block; font-size: .9rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.rc-cook-ings { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.rc-cook-ings .rc-chk { font-size: 1.15rem; }
+.rc-cook-nav { display: flex; gap: 10px; flex-wrap: wrap; position: sticky; bottom: 0; padding-top: 10px; background: var(--bg); }
+.rc-cook-nav .btn { flex: 1; min-height: 52px; }
+.rc-cook .rc-dur { font-size: inherit; }
+
+/* print one recipe: just the recipe, no app chrome */
+@media print {
+  html.rc-print .nav, html.rc-print .site-footer, html.rc-print .toasts, html.rc-print .rc-tray, html.rc-print .hub-back, html.rc-print header, html.rc-print .rc-noprint, html.rc-print .skip-link { display: none !important; }
+  html.rc-print body, html.rc-print .main, html.rc-print #app { background: #fff !important; color: #000 !important; padding: 0 !important; margin: 0 !important; }
+  html.rc-print .rc-recipe header { display: block !important; }
+  html.rc-print .rc-ing-sec, html.rc-print .rc-steps { border: 0; padding: 0; }
+  html.rc-print .rc-cols { display: block; }
+  html.rc-print .rc-dur { border: 0; background: none; color: inherit; padding: 0; font-weight: inherit; }
+}
+.main[data-view="recipes"] { max-width: 980px; padding-left: 12px; padding-right: 12px; }
+.main[data-view="recipes"] > * { margin-left: 0; margin-right: 0; }
+.main[data-view="recipes"] > .hub-back { margin-bottom: 8px; }
+.rc-controls input[type="search"], .rc-form input[type="search"], .rc-form input[type="number"], dialog input[type="number"] { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; box-sizing: border-box; }
+.rc-controls .row .btn, .rc-controls .row .chip { white-space: nowrap; }
+
+/* House rule (see DESIGN-RULES.md): no form control is left looking like the browser default. These cover every kind used in the app. */
+input[type="search"], input[type="number"], input[type="tel"], input[type="url"], input[type="date"], input[type="time"], input[type="datetime-local"] {
+  width: 100%; padding: 11px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); min-height: 44px; font: inherit; box-sizing: border-box;
+}
+input[type="search"] { -webkit-appearance: none; appearance: none; }
+input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+select { -webkit-appearance: none; appearance: none; color: var(--text); font: inherit; padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a949c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important; background-position: right 12px center !important; background-size: 18px !important; }
+input[type="checkbox"], input[type="radio"] { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; flex: none; margin: 0; border: 2px solid var(--muted); background: var(--surface); display: inline-grid; place-content: center; cursor: pointer; vertical-align: middle; }
+input[type="checkbox"] { border-radius: 7px; }
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]::after { content: ""; width: 11px; height: 6px; border-left: 3px solid var(--on-accent); border-bottom: 3px solid var(--on-accent); transform: rotate(-45deg) translate(1px, -1px) scale(0); transition: transform .12s; }
+input[type="radio"]::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--on-accent); transform: scale(0); transition: transform .12s; }
+input[type="checkbox"]:checked, input[type="radio"]:checked { background: var(--accent); border-color: var(--accent); }
+input[type="checkbox"]:checked::after { transform: rotate(-45deg) translate(1px, -1px) scale(1); }
+input[type="radio"]:checked::after { transform: scale(1); }
+input[type="file"]::file-selector-button { font: inherit; font-weight: 700; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 999px; padding: 8px 14px; margin-right: 10px; cursor: pointer; }
+input[type="range"] { accent-color: var(--accent); }
+.rc-chk input { width: 22px; height: 22px; }

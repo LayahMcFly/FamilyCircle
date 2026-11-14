@@ -5881,6 +5881,7 @@
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, noteDenied: noteDenied, route: route,
       functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });
+    if (window.FCRecipes) window.FCRecipes.install({ S: S, VIEWS: VIEWS, h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, reroute: function () { route(false); } });
     if (window.FCHub) window.FCHub.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, icon: icon, famName: famName, familySwitcher: familySwitcher, shopEnabled: shopEnabled });
     var action = readActionParams();
     if (action) await handleAction(action);

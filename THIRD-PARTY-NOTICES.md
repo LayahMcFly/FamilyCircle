@@ -9,7 +9,7 @@ Family Circle includes the open-source code below. Keep this file and the `vendo
 | MediaPipe Selfie Segmentation (call backgrounds) | 0.1.1675465747 | `vendor/mediapipe/selfie_segmentation*` | Apache-2.0 | © Google LLC |
 | MediaPipe Face Mesh (call face filters) | 0.4.1633559619 | `vendor/mediapipe/face/*` | Apache-2.0 | © Google LLC |
 | d3 (family-chart needs it) | 7.9.0 | `vendor/d3.min.js` | ISC, see `vendor/LICENSE-d3.txt` | © 2010-2023 Mike Bostock |
-| The Family Recipe Book, Family Circle edition (Recipes) | v2.0.6 | `recipes-app/` | GPL-3.0-or-later, see `recipes-app/LICENSE-GPL-3.0.txt` | © 2026 Leia |
+| Recipes (`recipes.js`), adapted from the author's Family Recipe Book | v2.1.0 | `recipes.js`, `LICENSE-GPL-3.0.txt` | GPL-3.0-or-later | © 2026 Leia |
 
 ## family-chart
 
@@ -64,6 +64,6 @@ Lora, Nunito, Courier Prime, Merriweather, EB Garamond, Poppins, Montserrat, Beb
 
 More page fonts (shown under "Load more fonts"), all SIL Open Font License 1.1 and from `@fontsource/*`: Caveat, Sacramento, Great Vibes, Satisfy, Lobster, Shadows Into Light, Indie Flower, Patrick Hand, Amatic SC, Chewy, Cormorant Garamond, Cinzel, Abril Fatface, Josefin Sans, Righteous, Bangers, Special Elite, Yeseva One, Courgette, Pangolin, Kalam, Handlee, DM Serif Display and Raleway.
 
-## Recipes (`recipes-app/`)
+## Recipes (`recipes.js`)
 
-An adapted copy of the Recipe Book from the author's ZenfulOutput project, loaded in a frame inside Family Circle. It is a separate GPL-3.0-or-later component (see `recipes-app/README.md`); the rest of this repo keeps its own license. It carries its own third-party notices: `recipes-app/THIRD-PARTY-NOTICES-cookbook.txt` (pdf-lib and fontkit, MIT, and fonts) and the font license texts in `recipes-app/fonts/` (Courier Prime, Crimson Pro, IM Fell English: SIL OFL 1.1; Homemade Apple: Apache-2.0).
+Adapted from the author's own Family Recipe Book (ZenfulOutput project). `recipes.js` is licensed GPL-3.0-or-later, Copyright (C) 2026 Leia; the license text is `LICENSE-GPL-3.0.txt` and the notice is at the top of the file. The rest of this repo keeps its own license, so this one file is a GPL component inside it (an open question in `LICENSING-REVIEW.md`). No third-party code or fonts ship with it.
