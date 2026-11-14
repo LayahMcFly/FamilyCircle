@@ -670,6 +670,8 @@
       }
       var fm = memberList(c).filter(function (p) { return p.userId !== c.uid; }).sort(function (a, b) { return (isHere(c, b.userId) ? 1 : 0) - (isHere(c, a.userId) ? 1 : 0); });
       var fmDet = h('details', { class: 'fm-drop' }, h('summary', { text: 'Family members' + (hereCount(c) > 0 ? ' · ' + hereCount(c) + ' online' : '') }));
+      fmDet.open = !!c.fmOpen;   // the list is rebuilt whenever someone comes online or goes offline; keep it as the person left it
+      fmDet.addEventListener('toggle', function () { c.fmOpen = fmDet.open; });
       if (!fm.length) fmDet.appendChild(h('p', { class: 'small muted fm-empty', text: 'No one else is here yet.' }));
       fm.forEach(function (p) {
         var on = isHere(c, p.userId);
@@ -1889,5 +1891,5 @@
     var first = splitLinks(String(text || '')).filter(function (p) { return p.u; })[0];
     return first ? previewCard(first.u) : null;
   }
-  window.FCChat = { presenceLine: presenceLine, presenceSlot: presenceSlot, presenceRefresh: presenceRefresh, hoverCards: hoverCards, profileFor: function (uid) { profileSheet(C || { uid: me(), here: GP.here, dms: [], calls: {}, blocked: [], standalone: true }, uid); }, presenceWatch: presenceWatch, shareToDm: shareToDm, linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
+  window.FCChat = { __repaint: function () { if (C) repaintHere(C); }, presenceLine: presenceLine, presenceSlot: presenceSlot, presenceRefresh: presenceRefresh, hoverCards: hoverCards, profileFor: function (uid) { profileSheet(C || { uid: me(), here: GP.here, dms: [], calls: {}, blocked: [], standalone: true }, uid); }, presenceWatch: presenceWatch, shareToDm: shareToDm, linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
 })();
