@@ -1968,3 +1968,10 @@ html, body { overflow-x: clip; }
 .mention-chips { position: fixed; z-index: 89; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; font-size: .9rem; }
 .mention-chips[hidden] { display: none; }
 .mention-chips-lab { color: var(--muted); font-size: .8rem; }
+.bd-head-acts { gap: 6px; flex-wrap: nowrap; }
+.bd-help h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.bd-help-list { margin: 0 0 12px; display: grid; gap: 10px; }
+.bd-help-list dt { font-weight: 700; }
+.bd-help-list dd { margin: 2px 0 0; color: var(--muted); line-height: 1.4; }
+.bd-head h1 { font-size: 1.3rem; flex: 1 1 auto; min-width: 0; }
+.bd-how { white-space: nowrap; }

@@ -68,6 +68,15 @@ async function newPage(ctx, mock, who, manager, errors) {
   const card = page.locator('a[data-hub="calendar"]');
   check('1 Hub card opens inside the app, same tab, no frame', (await card.getAttribute('href')) === '#/calendar' && (await card.getAttribute('target')) === null, await card.getAttribute('href'));
   await card.click(); await page.waitForSelector('main[data-view="calendar"] .bd-grid');
+  check('14 first visit shows the How the calendar works card', (await page.locator('.bd-help h2').innerText()) === 'How the calendar works' && (await page.locator('.bd-help dt').count()) === 7, '');
+  await page.screenshot({ path: path.join(shots, 'calendar-help.png') });
+  await page.click('.bd-help button:has-text("Got it")');
+  check('14 Got it hides the card', (await page.locator('.bd-help').count()) === 0, '');
+  await page.evaluate(() => { location.hash = '#/hub'; }); await page.waitForSelector('a[data-hub="calendar"]'); await page.click('a[data-hub="calendar"]'); await page.waitForSelector('.bd-grid');
+  check('14 it stays hidden on the next visit', (await page.locator('.bd-help').count()) === 0, '');
+  check('14 the i icon sits at the top right beside the bell', await page.evaluate(() => { const i = document.querySelector('.bd-how').getBoundingClientRect(), b = document.querySelector('.bd-bell').getBoundingClientRect(); return i.right <= b.left + 1 && b.right > innerWidth - 40 && !!document.querySelector('.bd-how svg'); }), '');
+  await page.click('.bd-how'); check('14 the i button brings it back', (await page.locator('.bd-help').count()) === 1, '');
+  await page.click('.bd-how'); check('14 and hides it again without forgetting', (await page.locator('.bd-help').count()) === 0, '');
   check('1 no iframe, Back to Hub link present', (await page.locator('iframe').count()) === 0 && (await page.locator('main .hub-back a[href="#/hub"]').count()) === 1, '');
   const today = await page.evaluate(() => { const d = new Date(), p = n => (n < 10 ? '0' : '') + n; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); });
   check('2 month grid with today picked', (await page.locator('.bd-cell.today.picked').count()) === 1, '');

@@ -31,7 +31,7 @@
     var PALETTE = ['#b4556a', '#c0773d', '#a38a1f', '#4f8a5b', '#2f8a8a', '#4a6fb5', '#7b5cb5', '#8a5a44'];
     var TABS = [['month', 'Month'], ['week', 'Week'], ['tasks', 'Tasks'], ['shop', 'Shopping'], ['groups', 'Groups'], ['requests', 'Requests']];
 
-    var B = { fid: '', data: null, tab: 'month', cur: null, day: '', week: '', filter: { group: '', mine: false, done: false }, busy: false, root: null, token: 0 };
+    var B = { help: null, fid: '', data: null, tab: 'month', cur: null, day: '', week: '', filter: { group: '', mine: false, done: false }, busy: false, root: null, token: 0 };
 
     /* ---------- dates (all local, as YYYY-MM-DD text) ---------- */
     var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -389,6 +389,26 @@
       if (unread()) guard(async function () { await call('boardNotesRead'); B.data.notes.forEach(function (n) { n.read = true; }); paint(); })();
     }
 
+    /* ---------- the "How it works" card: shown the first time, dismissible, reopened any time from the header ---------- */
+    var HELP = [
+      ['Month', 'A calendar grid. Tap a day to see its tasks and add one. Dots show tasks, a star shows a special day, and a task that lasts several days shows on each of them.'],
+      ['Week', 'The same tasks as seven stacked days, so you can see the whole week at once.'],
+      ['Tasks', 'Your to-do list by due date. Tick the box to finish a task and the app records who did it. Tap a task to see its steps, history and edit it. A repeating task makes its next copy when you finish it.'],
+      ['Shopping', 'Things your family buys again and again. Tap Running low to tell everyone how many are left, and Bought it to clear it.'],
+      ['Groups', 'Labels for sorting tasks, like Chores or School. Owners and admins make and change them. Everyone else can ask for one.'],
+      ['Requests', 'For things you cannot do alone: asking for a new group, or asking to delete a task someone else made. Owners and admins see the request here and choose Accept, Reject or Ignore. Accept does it, Reject leaves things as they are and tells you, and Ignore closes it quietly. You only see your own requests.'],
+      ['Alerts', 'The bell lists the last 7 days: tasks given to you, tasks finished, products running low, and answers to your requests. Opening it marks them read.']
+    ];
+    var helpKey = function () { return 'fc_calendar_help_' + (X.S.user && X.S.user.$id || ''); };
+    function helpSeen() { try { return localStorage.getItem(helpKey()) === '1'; } catch (e) { return false; } }
+    function helpDone() { try { localStorage.setItem(helpKey(), '1'); } catch (e) { /* private mode: it will show again next visit */ } }
+    function helpCard() {
+      return h('section', { class: 'card bd-help', 'aria-labelledby': 'bd-help-h' },
+        h('h2', { id: 'bd-help-h', text: 'How the calendar works' }),
+        h('dl', { class: 'bd-help-list' }, HELP.map(function (x) { return h('div', null, h('dt', { text: x[0] }), h('dd', { text: x[1] })); })),
+        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: function () { helpDone(); B.help = false; paint(); } }, 'Got it')));
+    }
+
     /* ---------- page ---------- */
     function paint() {
       var root = B.root;
@@ -397,7 +417,9 @@
       root.textContent = '';
       var u = unread();
       var bell = h('button', { type: 'button', class: 'btn secondary small bd-bell', 'aria-label': 'Alerts' + (u ? ', ' + u + ' new' : ''), onclick: openBell }, icon('bell'), u ? h('span', { class: 'bd-badge', text: String(u > 99 ? '99+' : u) }) : null);
-      root.appendChild(h('header', { class: 'bd-head' }, h('h1', { text: 'Calendar & chores' }), bell));
+      var how = h('button', { type: 'button', class: 'btn secondary small bd-how', 'aria-expanded': String(!!B.help), 'aria-label': B.help ? 'Hide the help' : 'Show the help: how the calendar works', title: 'How the calendar works', onclick: function () { B.help = !B.help; paint(); } }, icon('info'));
+      root.appendChild(h('header', { class: 'bd-head' }, h('h1', { text: 'Calendar & chores' }), h('div', { class: 'row bd-head-acts' }, how, bell)));
+      if (B.help) root.appendChild(helpCard());
       var tabs = h('div', { class: 'bd-tabs', role: 'tablist', 'aria-label': 'Calendar sections' }, TABS.map(function (t) {
         var on = B.tab === t[0], n = t[0] === 'requests' ? pendingReqs().length : 0;
         return h('button', { type: 'button', role: 'tab', class: 'bd-tab' + (on ? ' on' : ''), 'aria-selected': String(on), onclick: function () { B.tab = t[0]; paint(); } }, t[1] + (n && me().manager ? ' (' + n + ')' : ''));
@@ -416,6 +438,7 @@
       var fid = X.S.familyId;
       if (B.fid !== fid) { B.data = null; B.filter = { group: '', mine: false, done: false }; }
       B.fid = fid; B.token = token;
+      if (B.help === null) B.help = !helpSeen();
       B.cur = B.cur || new Date(); B.day = B.day || today(); B.week = B.week || weekStart(today());
       B.root = h('div', { class: 'bd-page' });
       main.appendChild(B.root);
