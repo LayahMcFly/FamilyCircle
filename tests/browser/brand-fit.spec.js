@@ -12,13 +12,13 @@ const check = (n, ok, d) => { ok ? pass++ : fail++; console.log((ok ? 'PASS ' : 
   const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
   const ctx = await b.newContext({ viewport: { width: 420, height: 700 }, isMobile: true, hasTouch: true }); const page = await ctx.newPage();
   await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, r => r.abort()); await page.route(/cdn\.jsdelivr\.net\/npm\/appwrite/, r => r.fulfill({ contentType: 'text/javascript', body: FAKE }));
-  await page.addInitScript(() => { window.__MOCK = { signedIn: true, user: { $id: 'uA', name: 'A', email: 'a@e.com', emailVerification: true, prefs: {} }, families: [{ id: 'famA', name: 'Alpha', role: 'owner' }], members: [{ $id: 'm1', userId: 'uA', confirm: true, roles: ['owner'], userName: 'A' }], tables: { profiles: [{ $id: 'p', userId: 'uA', familyId: 'famA', displayName: 'A', about: '[]' }], people: [], posts: [] }, log: [] }; });
+  await page.addInitScript(() => { window.__MOCK = { signedIn: true, user: { $id: 'uA', name: 'A', email: 'a@e.com', emailVerification: true, prefs: {} }, families: [{ id: 'famA', name: 'The McFly Happy Family', role: 'owner' }, { id: 'famB', name: 'Cousins', role: 'member' }], members: [{ $id: 'm1', userId: 'uA', confirm: true, roles: ['owner'], userName: 'A' }], tables: { profiles: [{ $id: 'p', userId: 'uA', familyId: 'famA', displayName: 'A', about: '[]' }], people: [], posts: [] }, log: [] }; });
   await page.goto('http://127.0.0.1:' + port + SUB + '#/home'); await page.waitForSelector('.topbar .brand span'); await page.waitForTimeout(800);
   const read = () => page.evaluate(() => { const sp = document.querySelector('.topbar .brand span'); const inner = document.querySelector('.topbar-inner'); const last = Array.from(inner.children).filter(c => getComputedStyle(c).display !== 'none').pop().getBoundingClientRect(); return { t: sp.textContent, clipped: sp.scrollWidth > sp.clientWidth + 1, overflow: inner.scrollWidth > inner.clientWidth + 1, lastRight: Math.round(last.right), vw: document.documentElement.clientWidth }; });
   const seen = {};
-  for (const w of [1100, 600, 480, 420, 390, 360, 340, 320, 300, 260, 230]) {
+  for (const w of [1100, 600, 480, 430, 420, 412, 390, 375, 360, 340, 336, 320, 300, 260, 230]) {
     await page.setViewportSize({ width: w, height: 700 }); await page.waitForTimeout(400); const r = await read(); seen[w] = r.t;
-    check(w + 'px: shows "' + r.t + '" with nothing cut off', w < 300 || !r.clipped && (w < 300 || (!r.overflow && r.lastRight <= r.vw + 1)), JSON.stringify(r));
+    check(w + 'px: shows "' + r.t + '" with nothing cut off', w < 300 || (!r.clipped && !r.overflow && r.lastRight <= r.vw + 1), JSON.stringify(r));
     if (w === 390 || w === 320) await page.screenshot({ path: path.join(OUT, 'brand-' + w + '.png'), clip: { x: 0, y: 0, width: w, height: 110 } });
   }
   check('Narrow enough: Circle, then FC when even Circle does not fit', seen[300] === 'Circle' && seen[230] === 'FC', JSON.stringify(seen));
