@@ -67,6 +67,15 @@ async function open(browser, mock, hash, w, h) {
   const fm = await page.evaluate(() => Array.from(document.querySelectorAll('.fm-row')).map(r => r.textContent.replace(/\s+/g, ' ').trim()));
   const hasCara = fm.some(t => /Cara Smith.*Online/.test(t)), hasTeen = fm.some(t => /Tee Smith.*Active 5 mins ago/.test(t)), adminRow = fm.find(t => /Bob Admin/.test(t));
   check('Chat people list: online and last active shown, hidden member shows no status', fm.length > 0 ? (hasCara && hasTeen && adminRow && !/Online|Active|Offline/.test(adminRow)) : false, JSON.stringify(fm));
+  // the members list stays open when a presence change rebuilds the side panel
+  await page.evaluate(() => { document.querySelector('.fm-drop').open = true; }); await page.waitForTimeout(200);
+  await page.evaluate(() => window.FCChat.__repaint()); await page.waitForTimeout(300);
+  const stillOpen = await page.evaluate(() => { const d = document.querySelector('.fm-drop'); return !!(d && d.open); });
+  check('Members list stays open after the side panel is rebuilt', stillOpen, String(stillOpen));
+  await page.evaluate(() => { document.querySelector('.fm-drop').open = false; }); await page.waitForTimeout(200);
+  await page.evaluate(() => window.FCChat.__repaint()); await page.waitForTimeout(300);
+  const stillShut = await page.evaluate(() => !document.querySelector('.fm-drop').open);
+  check('A list you closed stays closed after a rebuild', stillShut, '');
   // hover card in community
   await go('#/home'); await page.evaluate(() => { const a = document.createElement('a'); a.href = '#/profile/u-cara'; a.id = 'probe-link'; a.textContent = 'Cara Smith'; document.querySelector('main').appendChild(a); });
   await page.hover('#probe-link'); await page.waitForTimeout(1000);
