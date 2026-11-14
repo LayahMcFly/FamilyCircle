@@ -39,9 +39,10 @@ const schema = {
       S('familyId', 36, true), S('authorId', 36, true),
       { type: 'enum', key: 'kind', elements: ['text', 'photo', 'video', 'short'], required: true },
       S('body', 2000, false), S('mediaFileId', 36, false), S('mediaMime', 32, false), S('pinnedCommentIds', 120, false), S('editedAt', 32, false), { type: 'text', key: 'captions', required: false }, S('repostOfId', 36, false),
-      { type: 'integer', key: 'mediaSize', min: 0, max: 52428800, required: false }
+      { type: 'integer', key: 'mediaSize', min: 0, max: 52428800, required: false },
+      { type: 'integer', key: 'shareCount', min: 0, max: 1000000, required: false }
     ],
-    indexes: [['idx_familyId', 'key', ['familyId']], ['idx_family_kind', 'key', ['familyId', 'kind']], ['idx_mediaFileId', 'key', ['mediaFileId']]]
+    indexes: [['idx_familyId', 'key', ['familyId']], ['idx_family_kind', 'key', ['familyId', 'kind']], ['idx_mediaFileId', 'key', ['mediaFileId']], ['idx_repostOfId', 'key', ['repostOfId']]]
   },
   comments: {
     columns: [S('familyId', 36, true), S('postId', 36, true), S('authorId', 36, true), S('body', 500, true), S('parentId', 36, false), { type: 'string', key: 'likedBy', size: 36, required: false, array: true }],

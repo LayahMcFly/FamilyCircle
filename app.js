@@ -1854,10 +1854,13 @@
     if (missing && Date.now() - S.profilesAt > 30000) await loadProfiles();   // a new member may have joined
   }
 
-  // Loads authors, like counts and comment counts for a page of posts.
+  var repostTarget = function (p) { return p.kind === 'repost' && p.repostOfId ? p.repostOfId : p.$id; };
+  var repostTargets = function (posts) { var seen = {}; posts.forEach(function (p) { seen[repostTarget(p)] = 1; }); return Object.keys(seen); };
+
+  // Loads authors, like counts, comment counts and repost counts for a page of posts.
   async function decorate(posts) {
     var ids = posts.map(function (p) { return p.$id; });
-    var reactions = [], comments = [];
+    var reactions = [], comments = [], reposts = [];
     var origIds = [];
     posts.forEach(function (p) { if (p.kind === 'repost' && p.repostOfId && origIds.indexOf(p.repostOfId) === -1) origIds.push(p.repostOfId); });
     var origs = [];
@@ -1871,10 +1874,15 @@
     await Promise.all([
       ensureProfiles(posts.map(function (p) { return p.authorId; }).concat(origs.map(function (o) { return o.authorId; }))),
       listRows('reactions', [Query.equal('postId', ids), Query.limit(500)]).then(function (r) { reactions = r.rows; }),
-      listRows('comments', [Query.equal('postId', ids), Query.select(['postId']), Query.limit(500)]).then(function (r) { comments = r.rows; })
+      listRows('comments', [Query.equal('postId', ids), Query.select(['postId']), Query.limit(500)]).then(function (r) { comments = r.rows; }),
+      // How many times each post was reposted: a plain number. A repost card shows the count for the original it points at.
+      listRows('posts', [Query.equal('repostOfId', repostTargets(posts)), Query.select(['repostOfId']), Query.limit(500)]).then(function (r) { reposts = r.rows; }).catch(function () { reposts = []; })   // no index yet: no counts, nothing else breaks
     ]);
     var meta = {};
-    ids.forEach(function (id) { meta[id] = { likes: 0, liked: false, comments: 0 }; });
+    ids.forEach(function (id) { meta[id] = { likes: 0, liked: false, comments: 0, reposts: 0 }; });
+    var perOrig = {};
+    reposts.forEach(function (r) { perOrig[r.repostOfId] = (perOrig[r.repostOfId] || 0) + 1; });
+    posts.forEach(function (p) { meta[p.$id].reposts = perOrig[repostTarget(p)] || 0; });
     reactions.forEach(function (r) { var m = meta[r.postId]; if (!m) return; m.likes++; if (r.userId === S.user.$id) m.liked = true; });
     comments.forEach(function (c) { var m = meta[c.postId]; if (m) m.comments++; });
     return meta;
@@ -2510,20 +2518,29 @@
     return box;
   }
 
-  function repostDialog(post) {
+  function repostDialog(post, onDone) {
     var base = (post.kind === 'repost' && post.repostOfId && S.origs && S.origs.get(post.repostOfId)) || post;
     textDialog('Remind the family of this day', 'Remember this day?', 'Repost', { multiline: true, max: 500, aria: 'Your note on the repost',
       hint: 'The repost shows the original date (' + longDate(base.$createdAt) + ') and today’s date. Only members of ' + famName() + ' can see it.' },
       async function (v) {
         await api('repostPost', { familyId: S.familyId, postId: post.$id, body: v });
         S.feedDirty = true; toast('Reposted to ' + famName() + '.');
+        if (onDone) onDone();
         if (location.hash === '#/home' || location.hash === '' || location.hash === '#/') route();
       });
   }
 
   function shareLink(post) { return baseUrl() + '#/post/' + post.$id + '/' + S.familyId; }
 
-  function shareDialog(post) {
+  // Counts a share as a plain number (once per person per post while the app stays open). Nothing says who shared it or with whom.
+  S.counted = S.counted || {};
+  async function countShare(post, onCount) {
+    if (S.counted[post.$id]) return;
+    S.counted[post.$id] = true;
+    try { var r = await api('sharePost', { familyId: S.familyId, postId: post.$id }); if (r && r.counted && onCount) onCount(r.shareCount); }
+    catch (e) { S.counted[post.$id] = false; }
+  }
+  function shareDialog(post, onCount) {
     var link = shareLink(post);
     var dlg = h('dialog', { class: 'sheet-dialog', 'aria-labelledby': 'dlg-title' });
     function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
@@ -2535,13 +2552,13 @@
     dlg.appendChild(h('p', { class: 'hint', text: 'This link holds no photo, video or text. It opens only for people who are signed in and are members of ' + famName() + '. Anyone else sees “That post is not available.”' }));
     dlg.appendChild(field); dlg.appendChild(msg);
     dlg.appendChild(h('div', { class: 'stack' },
-      (window.FCChat && window.FCChat.shareToDm && CFG.chatEnabled !== false) ? h('button', { class: 'btn block', type: 'button', text: 'Send in a direct chat', onclick: function () { close(); window.FCChat.shareToDm(link, 'post'); } }) : null,
+      (window.FCChat && window.FCChat.shareToDm && CFG.chatEnabled !== false) ? h('button', { class: 'btn block', type: 'button', text: 'Send in a direct chat', onclick: function () { close(); countShare(post, onCount); window.FCChat.shareToDm(link, 'post'); } }) : null,
       h('button', { class: 'btn secondary block', type: 'button', text: 'Copy link', onclick: async function () {
-        try { await navigator.clipboard.writeText(link); showAlert(msg, 'ok', 'Link copied.'); }
+        try { await navigator.clipboard.writeText(link); showAlert(msg, 'ok', 'Link copied.'); countShare(post, onCount); }
         catch (e) { field.focus(); field.select(); showAlert(msg, 'ok', 'Select the link above and copy it.'); }
       } }),
       canShare ? h('button', { class: 'btn secondary block', type: 'button', text: 'Send with another app…', onclick: function () {
-        navigator.share({ title: famName(), text: 'A post from ' + famName() + ' (family members only)', url: link }).catch(function () {});
+        navigator.share({ title: famName(), text: 'A post from ' + famName() + ' (family members only)', url: link }).then(function () { countShare(post, onCount); }).catch(function () {});
       } }) : null,
       h('button', { class: 'btn ghost block', type: 'button', text: 'Close', onclick: close })));
     document.body.appendChild(dlg); dlg.showModal();
@@ -2550,7 +2567,7 @@
   function postCard(post, meta, variant, hooks) {
     hooks = hooks || {};
     var uid = S.user.$id;
-    var st = { likes: meta ? meta.likes : 0, liked: meta ? meta.liked : false, comments: meta ? meta.comments : 0, busy: false };
+    var st = { likes: meta ? meta.likes : 0, liked: meta ? meta.liked : false, comments: meta ? meta.comments : 0, reposts: meta ? (meta.reposts || 0) : 0, shares: Number.isInteger(post.shareCount) ? post.shareCount : 0, busy: false };
     var prof = S.profiles.get(post.authorId) || null;
     var name = prof ? prof.displayName : 'Family member';
     var isMine = post.authorId === uid;
@@ -2639,9 +2656,11 @@
     // actions
     var like = actionBtn('heart', 'Like', function () { toggleLike(); });
     var cmt = actionBtn('comment', 'Comments', function () { toggleComments(); });
-    var rep = actionBtn('repost', 'Repost: remember this day?', function () { repostDialog(post); });
-    var shr = actionBtn('send', 'Share link, family only', function () { shareDialog(post); });
-    rep.setCount(null, 'Repost: remind the family of this day'); shr.setCount(null, 'Share link, family members only');
+    var rep = actionBtn('repost', 'Repost: remember this day?', function () { repostDialog(post, function () { st.reposts++; paintRep(); }); });
+    var shr = actionBtn('send', 'Share link, family only', function () { shareDialog(post, function (n) { st.shares = n; paintShr(); }); });
+    function paintRep() { rep.setCount(st.reposts > 0 ? st.reposts : null, 'Repost: remind the family of this day' + (st.reposts > 0 ? '. Reposted ' + st.reposts + (st.reposts === 1 ? ' time' : ' times') : '')); }
+    function paintShr() { shr.setCount(st.shares > 0 ? st.shares : null, 'Share link, family members only' + (st.shares > 0 ? '. Shared ' + st.shares + (st.shares === 1 ? ' time' : ' times') : '')); }
+    paintRep(); paintShr();
     var save = actionBtn('bookmark', 'Save', function () { toggleSave(); });
     save.className = 'act save';
     function paintLike() { like.setCount(st.likes, (st.liked ? 'Remove your like. ' : 'Like. ') + st.likes + ' likes', !!st.liked); }

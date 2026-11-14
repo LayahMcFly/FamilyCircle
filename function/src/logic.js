@@ -1117,6 +1117,23 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       return { postId: row.$id };
     },
 
+    /**
+     * Counts one more share of a post. Only a number is kept: nothing records who shared it or who it went to.
+     * Needs the optional `shareCount` number column on posts; without it the share still works and nothing is counted.
+     */
+    async sharePost({ user, body }) {
+      const { familyId } = await requireMember(user, body.familyId);
+      const post = await loadPostInFamily(familyId, body.postId);
+      const next = (Number.isInteger(post.shareCount) && post.shareCount > 0 ? post.shareCount : 0) + 1;
+      try {
+        await updateRow(TABLES.posts, post.$id, { shareCount: next });
+      } catch (e) {
+        if (sdkCode(e) === 400) return { counted: false };   // the shareCount column has not been added yet
+        throw e;
+      }
+      return { counted: true, shareCount: next };
+    },
+
     async editPost({ user, body }) {
       const { familyId } = await requireMember(user, body.familyId);
       const post = await loadPostInFamily(familyId, body.postId);

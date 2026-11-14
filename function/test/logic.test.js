@@ -769,6 +769,22 @@ test('repost: any member can remind the family; no file is copied; flattened; on
   assert.ok(s.world.tables.posts.has(orig.json.postId));                                       // deleting a repost keeps the original
 });
 
+test('sharePost: counts a share as a number only; members of the family only; stores nobody\'s name', async () => {
+  const s = await setup();
+  const post = await s.call(s.bob, { action: 'createPost', familyId: 'famA', kind: 'text', body: 'Hello' });
+  const id = post.json.postId;
+  const a = await s.call(s.alice, { action: 'sharePost', familyId: 'famA', postId: id });
+  assert.deepEqual([a.status, a.json.counted, a.json.shareCount], [200, true, 1]);
+  const b = await s.call(s.bob, { action: 'sharePost', familyId: 'famA', postId: id });
+  assert.equal(b.json.shareCount, 2);
+  const row = s.world.tables.posts.get(id);
+  assert.equal(row.shareCount, 2);
+  assert.ok(!JSON.stringify(row).includes('alice'), 'no record of who shared');
+  assert.equal((await s.call(s.carol, { action: 'sharePost', familyId: 'famA', postId: id })).status, 403);
+  assert.equal((await s.call(s.alice, { action: 'sharePost', familyId: 'famA', postId: 'nope' })).status, 404);
+  assert.equal(s.world.tables.posts.get(id).shareCount, 2);
+});
+
 test('inviting by relationship connects every kind, adding unnamed placeholders for missing middle people', async () => {
   const s = await setup();
   await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });

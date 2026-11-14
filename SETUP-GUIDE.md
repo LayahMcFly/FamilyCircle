@@ -356,3 +356,5 @@ Add one optional column to the `people` table, then upload the new `family-api` 
     appwrite tablesdb create-string-column --database-id family --table-id people --key parentKinds --size 600 --required false
 
 Until the column exists the tree still works and plain birth-parent links still save. Saving an adoptive, step, foster or guardian link shows an error that tells you to add the column. New installs made with the setup script get the column automatically.
+
+> **Added in v1.51.99.20 (share and repost counts):** in `posts` add an Integer column `shareCount` (min 0, max 1000000, not required) and a key index `idx_repostOfId` on `repostOfId`, then upload the new `family-api` function. Until both exist, posts simply show no share or repost numbers; everything else keeps working. The counts are plain numbers. Nothing records who shared a post or who received it.
