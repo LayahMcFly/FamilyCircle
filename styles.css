@@ -1710,8 +1710,6 @@ button.hub-card { box-sizing: border-box; font: inherit; text-align: left; width
 .rc-partadd { display: flex; justify-content: space-between; width: 100%; padding: 10px 12px; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; text-align: left; }
 .rc-partadd:hover, .rc-partadd:focus-visible { background: var(--surface-2); }
 
-dialog.rc-dinner { max-width: 420px; }
-dialog.rc-dinner .rc-photo { margin: 8px 0; }
 .rc-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
 
 /* timers: a small tray above the bottom bar, on every screen while any timer exists */
@@ -1740,11 +1738,14 @@ body.rc-lock { overflow: hidden; }
 .rc-cook-nav .btn { flex: 1; min-height: 52px; }
 .rc-cook .rc-dur { font-size: inherit; }
 
-/* print one recipe: just the recipe, no app chrome */
+/* print one recipe: a plain copy of just the recipe (see preparePrint in recipes.js); everything else is hidden */
+#rc-printdoc { display: none; }
 @media print {
-  html.rc-print .nav, html.rc-print .site-footer, html.rc-print .toasts, html.rc-print .rc-tray, html.rc-print .hub-back, html.rc-print header, html.rc-print .rc-noprint, html.rc-print .skip-link { display: none !important; }
-  html.rc-print body, html.rc-print .main, html.rc-print #app { background: #fff !important; color: #000 !important; padding: 0 !important; margin: 0 !important; }
-  html.rc-print .rc-recipe header { display: block !important; }
+  html.rc-print, html.rc-print body { height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important; color: #000 !important; margin: 0 !important; padding: 0 !important; }
+  html.rc-print body > *:not(#rc-printdoc) { display: none !important; }
+  html.rc-print #rc-printdoc { display: block !important; position: static !important; margin: 0 !important; padding: 0 !important; min-height: 0 !important; height: auto !important; }
+  html.rc-print #rc-printdoc .rc-recipe { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+  html.rc-print #rc-printdoc .rc-recipe header { display: block !important; }
   html.rc-print .rc-ing-sec, html.rc-print .rc-steps { border: 0; padding: 0; }
   html.rc-print .rc-cols { display: block; }
   html.rc-print .rc-dur { border: 0; background: none; color: inherit; padding: 0; font-weight: inherit; }
@@ -1775,3 +1776,92 @@ input[type="radio"]:checked::after { transform: scale(1); }
 input[type="file"]::file-selector-button { font: inherit; font-weight: 700; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 999px; padding: 8px 14px; margin-right: 10px; cursor: pointer; }
 input[type="range"] { accent-color: var(--accent); }
 .rc-chk input { width: 22px; height: 22px; }
+
+/* Recipes: buttons with icons (an icon has no size of its own, so give every one in this page a box) */
+.rc-controls .btn, .rc-controls .chip, .rc-recipe .btn, .rc-actions .btn, .rc-cbhost .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.rc-controls .btn svg, .rc-controls .chip svg, .rc-actions .btn svg, .rc-recipe .btn svg, .rc-cbhost .btn svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
+.rc-heartchip svg { width: 16px; height: 16px; }
+.rc-heartchip[aria-pressed="true"] svg { fill: currentColor; }
+.rc-controls .rc-bookbtn { width: 100%; box-sizing: border-box; }
+.rc-controls .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* Printable recipe book maker (page at #/recipes/cookbook), styled with the app theme */
+.rc-cbhost .cb { color: var(--text); margin-top: 6px; }
+.cb h2 { font-size: 1.6rem; margin: 0 0 6px; }
+.cb h3 { font-size: 1.15rem; margin: 0; }
+.cb p { margin: 0; }
+.cb .lede { color: var(--muted); margin: 4px 0 16px; max-width: 62ch; }
+.cb .info { font-size: .95rem; color: var(--muted); }
+.cb .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 6px; margin: 14px 0 20px; padding: 0; list-style: none; }
+.cb .steps li { list-style: none; margin: 0; padding: 0; min-width: 0; }
+.cb .steps li::marker { content: ''; }
+.cb .steps button, .cb .mini, .cb .choice { font: inherit; font-weight: 700; font-size: .85rem; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.cb .steps button { padding: 10px 8px; min-height: 44px; width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; text-align: center; line-height: 1.25; }
+.cb .steps button[aria-current="step"], .cb .choice[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.cb button:focus-visible, .cb summary:focus-visible, .cb a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cb .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+.cb .bar .grow { flex: 1 1 220px; min-width: 0; }
+.cb .count { font-weight: 700; font-size: .85rem; color: var(--muted); }
+.cb .rows { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 8px; }
+.cb .row { display: grid; grid-template-columns: auto 56px 1fr; gap: 12px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; }
+.cb .row.off { opacity: .6; }
+.cb .row .th { width: 56px; height: 44px; border-radius: var(--radius-sm); background: var(--surface-2) center/cover no-repeat; border: 1px solid var(--border); }
+.cb .row .nm, .cb .item .nm { font-size: 1.05rem; line-height: 1.25; overflow-wrap: anywhere; }
+.cb .row .mt { font-size: .9rem; color: var(--muted); }
+.cb .perm { grid-column: 2 / -1; font-size: .95rem; }
+.cb label.ck { display: flex; gap: 10px; align-items: flex-start; line-height: 1.35; cursor: pointer; }
+.cb .tag { display: inline-block; font-weight: 700; font-size: .7rem; background: var(--tint, var(--surface-2)); color: var(--accent-text); border-radius: 999px; padding: 3px 8px; margin-left: 6px; vertical-align: 2px; }
+.cb .sec, .cb .panel, .cb .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: none; }
+.cb .sec { margin: 14px 0; padding: 12px; }
+.cb .sec > header { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.cb .sec > header input { flex: 1 1 220px; min-width: 0; }
+.cb .item { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; margin: 6px 0; }
+.cb .item.drag { opacity: .4; }
+.cb .item.over { box-shadow: 0 -3px 0 var(--accent); }
+.cb .secdrop.over { outline: 2px dashed var(--accent); }
+.cb .grip { cursor: grab; color: var(--muted); font-size: 1.3rem; line-height: 1; padding: 0 4px; user-select: none; }
+.cb .item .tools { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.cb .mini { padding: 9px 12px; min-height: 40px; min-width: 40px; }
+.cb .mini:disabled { opacity: .4; cursor: default; }
+.cb details.ct { grid-column: 1 / -1; }
+.cb details.ct summary { cursor: pointer; color: var(--accent-text); }
+.cb details.ct input { width: 100%; margin-top: 6px; box-sizing: border-box; }
+.cb .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.cb .panel { display: grid; gap: 12px; align-content: start; }
+.cb .field { display: grid; gap: 6px; }
+.cb .field label, .cb .lab { font-weight: 700; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rc-cbhost .cb input:not([type]), .rc-cbhost .cb input[type="text"], .rc-cbhost .cb input[type="search"], .rc-cbhost .cb textarea, .rc-cbhost .cb select { width: 100%; box-sizing: border-box; padding: 10px 12px; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; }
+.cb textarea { min-height: 96px; resize: vertical; }
+.cb select.mv { width: auto; max-width: 100%; min-height: 40px; padding: 6px 32px 6px 10px; }
+.cb input[type="color"] { width: 48px; height: 44px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
+.cb .choices { display: flex; gap: 8px; flex-wrap: wrap; }
+.cb .choice { padding: 11px 13px; min-height: 44px; text-align: left; }
+.cb .choice small { display: block; font-weight: 400; font-size: .85rem; opacity: .85; margin-top: 3px; }
+.cb .sw { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--border); cursor: pointer; padding: 0; }
+.cb .sw[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--text); }
+.cb .warn, .cb .bad, .cb .ok { border-radius: var(--radius-sm); padding: 10px 12px; border: 1px solid var(--border); background: var(--surface-2); }
+.cb .warn { border-color: #d9b46a; }
+.cb .bad { border-color: var(--danger); color: var(--danger); }
+.cb .ok { border-color: #6fa36f; }
+.cb .warn ul { margin: 6px 0 0; padding-left: 20px; }
+.cb .pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; margin: 14px 0; }
+.cb .pg { margin: 0; }
+.cb .pg .sheet { background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); width: 100%; display: block; }
+.cb .pg svg { display: block; width: 100%; height: auto; }
+.cb .pg svg text { font-kerning: none; white-space: pre; }
+.cb .pg figcaption { font-weight: 700; font-size: .8rem; color: var(--muted); text-align: center; margin-top: 6px; }
+.cb .pg .lk { cursor: pointer; }
+.cb .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; margin: 14px 0; }
+.cb .card { display: grid; gap: 10px; align-content: start; }
+.cb .card.soon { opacity: .85; border-style: dashed; }
+.cb progress { width: 100%; height: 14px; accent-color: var(--accent); }
+.cb .draft { display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; }
+.cb .draft .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.cb .btn.soft { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+@media (max-width: 560px) { .cb .draft { grid-template-columns: 1fr; } .cb .row { grid-template-columns: auto 44px 1fr; } .cb .row .th { width: 44px; height: 36px; } }
+@media print { .cb { display: none; } }
+/* The maker's page thumbnails use the class name "sheet", which the app also uses for pop-up sheets. Undo every pop-up-sheet rule here. */
+.cb .pg .sheet { position: static; inset: auto; z-index: auto; max-width: none; height: auto; max-height: none; margin: 0; padding: 0; overflow: visible; display: block; border-radius: 0; touch-action: auto; will-change: auto; }
+.cb .pg .sheet::before { content: none; display: none; }
+.cb .count { text-align: left; padding-top: 0; }
+.cb .field { margin: 0; }

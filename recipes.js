@@ -25,7 +25,7 @@
 
   function install(X) {
     var h = X.h, icon = X.icon, toast = X.toast;
-    var VERSION = 'v2.1.0';
+    var VERSION = 'v2.2.0';
     var PAGE = 24;
 
     /* ---------- storage: this device, this member ---------- */
@@ -413,13 +413,14 @@
       var q = h('input', { id: 'rc-q', type: 'search', autocomplete: 'off', enterkeyhint: 'search', placeholder: 'Search by name or ingredient', 'aria-label': 'Search recipes', value: R.query });
       var grid = h('ul', { class: 'rc-grid', id: 'rc-grid' }), more = h('div', { id: 'rc-more' });
       var chipsBox = h('div', { class: 'rc-chips', role: 'group', 'aria-label': 'Categories' });
-      var heartBtn = h('button', { type: 'button', class: 'chip', 'aria-pressed': String(R.onlyFavs), onclick: function () { R.onlyFavs = !R.onlyFavs; heartBtn.setAttribute('aria-pressed', String(R.onlyFavs)); paint(false); } }, 'Hearted');
+      var heartBtn = h('button', { type: 'button', class: 'chip rc-heartchip', 'aria-pressed': String(R.onlyFavs), onclick: function () { R.onlyFavs = !R.onlyFavs; heartBtn.setAttribute('aria-pressed', String(R.onlyFavs)); paint(false); } }, icon('heart'), h('span', { text: 'Hearted' }));
       var typeBtns = [['', 'All'], ['dish', 'Dishes'], ['meal', 'Meals']].map(function (t) {
         var b = h('button', { type: 'button', class: 'chip', 'aria-pressed': String(R.type === t[0]), onclick: function () { R.type = t[0]; typeBtns.forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); }); paint(false); } }, t[1]);
         return b;
       });
       main.appendChild(h('div', { class: 'rc-controls' }, q,
-        h('div', { class: 'row' }, heartBtn, h('button', { type: 'button', class: 'btn secondary small', onclick: openDinner }, "What's for dinner?"), h('a', { class: 'btn small', href: '#/recipes/new' }, icon('plus'), ' Add a recipe'))));
+        h('div', { class: 'row' }, heartBtn, h('a', { class: 'btn small', href: '#/recipes/new' }, icon('plus'), h('span', { text: 'Add a recipe' }))),
+        h('a', { class: 'btn secondary rc-bookbtn', href: '#/recipes/cookbook' }, icon('book'), h('span', { text: 'Make printable recipe book' }))));
       main.appendChild(h('div', { class: 'rc-chips', role: 'group', 'aria-label': 'Show' }, typeBtns));
       var cats = [['', 'All']].concat(categories());
       cats.forEach(function (c) { var b = h('button', { type: 'button', class: 'chip', 'aria-pressed': String(R.cat === c[0]), onclick: function () { R.cat = c[0]; Array.prototype.forEach.call(chipsBox.children, function (x) { x.setAttribute('aria-pressed', String(x === b)); }); paint(false); } }, c[1]); chipsBox.appendChild(b); });
@@ -444,26 +445,6 @@
         h('p', { class: 'muted', text: 'Your recipes live in this browser on this device. To keep them safe or move them to another device, save a backup file, then restore it there.' }),
         h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn secondary', onclick: backup }, 'Save a backup file'), h('button', { type: 'button', class: 'btn secondary', onclick: function () { file.click(); } }, 'Restore from a backup file'), file),
         h('p', { class: 'small muted', text: 'Recipe Book ' + VERSION + '. Backups use the original recipe book’s file format, photos included.' })));
-    }
-
-    /* ---------- what's for dinner ---------- */
-    var ND = { last: '', fav: false };
-    function openDinner() {
-      var dlg = h('dialog', { 'aria-labelledby': 'rc-dt', class: 'rc-dinner' }), body = h('div');
-      dlg.appendChild(h('h2', { id: 'rc-dt', text: "What's for dinner?" })); dlg.appendChild(body);
-      function close() { dlg.close(); dlg.remove(); }
-      dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
-      function pick() {
-        var pool = ND.fav ? R.demo.filter(function (r) { return r.fav; }) : R.demo;
-        var tog = h('label', { class: 'rc-chk' }, h('input', { type: 'checkbox', checked: ND.fav ? true : null, onchange: function (e) { ND.fav = e.target.checked; pick(); } }), h('span', { text: 'Only hearted recipes' }));
-        body.replaceChildren();
-        if (!pool.length) { body.appendChild(h('p', { class: 'muted', text: ND.fav ? 'No hearted recipes yet. Heart a few, or turn that off.' : 'Your book is empty. Add a recipe first.' })); body.appendChild(tog); body.appendChild(h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn secondary', onclick: close }, 'Close'))); return; }
-        var r; do { r = pool[Math.random() * pool.length | 0]; } while (pool.length > 1 && r.slug === ND.last);
-        ND.last = r.slug;
-        body.appendChild(h('p', { class: 'small muted', text: 'From your book' })); body.appendChild(photoEl(r.image, '')); body.appendChild(h('h3', { text: r.name })); body.appendChild(h('p', { class: 'small muted', text: metaLine(r) })); body.appendChild(tog);
-        body.appendChild(h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/recipes/recipe/' + encodeURIComponent(r.slug), onclick: close }, 'Open this recipe'), h('button', { type: 'button', class: 'btn secondary', onclick: pick }, 'Another one'), h('button', { type: 'button', class: 'btn ghost', onclick: close }, 'Close')));
-      }
-      pick(); document.body.appendChild(dlg); dlg.showModal();
     }
 
     /* ---------- one recipe ---------- */
@@ -513,11 +494,19 @@
       }
       main.appendChild(art);
     }
+    // Printing uses a plain copy of just the recipe, placed straight under <body> while everything else is hidden, so no app layout (tall minimum heights, fixed bars, footers) can spill onto an extra page.
+    function preparePrint() {
+      var src = document.querySelector('.rc-recipe'); if (!src) return function () {};
+      var doc = document.createElement('div'); doc.id = 'rc-printdoc'; doc.appendChild(src.cloneNode(true));
+      Array.prototype.forEach.call(doc.querySelectorAll('.rc-noprint, .rc-actions, button, dialog'), function (n) { n.remove(); });
+      document.body.appendChild(doc); document.documentElement.classList.add('rc-print');
+      return function () { document.documentElement.classList.remove('rc-print'); doc.remove(); };
+    }
     function printIt() {
-      document.documentElement.classList.add('rc-print');
-      var done = function () { document.documentElement.classList.remove('rc-print'); window.removeEventListener('afterprint', done); };
+      var undo = preparePrint(), done = function () { undo(); window.removeEventListener('afterprint', done); };
       window.addEventListener('afterprint', done); window.print();
     }
+    window.__rcPreparePrint = preparePrint;
     async function remove(r) {
       var ok = await X.confirmDialog('Remove “' + r.name + '”?', 'It leaves your book on this device. This cannot be undone, but a backup file you saved earlier still has it.', 'Remove it');
       if (!ok) return;
@@ -593,13 +582,53 @@
       main.appendChild(form); partsPaint();
     }
 
+    /* ---------- printable recipe book (the original cookbook maker, loaded only when opened) ---------- */
+    var cbLoading = null;
+    function loadCookbook() {
+      if (window.RBCookbook) return Promise.resolve();
+      if (!cbLoading) cbLoading = new Promise(function (res, rej) {
+        var sc = document.createElement('script'); sc.src = 'cookbook.js?v=' + encodeURIComponent((window.FAMILY_CONFIG && window.FAMILY_CONFIG.version) || VERSION);
+        sc.onload = function () { res(); }; sc.onerror = function () { cbLoading = null; sc.remove(); rej(new Error('LOAD')); };
+        document.head.appendChild(sc);
+      });
+      return cbLoading;
+    }
+    // The maker writes small style hints as data-st (inline style attributes are not allowed on this site); apply them as they appear.
+    function applyStyleHints(root) {
+      if (root.nodeType !== 1) return;
+      var list = root.matches && root.matches('[data-st]') ? [root] : [];
+      list = list.concat(Array.prototype.slice.call(root.querySelectorAll('[data-st]')));
+      list.forEach(function (el) { el.style.cssText = el.getAttribute('data-st'); el.removeAttribute('data-st'); });
+    }
+    var cbObserver = null;
+    function cookbookOff() {
+      if (cbObserver) { cbObserver.disconnect(); cbObserver = null; }
+      if (window.RBCookbook) window.RBCookbook.unmount();
+    }
+    window.addEventListener('hashchange', function () { if (!/^#\/recipes\/cookbook/.test(location.hash)) cookbookOff(); });
+    function viewCookbook(main, uid, token) {
+      main.appendChild(h('div', { class: 'rc-noprint' }, backLink()));
+      var host = h('div', { class: 'rc-cbhost' }, h('p', { class: 'info', text: 'Opening the recipe book maker…' }));
+      main.appendChild(host);
+      loadCookbook().then(function () {
+        if (!/^#\/recipes\/cookbook/.test(location.hash) || !host.isConnected) return;
+        window.__RB_IDB = 'fcrb_cookbooks_' + uid;
+        cbObserver = new MutationObserver(function (muts) { muts.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, applyStyleHints); }); });
+        cbObserver.observe(host, { childList: true, subtree: true });
+        window.RBCookbook.mount(host, { header: function () { return ''; }, recipes: function () { return R.demo; }, toast: X.toast, exit: function () { location.hash = '#/recipes'; }, author: '' });
+      }).catch(function () {
+        host.replaceChildren(h('div', { class: 'alert error', role: 'alert', text: 'I could not load the recipe book maker. Check your connection and try again.' }));
+      });
+    }
+
     /* ---------- the view ---------- */
     X.VIEWS.recipes = function (main, token, a, b) {
       var uid = X.S.user && X.S.user.$id;
       if (!uid) { main.appendChild(h('p', { class: 'muted', text: 'Sign in to open the recipe book.' })); return; }
-      cookClose(); boot(String(uid));
+      cookClose(); cookbookOff(); boot(String(uid));
       var arg = b ? decodeURIComponent(b) : '';
       if (a === 'recipe' && arg) return viewRecipe(main, arg);
+      if (a === 'cookbook') return viewCookbook(main, String(uid), token);
       if (a === 'new') return viewEditor(main, null);
       if (a === 'edit' && arg) return viewEditor(main, arg);
       return viewList(main);

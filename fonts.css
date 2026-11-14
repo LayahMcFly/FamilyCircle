@@ -50,3 +50,10 @@
 @font-face { font-family: "Handlee"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/handlee-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "DM Serif Display"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/dm-serif-display-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "Raleway"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/raleway-latin-400-normal.woff2") format("woff2"); }
+/* Recipe book maker (page previews). Open fonts: SIL Open Font License 1.1 (Courier Prime, Crimson Pro, IM Fell English) and Apache-2.0 (Homemade Apple); license texts sit in fonts/cookbook/. */
+@font-face { font-family: "Crimson Pro"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/cookbook/crimson-pro-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Crimson Pro"; font-style: italic; font-weight: 400; font-display: swap; src: url("fonts/cookbook/crimson-pro-latin-400-italic.woff2") format("woff2"); }
+@font-face { font-family: "Crimson Pro"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/cookbook/crimson-pro-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Homemade Apple"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/cookbook/homemade-apple-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IM Fell English"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/cookbook/im-fell-english-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IM Fell English"; font-style: italic; font-weight: 400; font-display: swap; src: url("fonts/cookbook/im-fell-english-latin-400-italic.woff2") format("woff2"); }

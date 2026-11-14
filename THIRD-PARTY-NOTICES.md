@@ -9,7 +9,8 @@ Family Circle includes the open-source code below. Keep this file and the `vendo
 | MediaPipe Selfie Segmentation (call backgrounds) | 0.1.1675465747 | `vendor/mediapipe/selfie_segmentation*` | Apache-2.0 | © Google LLC |
 | MediaPipe Face Mesh (call face filters) | 0.4.1633559619 | `vendor/mediapipe/face/*` | Apache-2.0 | © Google LLC |
 | d3 (family-chart needs it) | 7.9.0 | `vendor/d3.min.js` | ISC, see `vendor/LICENSE-d3.txt` | © 2010-2023 Mike Bostock |
-| Recipes (`recipes.js`), adapted from the author's Family Recipe Book | v2.1.0 | `recipes.js`, `LICENSE-GPL-3.0.txt` | GPL-3.0-or-later | © 2026 Leia |
+| Recipes (`recipes.js`), adapted from the author's Family Recipe Book | v2.2.0 | `recipes.js`, `LICENSE-GPL-3.0.txt` | GPL-3.0-or-later | © 2026 Leia |
+| Recipe book maker (`cookbook.js`, loaded only on its page), from the same Family Recipe Book; bundles pdf-lib and fontkit (MIT) and the fonts it embeds | v2.2.0 | `cookbook.js`, `THIRD-PARTY-NOTICES-cookbook.txt`, `fonts/cookbook/` | GPL-3.0-or-later (own code); MIT; SIL OFL 1.1 and Apache-2.0 (fonts) | © 2026 Leia; others as listed in the notices file |
 
 ## family-chart
 
@@ -67,3 +68,7 @@ More page fonts (shown under "Load more fonts"), all SIL Open Font License 1.1 a
 ## Recipes (`recipes.js`)
 
 Adapted from the author's own Family Recipe Book (ZenfulOutput project). `recipes.js` is licensed GPL-3.0-or-later, Copyright (C) 2026 Leia; the license text is `LICENSE-GPL-3.0.txt` and the notice is at the top of the file. The rest of this repo keeps its own license, so this one file is a GPL component inside it (an open question in `LICENSING-REVIEW.md`). No third-party code or fonts ship with it.
+
+## Recipe book maker (`cookbook.js`)
+
+The original Family Recipe Book's cookbook maker, kept as one file and loaded only when the member opens "Make printable recipe book". Its own code is GPL-3.0-or-later, Copyright (C) 2026 Leia (header at the top of the file). It bundles pdf-lib and @pdf-lib/fontkit (MIT) and embeds the fonts IM Fell English, Crimson Pro, Inter and Courier Prime (SIL OFL 1.1); full texts are in `THIRD-PARTY-NOTICES-cookbook.txt`. Fonts used only for the on-screen page previews are in `fonts/cookbook/` with their license texts (OFL 1.1, and Apache-2.0 for Homemade Apple). Changes for Family Circle are listed in the file header: runs inside the app page (no injected style, no inline style attributes), reads photos from data: URLs without any network request, and keeps drafts in a per-member browser database on this device.
