@@ -3665,10 +3665,18 @@
     var name = field('inviteName', 'Their name', 'text', { maxlength: 60, autocomplete: 'off', required: true });
     function sel(id, label, opts) { var el = h('select', { id: id, name: id }, opts.map(function (o) { return h('option', { value: o[0], text: o[1] }); })); return { el: el, wrap: h('div', null, h('label', { for: id, text: label }), el) }; }
     var rel = sel('inviteRelation', 'They are my…', [['', 'Choose one'], ['parent', 'Parent'], ['child', 'Child'], ['sibling', 'Sibling'], ['partner', 'Partner or spouse'], ['grandparent', 'Grandparent'], ['grandchild', 'Grandchild'], ['aunt_uncle', 'Aunt or uncle'], ['niece_nephew', 'Niece or nephew'], ['cousin', 'Cousin'], ['other', 'Other relative (link later)']]);
+    // When they are my parent: the same five kinds for every parent; only the wording (Mother or Father) follows their gender.
+    var PK = ['birth', 'adoptive', 'step', 'foster', 'guardian'];
+    var pkind = sel('inviteParentKind', 'What kind of parent?', PK.map(function (k) { return [k, KIND_LABEL[k]]; }));
+    pkind.wrap.hidden = true;
+    function relabelKinds() { [].slice.call(pkind.el.options).forEach(function (o) { o.textContent = parentTitle({ gender: gen.el.value }, o.value); }); }
     var gen = sel('inviteGender', 'Their gender (optional)', [['', 'Not set'], ['Female', 'Female'], ['Male', 'Male'], ['Nonbinary', 'Nonbinary'], ['Other', 'Other']]);
     var bday = field('inviteBirthday', 'Their birthday (optional)', 'date', {});
     var age = field('inviteAge', 'Or their age (if you do not know the birthday)', 'number', { placeholder: 'For example 8' });
     var msg = h('div');
+    rel.el.addEventListener('change', function () { pkind.wrap.hidden = rel.el.value !== 'parent'; relabelKinds(); });
+    gen.el.addEventListener('change', relabelKinds);
+    relabelKinds();
     var btn = h('button', { class: 'btn', type: 'submit', text: 'Send invitation' });
     var memberBox = h('div', { class: 'card' });
     var form = h('form', { novalidate: true, onsubmit: function (ev) {
@@ -3689,17 +3697,17 @@
           var mem = await teams.createMembership({ teamId: fid, roles: ['member'], email: e, name: nm, url: baseUrl() + '?action=invite' });
           var note = '';
           try {
-            var pr = await api('treeAddPerson', { familyId: fid, name: nm, relation: rel.el.value || undefined, birthday: birthday || undefined, gender: gen.el.value || undefined, inviteMembershipId: mem.$id });
+            var pr = await api('treeAddPerson', { familyId: fid, name: nm, relation: rel.el.value || undefined, parentKind: rel.el.value === 'parent' && pkind.el.value !== 'birth' ? pkind.el.value : undefined, birthday: birthday || undefined, gender: gen.el.value || undefined, inviteMembershipId: mem.$id });
             S.tree = null;
             if (pr.linked === false) note = ' They were added to the family tree but are not connected to anyone yet, because that relationship cannot be linked automatically. Open Settings \u2192 Family tree, tap Edit on their box and choose their parents or partner.';
             else note = ' They were added to the family tree and connected to you.';
           } catch (te) { note = ' The invitation was sent, but adding them to the family tree did not work: ' + friendly(te); }
           showAlert(msg, 'ok', 'Invitation sent to ' + e + '. They need to open the link in the email while signed in with that address.' + note + ' If they already filled in their own details, theirs are used instead. Once they accept, only they can change their name, gender and birthday.');
-          email.input.value = ''; name.input.value = ''; rel.el.value = ''; gen.el.value = ''; bday.input.value = ''; age.input.value = '';
+          email.input.value = ''; name.input.value = ''; rel.el.value = ''; pkind.el.value = 'birth'; pkind.wrap.hidden = true; gen.el.value = ''; relabelKinds(); bday.input.value = ''; age.input.value = '';
           loadMemberships();
         } catch (err) { showAlert(msg, 'error', friendly(err)); }
       }, 'Sending…');
-    } }, email.wrap, name.wrap, rel.wrap, gen.wrap, bday.wrap, age.wrap, msg, h('div', { class: 'stack' }, btn));
+    } }, email.wrap, name.wrap, rel.wrap, pkind.wrap, gen.wrap, bday.wrap, age.wrap, msg, h('div', { class: 'stack' }, btn));
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Invite a relative' },
       h('h2', { text: 'Invite a relative' }),
       h('p', { class: 'muted small', text: 'Only family owners can do this. Ask them to create an account and verify their email first, then send the invitation to that same address. The name, relationship, gender and birthday you fill in below are only a starting point for someone new. If they have already filled in About you, their own details are used.' }), form));

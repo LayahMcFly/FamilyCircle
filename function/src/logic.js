@@ -329,7 +329,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     return bad('Adoptive, step and foster links need one more setup step: add the parentKinds column to the people table (see the Setup Guide).');
   }
   /** What a new relative needs so the tree connects them to `anchor` as `relation`; missing middle people get unnamed placeholders. */
-  async function relate(ctx, user, all, anchor, relation) {
+  async function relate(ctx, user, all, anchor, relation, parentKind) {
     const out = { parentIds: null, partnerIds: null, afterCreate: null, linked: null };
     const idsOf = (r) => (Array.isArray(r.parentIds) ? r.parentIds : []).filter((x) => all.some((y) => y.$id === x));
     // A relative whose middle link is missing (an uncle needs a parent and a grandparent) gets an unnamed placeholder, so the
@@ -353,7 +353,18 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     else if (relation === 'sibling') { await ensureParent(anchor); out.parentIds = idsOf(anchor).slice(0, 2); out.linked = true; }
     else if (relation === 'parent') {
       const mine = idsOf(anchor);
-      if (mine.length < 2) { out.linked = true; out.afterCreate = (newId) => updateRow(TABLES.people, anchor.$id, { parentIds: [...mine, newId] }); }
+      if (mine.length < 2) {
+        out.linked = true;
+        out.afterCreate = async (newId) => {
+          const patch = { parentIds: [...mine, newId] };
+          if (parentKind && parentKind !== 'birth') {   // the same five kinds for every parent; only the wording (mother or father) follows their gender, on screen
+            let kinds = {}; try { kinds = anchor.parentKinds ? JSON.parse(anchor.parentKinds) : {}; } catch { kinds = {}; }
+            kinds[newId] = parentKind; patch.parentKinds = JSON.stringify(kinds);
+          }
+          try { await updateRow(TABLES.people, anchor.$id, patch); }
+          catch (e) { if (patch.parentKinds && sdkCode(e) === 400) throw kindsColumnMissing(); throw e; }
+        };
+      }
       else out.linked = false;
     } else if (relation === 'grandparent') {
       const par = await ensureParent(anchor), gp = idsOf(par);
@@ -715,7 +726,9 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
             { familyId: ctx.familyId, name: (prof && prof.displayName) || 'Me', userId: user.$id, confirmed: true, parentIds: [], partnerIds: [], createdBy: user.$id }, {});
           all.push(meRow);
         }
-        const r = await relate(ctx, user, all, meRow, relation);
+        const wantKind = body.parentKind === undefined || body.parentKind === '' ? '' : String(body.parentKind);
+        if (wantKind && !PARENT_KINDS.includes(wantKind)) throw bad('That kind of parent is not valid.');
+        const r = await relate(ctx, user, all, meRow, relation, wantKind);
         if (r.parentIds) parentIds = r.parentIds;
         if (r.partnerIds) partnerIds = r.partnerIds;
         afterCreate = r.afterCreate; relationLinked = r.linked;
