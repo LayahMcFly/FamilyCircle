@@ -81,12 +81,12 @@
     var st = { userId: real ? 'me' : viewers[0].userId, familyId: real ? (o.famId ? o.famId() : null) : null, gen: 0, data: null };
 
     /* One entry point for every request. A reply that arrives after the person or family changed is dropped, never drawn. */
-    function api(action, body) {
+    function api(action, body, opts) {
       var gen = st.gen, uid = st.userId, fam = real && o.famId ? o.famId() : st.familyId;
       var b = Object.assign({ familyId: fam }, body || {});
       return Promise.resolve().then(function () { return net.wrap(function () { return server.call(uid, action, b); }); })
         .catch(function () { return { ok: false, error: 'network', message: 'Could not reach the server. Check your connection and try again.' }; })
-        .then(function (r) { if (gen !== st.gen) return { ok: false, error: 'stale', stale: true }; return r; });
+        .then(function (r) { if (gen !== st.gen && !(opts && opts.keep)) return { ok: false, error: 'stale', stale: true }; return r; });
     }
     function toast(msg) { if (o.toast) return o.toast(msg); var t = h('div', { class: 'toast', text: msg }); toasts.appendChild(t); setTimeout(function () { t.remove(); }, 3500); }
     function route() {
@@ -425,20 +425,24 @@
           var url = f.url.value.trim(); setErr('gv-url', ''); setErr('gv-photofile', '');
           if (!/^https?:\/\/\S+\.\S+/i.test(url)) return setErr('gv-url', 'Enter a web address that starts with https:// first.');
           f.linkBtn.disabled = true; f.debug.textContent = ''; f.info.textContent = 'Looking for a picture at the link…';
-          var timedOut = false, slow = setTimeout(function () { timedOut = true; f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'That is taking too long. Big shops often block this. Save the picture to your phone and add it with the photo picker instead.'); }, 20000);
-          api('linkPicture', { url: url }).then(function (r) {
-            clearTimeout(slow); if (timedOut) return;
-            f.linkBtn.disabled = false; if (r.stale) return;
+          var t0 = Date.now(), dbg = function (m) { if (f.debug.isConnected) f.debug.textContent += (f.debug.textContent ? ' ' : '') + m; };
+          dbg('Request sent.');
+          var timedOut = false, slow = setTimeout(function () { timedOut = true; if (f.debug.isConnected) f.debug.textContent += ' No answer after 20 s.'; f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'That is taking too long. Big shops often block this. Save the picture to your phone and add it with the photo picker instead.'); }, 20000);
+          // keep: true. The answer is for THIS form, so it is used even if the screen refreshed in the background meanwhile (a refresh must not leave "Looking…" on screen forever).
+          api('linkPicture', { url: url }, { keep: true }).then(function (r) {
+            clearTimeout(slow); if (timedOut || !f.info.isConnected) return;
+            f.linkBtn.disabled = false;
+            dbg('Answer after ' + Math.round((Date.now() - t0) / 100) / 10 + ' s (' + (r.ok ? 'picture found' : (r.error || 'no picture')) + ').');
             if (!r.ok) {
               f.info.textContent = ''; var parts = String(r.message || '').split(' Details: ');
-              if (parts[1]) f.debug.textContent = 'What happened, step by step: ' + parts[1];
+              if (parts[1]) dbg('What happened, step by step: ' + parts[1]);
               return setErr('gv-photofile', parts[0]);
             }
             return fetch(r.image).then(function (x) { return x.blob(); }).then(function (b) {
               var file = new File([b], 'from-link', { type: b.type }); chosen = file; removePhoto = false; f.file.value = ''; process(file);
               f.info.textContent = 'Picture found at ' + r.host + '. Converting and compressing…';
             });
-          }, function () { clearTimeout(slow); if (timedOut) return; f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'Could not look at the link. Try again, or add your own photo.'); });
+          }).catch(function (e) { clearTimeout(slow); if (timedOut || !f.info.isConnected) return; f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'Something went wrong while getting the picture. Try again, or add your own photo.'); });
         } });
         f.getReady = function () { return ready; };
       }
