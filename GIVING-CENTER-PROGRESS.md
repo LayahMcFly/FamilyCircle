@@ -46,10 +46,10 @@ Branch `giving-center-preview` (from `main` at v1.51.99.22, commit `bb6ed16`). S
 - [x] Step 4: real backend design written (`GIVING-CENTER-BACKEND-DESIGN.md`). approved by you 2026-11-14 (third answer: removed members' lists hidden 30 days, then deleted)
 - [x] Step 5: real backend built and tested (23 new tests), OFF for every family. Not yet uploaded: tables and function are your actions (`GIVING-CENTER-SETUP.md`)
 - [x] Step 5b: real screens built and tested (`giving-ui.js` real mode, `giving.js`, `giving.css`, route `#/giving`), version 1.51.99.24. Hub card still "Planned". On the branch only, not merged
-- [ ] Step 6: real photo upload. Needs approval
-- [ ] Step 7: staged turn-on for real family members. Needs approval
-- [ ] Hub card still says Planned and is not clickable (change only after approval)
-- [ ] Merge to main (not requested yet)
+- [x] Step 6: real photo upload, done and merged (v1.51.99.25 to .26)
+- [x] Step 7: Hub card is live for every member; Giving stays OFF per family until its owner turns it on (v1.51.99.27)
+- [x] Hub card is a real link to #/giving (v1.51.99.27)
+- [x] Merged to main (approved in practice by asking for each feature)
 - [ ] Later phases only mapped, never built: requests and pledges, gift exchanges, emergency assistance, processed contributions
 - [ ] Never in scope: shop or Printify, checkout, wallet, charging, ads or affiliate links
 
