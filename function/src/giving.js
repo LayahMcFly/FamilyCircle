@@ -24,6 +24,8 @@ export const GIVING_TABLES = {
   reservations: 'givingReservations', // familyId, itemId (UNIQUE index), buyerId, version
   reports: 'givingReports',           // familyId, reporterId, kind, targetId, listId, data (JSON: reason, note)
   notices: 'givingNotices',           // familyId, userId, data (JSON: text)
+  requests: 'givingRequests',         // familyId, ownerId, status (open|closed), approval (pending|approved), audience, hiddenAt, data (JSON: title, details, kind, needed, amount, neededBy)
+  pledges: 'givingPledges',           // familyId, requestId, userId, status (pledged|done), pledgeKey (UNIQUE: requestId_userId), data (JSON: note)
   state: 'givingState'                // row id = familyId; enabled (bool), enabledBy, enabledAt
 };
 export const GIVING_LIMITS = { ...R.LIMITS, hideDays: 30, reportsPerPerson: 20, noticesShown: 20, perMinute: 60, thumbBytes: 10000, photoBytes: 250000, linkPicturesPer10Min: 10 };
@@ -127,6 +129,52 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
     await createRow(T.notices, ID.unique(), { familyId: c.familyId, userId, data: JSON.stringify({ text }) }, []);
   }
 
+
+  /* ---------- requests and pledges (Phase A) ---------- */
+  const RQ = R.REQ;
+  /** Reachable if it exists in this family, is not hidden, its owner is still a member, and the viewer may see it:
+   *  approved ones follow the audience rule; one waiting for approval is seen only by its owner and by adult owners/tree admins. */
+  function requestOk(c, r) {
+    if (!r || r.familyId !== c.familyId || r.hiddenAt || !c.names.has(r.ownerId)) return false;
+    if (r.ownerId === c.me.userId) return true;
+    if (r.approval !== 'approved') return c.moderator;
+    if (r.audience === 'adults' && !c.me.adult) return false;
+    return true;
+  }
+  async function requestRow(c, id) {
+    const r = await getRowOrNull(T.requests, idOf(id, 'requestId'));
+    if (!requestOk(c, r)) throw NA();
+    return r;
+  }
+  function requestView(c, r, pledgeRows, full) {
+    const d = parse(r.data), live = pledgeRows.filter((p) => c.names.has(p.userId));
+    const v = { id: r.$id, title: d.title || '', details: d.details || '', kind: d.kind || 'thing', kindLabel: R.REQUEST_KINDS[d.kind] || R.REQUEST_KINDS.thing, needed: d.needed || 1, amount: d.amount || '', neededBy: d.neededBy || '',
+      audience: r.audience === 'adults' ? 'adults' : 'everyone', ownerName: nameOf(c, r.ownerId), mine: r.ownerId === c.me.userId, status: r.status === 'closed' ? 'closed' : 'open', approval: r.approval === 'approved' ? 'approved' : 'pending',
+      pledgedCount: live.length, doneCount: live.filter((p) => p.status === 'done').length };
+    v.stillNeeded = Math.max(0, v.needed - live.length);
+    if (full) {
+      v.pledges = live.sort((a, b) => String(a.$createdAt).localeCompare(String(b.$createdAt))).map((p) => ({ id: p.$id, userId: p.userId, name: nameOf(c, p.userId), note: parse(p.data).note || '', status: p.status === 'done' ? 'done' : 'pledged', mine: p.userId === c.me.userId }));
+      const mine = live.find((p) => p.userId === c.me.userId); if (mine) v.myPledgeId = mine.$id;
+    }
+    return v;
+  }
+  const pledgesFor = (requestId) => all(T.pledges, [Query.equal('requestId', [requestId])], RQ.pledges + 20);
+  async function removeRequest(c, r, reason) {
+    const title = parse(r.data).title || 'a request';
+    for (const p of await pledgesFor(r.$id)) { if (reason && c.notify) await notify(c, p.userId, reason.replace('{request}', title)); await deleteRow(T.pledges, p.$id); }
+    await dropReports('request', r.$id);
+    await deleteRow(T.requests, r.$id);
+  }
+  const openCountOf = async (c, userId) => (await all(T.requests, [Query.equal('familyId', [c.familyId]), Query.equal('ownerId', [userId])], RQ.open + 20)).filter((x) => !x.hiddenAt && x.status !== 'closed').length;
+  /** A request whose owner left is hidden at once and deleted after 30 days (like wishlists); pledges made by people who left are removed (done ones too, there is nobody left to thank). */
+  async function tidyRequests(c, rows) {
+    for (const r of rows) {
+      if (!r.hiddenAt && !c.names.has(r.ownerId)) { await updateRow(T.requests, r.$id, { hiddenAt: iso() }); r.hiddenAt = iso(); }
+      else if (r.hiddenAt && Date.parse(r.hiddenAt) < now() - L.hideDays * DAY) await removeRequest({ ...c, notify: false }, r, '');
+    }
+    for (const p of await inFamily(T.pledges, c.familyId)) if (!c.names.has(p.userId)) await deleteRow(T.pledges, p.$id);
+  }
+
   /* ---------- removal helpers (take {familyId} so the scheduled cleanup can use them too) ---------- */
   async function dropReservations(c, itemId, reason, title) {
     const rows = await all(T.reservations, [Query.equal('itemId', [itemId])], 10);
@@ -179,6 +227,11 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       if (!page.rows.length) break;
       for (const l of page.rows) { await removeList({ familyId: l.familyId, notify: false }, l, ''); purged += 1; }
     }
+    while (now() < deadline) {
+      const page = await listRows(T.requests, [Query.lessThan('hiddenAt', cutoff), Query.limit(25)]);
+      if (!page.rows.length) break;
+      for (const r of page.rows) { await removeRequest({ familyId: r.familyId, notify: false }, r, ''); purged += 1; }
+    }
     return { purged };
   }
 
@@ -228,6 +281,7 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
         return l ? { itemId: it.$id, title: parse(it.data).title || '', listId: l.$id, ownerName: nameOf(c, l.ownerId), changedSinceReserved: (r.version || 1) !== (it.version || 1) } : null;
       }).filter(Boolean);
       const out = { lists: summaries, reservations: mine, notices: notes.rows.map((n) => ({ id: n.$id, text: parse(n.data).text || '' })), canCreateList: summaries.filter((x) => x.mine).length < L.lists, me: { adult: c.me.adult }, canManageAges: c.manager, canModerate: c.moderator };
+      { const rq = (await inFamily(T.requests, c.familyId, [], 600)).filter((q) => requestOk(c, q)); out.requests = { open: rq.filter((q) => q.approval === 'approved' && q.status !== 'closed').length }; if (c.moderator) out.requests.waiting = rq.filter((q) => q.approval !== 'approved' && q.ownerId !== user.$id).length; }
       if (c.moderator) out.openReports = (await inFamily(T.reports, c.familyId)).length;   // everyone else gets no report field at all
       return out;
     },
@@ -436,6 +490,133 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       return { adult };
     },
 
+
+    /* ----- Requests and pledges (Phase A) ----- */
+    async givingRequestsHome({ user, body }) {
+      const c = await context(user, body.familyId);
+      const rows = await inFamily(T.requests, c.familyId, [], 600);
+      await tidyRequests(c, rows);
+      const pledges = await inFamily(T.pledges, c.familyId);
+      const byReq = new Map(); for (const p of pledges) { if (!byReq.has(p.requestId)) byReq.set(p.requestId, []); byReq.get(p.requestId).push(p); }
+      const reach = rows.filter((r) => requestOk(c, r)).sort((a, b) => String(b.$createdAt).localeCompare(String(a.$createdAt)));
+      const view = (r) => requestView(c, r, byReq.get(r.$id) || [], false);
+      const shown = reach.filter((r) => r.approval === 'approved' || r.ownerId === c.me.userId);
+      const mineOpen = rows.filter((r) => r.ownerId === user.$id && !r.hiddenAt && r.status !== 'closed').length;
+      return { me: { adult: c.me.adult }, canModerate: c.moderator, canCreate: mineOpen < RQ.open,
+        open: shown.filter((r) => r.status !== 'closed').map(view), closed: shown.filter((r) => r.status === 'closed').slice(0, 20).map(view),
+        waiting: c.moderator ? reach.filter((r) => r.approval !== 'approved' && r.ownerId !== user.$id).map(view) : [] };
+    },
+    async givingRequestGet({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await requestRow(c, body.requestId);
+      return { request: requestView(c, r, await pledgesFor(r.$id), true), me: { adult: c.me.adult }, canModerate: c.moderator };
+    },
+    async givingRequestSave({ user, body }) {
+      const c = await context(user, body.familyId);
+      const v = R.validateRequest(body); if (!v.ok) throw invalid(v.errors);
+      if (v.value.audience === 'adults' && !c.me.adult) throw new ApiError(403, 'adults_only', 'Only adults can make a request adults only.');
+      const { audience, ...rest } = v.value, data = JSON.stringify(rest);
+      const view = async (r) => requestView(c, r, await pledgesFor(r.$id), true);
+      if (body.requestId) {
+        const r = await requestRow(c, body.requestId);
+        if (r.ownerId !== user.$id) throw NA();
+        const patch = { audience, data }; if (!c.me.adult) patch.approval = 'pending';   // a kid's edit goes back for an adult to look at again
+        return { request: await view(await updateRow(T.requests, r.$id, patch)) };
+      }
+      if ((await openCountOf(c, user.$id)) >= RQ.open) throw new ApiError(400, 'limit', 'You can have up to ' + RQ.open + ' open requests. Close one to add another.');
+      const approval = c.me.adult ? 'approved' : 'pending';
+      const row = await createRow(T.requests, ID.unique(), { familyId: c.familyId, ownerId: user.$id, status: 'open', approval, audience, data }, []);
+      return { request: await view(row), waitingForApproval: approval === 'pending' };
+    },
+    async givingRequestApprove({ user, body }) {
+      const c = await context(user, body.familyId);
+      if (!c.moderator) throw NA();
+      const r = await getRowOrNull(T.requests, idOf(body.requestId, 'requestId'));
+      if (!r || r.familyId !== c.familyId || r.hiddenAt || !c.names.has(r.ownerId) || r.approval === 'approved') throw NA();
+      if (r.ownerId === user.$id) throw new ApiError(400, 'self', 'Ask another owner or tree admin to approve your own request.');
+      await updateRow(T.requests, r.$id, { approval: 'approved' });
+      await notify(c, r.ownerId, 'Your request "' + (parse(r.data).title || '') + '" was approved and the family can see it.');
+      return {};
+    },
+    async givingRequestReject({ user, body }) {
+      const c = await context(user, body.familyId);
+      if (!c.moderator) throw NA();
+      const r = await getRowOrNull(T.requests, idOf(body.requestId, 'requestId'));
+      if (!r || r.familyId !== c.familyId || r.hiddenAt || !c.names.has(r.ownerId) || r.approval === 'approved') throw NA();
+      await notify(c, r.ownerId, 'Your request "' + (parse(r.data).title || '') + '" was not posted. An owner or tree admin can tell you why.');
+      await removeRequest({ ...c, notify: false }, r, '');
+      return {};
+    },
+    async givingRequestClose({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await requestRow(c, body.requestId);
+      if (r.ownerId !== user.$id) throw NA();
+      if (body.reopen && r.status === 'closed' && (await openCountOf(c, user.$id)) >= RQ.open) throw new ApiError(400, 'limit', 'You can have up to ' + RQ.open + ' open requests. Close one to reopen this.');
+      const saved = await updateRow(T.requests, r.$id, { status: body.reopen ? 'open' : 'closed' });
+      return { request: requestView(c, saved, await pledgesFor(r.$id), true) };
+    },
+    async givingRequestDelete({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await requestRow(c, body.requestId);
+      if (r.ownerId !== user.$id) throw NA();
+      await removeRequest({ ...c, notify: true }, r, 'A request you pledged to ("{request}") was removed.');
+      return {};
+    },
+    async givingPledgeSave({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await requestRow(c, body.requestId);
+      if (r.approval !== 'approved') throw NA();
+      if (!c.me.adult) throw new ApiError(403, 'adults_only', 'Pledging is for adults.');
+      if (r.ownerId === user.$id) throw new ApiError(400, 'own_request', 'You cannot pledge to your own request.');
+      if (r.status === 'closed') throw new ApiError(409, 'closed', 'This request is closed.');
+      const v = R.validatePledge(body); if (!v.ok) throw invalid(v.errors);
+      const rows = (await pledgesFor(r.$id)).filter((p) => c.names.has(p.userId));
+      const mine = rows.find((p) => p.userId === user.$id);
+      if (mine) {
+        if (mine.status === 'done') throw new ApiError(409, 'done', 'Your pledge is already marked done.');
+        await updateRow(T.pledges, mine.$id, { data: JSON.stringify(v.value) });
+      } else {
+        if (rows.length >= RQ.pledges) throw new ApiError(400, 'limit', 'This request already has ' + RQ.pledges + ' pledges.');
+        try { await createRow(T.pledges, ID.unique(), { familyId: c.familyId, requestId: r.$id, userId: user.$id, status: 'pledged', pledgeKey: r.$id + '_' + user.$id, data: JSON.stringify(v.value) }, []); }
+        catch (e) { if (sdkCode(e) !== 409) throw e; /* two taps at once: the first one stands */ }
+        await notify(c, r.ownerId, nameOf(c, user.$id) + ' pledged to help with "' + (parse(r.data).title || '') + '".');
+      }
+      return { request: requestView(c, r, await pledgesFor(r.$id), true) };
+    },
+    async givingPledgeWithdraw({ user, body }) {
+      const c = await context(user, body.familyId);
+      const p = await getRowOrNull(T.pledges, idOf(body.pledgeId, 'pledgeId'));
+      const r = p && p.familyId === c.familyId ? await getRowOrNull(T.requests, p.requestId) : null;
+      if (!p || !requestOk(c, r) || p.userId !== user.$id) throw NA();
+      if (p.status === 'done') throw new ApiError(409, 'done', 'A pledge marked done cannot be withdrawn. Ask the person who made the request.');
+      await deleteRow(T.pledges, p.$id);
+      await notify(c, r.ownerId, nameOf(c, user.$id) + ' withdrew a pledge on "' + (parse(r.data).title || '') + '".');
+      return { request: requestView(c, r, await pledgesFor(r.$id), true) };
+    },
+    async givingPledgeDone({ user, body }) {
+      const c = await context(user, body.familyId);
+      const p = await getRowOrNull(T.pledges, idOf(body.pledgeId, 'pledgeId'));
+      const r = p && p.familyId === c.familyId ? await getRowOrNull(T.requests, p.requestId) : null;
+      if (!p || !requestOk(c, r) || r.ownerId !== user.$id) throw NA();
+      const done = body.done !== false;
+      await updateRow(T.pledges, p.$id, { status: done ? 'done' : 'pledged' });
+      if (done) await notify(c, p.userId, 'Thank you. "' + (parse(r.data).title || '') + '" marked your help as done.');
+      return { request: requestView(c, r, await pledgesFor(r.$id), true) };
+    },
+    async givingRequestReport({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await requestRow(c, body.targetId);
+      if (r.approval !== 'approved') throw NA();
+      if (r.ownerId === user.$id) throw new ApiError(400, 'own_content', 'You cannot report your own request.');
+      const v = R.validateReport(body); if (!v.ok) throw invalid(v.errors);
+      const mineRows = await all(T.reports, [Query.equal('familyId', [c.familyId]), Query.equal('reporterId', [user.$id])], L.reportsPerPerson + 5);
+      if (!mineRows.some((x) => x.kind === 'request' && x.targetId === r.$id)) {
+        if (mineRows.length >= L.reportsPerPerson) throw new ApiError(429, 'limit', 'You have sent a lot of reports. An admin will review them first.');
+        await createRow(T.reports, ID.unique(), { familyId: c.familyId, reporterId: user.$id, kind: 'request', targetId: r.$id, listId: r.$id, data: JSON.stringify(v.value) }, []);
+      }
+      return { message: 'Thanks. An owner or tree admin will take a look. The person who wrote it is not told who reported it.' };
+    },
+
     /* ----- reporting ----- */
     async givingReport({ user, body }) {
       const c = await context(user, body.familyId);
@@ -456,6 +637,12 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       if (!c.moderator) throw NA();
       const out = [];
       for (const r of await inFamily(T.reports, c.familyId, [], 200)) {
+        if (r.kind === 'request') {
+          const q = await getRowOrNull(T.requests, r.targetId), rd = parse(r.data);
+          if (!q || q.familyId !== c.familyId || q.hiddenAt || !c.names.has(q.ownerId)) continue;
+          out.push({ id: r.$id, kind: 'request', reasonLabel: R.REPORT_REASONS[rd.reason] || 'Something else', note: rd.note || '', reporterName: nameOf(c, r.reporterId), ownerName: nameOf(c, q.ownerId), listName: 'Family requests', title: parse(q.data).title || '', notes: parse(q.data).details || '', url: '' });
+          continue;
+        }
         const l = await getRowOrNull(T.lists, r.listId);
         if (!l || l.familyId !== c.familyId || l.hiddenAt || !c.names.has(l.ownerId)) continue;
         const it = r.kind === 'item' ? await getRowOrNull(T.items, r.targetId) : null;
@@ -471,7 +658,10 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       if (!c.moderator) throw NA();
       const r = await getRowOrNull(T.reports, idOf(body.reportId, 'reportId'));
       if (!r || r.familyId !== c.familyId) throw NA();
-      if (body.resolution === 'remove') {
+      if (body.resolution === 'remove' && r.kind === 'request') {
+        const q = await getRowOrNull(T.requests, r.targetId);
+        if (q && q.familyId === c.familyId) { await notify(c, q.ownerId, 'Your request was removed by a family admin.'); await removeRequest({ ...c, notify: true }, q, 'A request you pledged to ("{request}") was removed.'); }
+      } else if (body.resolution === 'remove') {
         const l = await getRowOrNull(T.lists, r.listId);
         if (l && l.familyId === c.familyId) {
           const rc = { ...c, notify: true };

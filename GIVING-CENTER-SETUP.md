@@ -26,6 +26,8 @@ Create each under Databases > family. For every table: **Permissions tab empty, 
 | `givingReservations` | `familyId` String 36 required; `itemId` String 36 required; `buyerId` String 36 required; `version` Integer |
 | `givingReports` | `familyId` String 36 required; `reporterId` String 36 required; `kind` String 10 required; `targetId` String 36 required; `listId` String 36 required; `data` String 1000 required |
 | `givingNotices` | `familyId` String 36 required; `userId` String 36 required; `data` String 600 required |
+| `givingRequests` | `familyId` String 36 required; `ownerId` String 36 required; `status` String 10 required; `approval` String 10 required; `audience` String 10 required; `hiddenAt` String 40 (not required); `data` String 1500 required |
+| `givingPledges` | `familyId` String 36 required; `requestId` String 36 required; `userId` String 36 required; `status` String 10 required; `pledgeKey` String 80 required; `data` String 600 required |
 
 ## 3. Indexes
 
@@ -40,6 +42,11 @@ Create each under Databases > family. For every table: **Permissions tab empty, 
 | `givingReports` | `idx_family` | Key | `familyId` | Review queue |
 | `givingReports` | `idx_target` | Key | `targetId` | Clean up on delete |
 | `givingNotices` | `idx_user` | Key | `userId` | Bell |
+| `givingRequests` | `idx_family` | Key | `familyId` | Requests list |
+| `givingRequests` | `idx_hidden` | Key | `hiddenAt` | 30-day cleanup |
+| `givingPledges` | `uniq_pledgeKey` | **Unique** | `pledgeKey` | One pledge per person per request, even with two taps at once |
+| `givingPledges` | `idx_request` | Key | `requestId` | Request screen |
+| `givingPledges` | `idx_family` | Key | `familyId` | Requests list |
 
 The `givingState` row uses the family id as its row id, so it needs no index.
 
@@ -80,3 +87,7 @@ The real screens exist (open `#/giving` in the app). They are not linked from th
 2. When Etsy shows the app's API key, it is two parts, `keystring:sharedsecret`. In Appwrite, open the family-api function, Settings, Variables, and add `ETSY_API_KEY` with that whole value. Redeploy is not needed; the next run reads it.
 3. Until the key exists and is approved, Etsy links keep the placeholder tile and nothing breaks.
 - Etsy's rules, followed in the code: pictures are never saved (kept in the function's memory under 5 hours), the Etsy trademark notice is shown wherever an Etsy picture appears, and only etsystatic.com addresses are downloaded. Rollback: remove the variable.
+
+## Requests and pledges (v1.51.99.40)
+
+Create the two tables and five indexes above (all permissions empty, like the other giving tables), then upload the new function build. Until both are done, the **Family requests** row on the Giving home will show an error for families that have Giving turned on. Nothing changes for families that have it off.

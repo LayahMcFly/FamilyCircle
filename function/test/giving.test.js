@@ -22,7 +22,7 @@ function makeWorld() {
   };
   for (const t of [...Object.values(TABLES), ...Object.values(CHAT_TABLES), ...Object.values(GIVING_TABLES)]) world.tables[t] = new Map();
   const err = (code, m) => Object.assign(new Error(m), { code });
-  const UNIQUE = ['sendKey', 'channelKey', 'dmKey', 'reactionKey', 'blockKey', 'readKey', 'profileKey', 'itemId'];
+  const UNIQUE = ['sendKey', 'channelKey', 'dmKey', 'reactionKey', 'blockKey', 'readKey', 'profileKey', 'itemId', 'pledgeKey'];
   const match = (r, q) => {
     switch (q.method) {
       case 'equal': return q.values.includes(q.attribute === '$id' ? r.$id : r[q.attribute]);
@@ -549,4 +549,91 @@ test('the function cleans a long pasted shop link the same way as the page', asy
   const long = 'https://www.walmart.com/ip/Thing/939951644?selectedSellerId=16451&wmlspartner=wlpa&gclid=' + 'x'.repeat(500) + '&sid=abc';
   const it = (await w.ok('ann', 'givingItemSave', F({ listId: l.id, title: 'Thing', priority: 'high', url: long }))).item;
   assert.equal(it.url, 'https://www.walmart.com/ip/Thing/939951644?selectedSellerId=16451');
+});
+
+/* ---------- requests and pledges (Phase A) ---------- */
+const mkReq = async (w, uid, extra = {}) => (await w.ok(uid, 'givingRequestSave', F({ title: 'Help moving a couch', needed: 2, ...extra }))).request;
+
+test('requests: the rules match the preview', async () => {
+  const P = createRequire(import.meta.url)('../../giving-core.js');
+  const M = await import('../src/giving-rules.js');
+  for (const b of [{ title: 'x' }, { title: '' }, { title: 'x', needed: 0 }, { title: 'x', needed: 21 }, { title: 'x', kind: 'time', neededBy: '2026-12-01' }, { title: 'x', neededBy: 'soon' }, { title: 'x', amount: 'y'.repeat(61) }, { title: 'x', kind: 'zzz' }]) assert.deepEqual(M.validateRequest(b), P.validateRequest(b));
+  for (const b of [{ note: 'hi' }, { note: 'x'.repeat(301) }, {}]) assert.deepEqual(M.validatePledge(b), P.validatePledge(b));
+  assert.deepEqual(M.REQ, P.REQ);
+});
+
+test('requests: adults post at once, pledge, withdraw; kids only wait; no tables have client permissions', async () => {
+  const w = await setup();
+  await w.ok('owner', 'givingMemberSetAdult', F({ userId: 'tia', adult: true }));
+  const r = await mkReq(w, 'ann');
+  assert.equal(r.approval, 'approved');
+  assert.equal((await w.ok('bob', 'givingPledgeSave', F({ requestId: r.id, note: 'Saturday' }))).request.pledgedCount, 1);
+  await w.ok('bob', 'givingPledgeSave', F({ requestId: r.id, note: 'Saturday 10am' }));   // update, not a second pledge
+  assert.equal(rows(w, 'givingPledges').length, 1);
+  await w.fail('ann', 'givingPledgeSave', F({ requestId: r.id }), 400, 'own_request');
+  await w.fail('kid', 'givingPledgeSave', F({ requestId: r.id }), 403, 'adults_only');
+  const g = await w.ok('bob', 'givingRequestGet', F({ requestId: r.id }));
+  assert.ok(g.request.myPledgeId);
+  await w.ok('bob', 'givingPledgeWithdraw', F({ pledgeId: g.request.myPledgeId }));
+  assert.equal(rows(w, 'givingPledges').length, 0);
+  for (const t of ['givingRequests', 'givingPledges']) for (const x of rows(w, t)) assert.deepEqual(x.$permissions, []);
+});
+
+test('requests: a kid request waits; only an adult owner/admin approves (not the kid, not an ordinary adult); edits re-wait', async () => {
+  const w = await setup();
+  await w.ok('owner', 'givingMemberSetAdult', F({ userId: 'tia', adult: true }));
+  const k = await mkReq(w, 'kid', { title: 'Library trip' });
+  assert.equal(k.approval, 'pending');
+  const seen = async (u) => (await w.ok(u, 'givingRequestsHome', F())).open.map((x) => x.title);
+  assert.deepEqual(await seen('kid'), ['Library trip']);
+  assert.deepEqual(await seen('ann'), []);
+  await w.fail('ann', 'givingRequestGet', F({ requestId: k.id }), 404);
+  await w.fail('ann', 'givingPledgeSave', F({ requestId: k.id }), 404);
+  assert.equal((await w.ok('owner', 'givingRequestsHome', F())).waiting.length, 1);
+  await w.fail('ann', 'givingRequestApprove', F({ requestId: k.id }), 404);
+  await w.fail('kid', 'givingRequestApprove', F({ requestId: k.id }), 404);
+  await w.ok('tia', 'givingRequestApprove', F({ requestId: k.id }));
+  assert.deepEqual(await seen('ann'), ['Library trip']);
+  await w.ok('ann', 'givingPledgeSave', F({ requestId: k.id, note: 'ok' }));
+  await w.ok('kid', 'givingRequestSave', F({ requestId: k.id, title: 'Library trip Sat' }));
+  assert.deepEqual(await seen('ann'), []);                     // back to waiting
+  await w.fail('kid', 'givingRequestSave', F({ title: 'x', audience: 'adults' }), 403, 'adults_only');
+  const k2 = await mkReq(w, 'kid', { title: 'Nope' });
+  await w.ok('owner', 'givingRequestReject', F({ requestId: k2.id }));
+  assert.ok(!rows(w, 'givingRequests').some((x) => x.$id === k2.id));
+});
+
+test('requests: adults-only hidden from kids, other families see nothing, owner marks done, closed refuses pledges, limit of 10', async () => {
+  const w = await setup();
+  const a = await mkReq(w, 'ann', { title: 'Coat', audience: 'adults' });
+  await w.fail('kid', 'givingRequestGet', F({ requestId: a.id }), 404);
+  await w.fail('zed', 'givingRequestGet', { familyId: 'famB', requestId: a.id }, 404);
+  await w.fail('yan', 'givingRequestsHome', F(), 403);
+  const p = (await w.ok('bob', 'givingPledgeSave', F({ requestId: a.id }))).request.pledges[0];
+  await w.fail('bob', 'givingPledgeDone', F({ pledgeId: p.id }), 404);   // only the requester
+  await w.ok('ann', 'givingPledgeDone', F({ pledgeId: p.id }));
+  await w.fail('bob', 'givingPledgeWithdraw', F({ pledgeId: p.id }), 409, 'done');
+  await w.ok('ann', 'givingRequestClose', F({ requestId: a.id }));
+  await w.fail('owner', 'givingPledgeSave', F({ requestId: a.id }), 409, 'closed');
+  for (let i = 0; i < 10; i++) await mkReq(w, 'ann', { title: 'R' + i });   // the closed one does not count
+  await w.fail('ann', 'givingRequestSave', F({ title: 'one too many' }), 400, 'limit');
+});
+
+test('requests: reports reach adult admins only, and a removed member\'s requests hide and are purged', async () => {
+  const w = await setup();
+  const r = await mkReq(w, 'ann');
+  await w.fail('ann', 'givingRequestReport', F({ targetId: r.id, reason: 'other' }), 400, 'own_content');
+  await w.ok('bob', 'givingRequestReport', F({ targetId: r.id, reason: 'other', note: 'hmm' }));
+  await w.ok('bob', 'givingRequestReport', F({ targetId: r.id, reason: 'other' }));
+  assert.equal(rows(w, 'givingReports').length, 1);
+  const list = (await w.ok('owner', 'givingReports', F())).reports;
+  assert.equal(list[0].kind, 'request');
+  await w.fail('bob', 'givingReports', F(), 404);
+  await w.ok('bob', 'givingPledgeSave', F({ requestId: r.id }));
+  await w.ok('owner', 'givingReportResolve', F({ reportId: list[0].id, resolution: 'remove' }));
+  assert.equal(rows(w, 'givingRequests').length + rows(w, 'givingPledges').length + rows(w, 'givingReports').length, 0);
+  const r2 = await mkReq(w, 'ann', { title: 'Second' });
+  w.removeMember('famA', 'ann');
+  assert.deepEqual((await w.ok('bob', 'givingRequestsHome', F())).open, []);
+  assert.ok(rows(w, 'givingRequests')[0].hiddenAt);
 });

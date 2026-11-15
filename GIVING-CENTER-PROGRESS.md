@@ -158,3 +158,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.37: pasted shop links drop advertising/tracking parts (gclid, wl*, utm_* ...) so long Walmart/Google-ad links are accepted and saved short.
 - v1.51.99.38: Phase A (requests and pledges) PREVIEW only, in the hidden test page giving-preview/index.html (sample data, nothing real). Not in the real Giving screens yet; kids' requests wait for an adult owner/admin; money is plain text only; reporting covers requests.
 - v1.51.99.39: while creating a wishlist or a request, a note says what kids (if you are an adult) or adults (if you are a kid) can see and do; it changes when you pick Adults only.
+- v1.51.99.40: Phase A requests and pledges are REAL: tables givingRequests and givingPledges, 13 function actions, real screens. Needs the two tables + indexes in GIVING-CENTER-SETUP.md and the new function build.

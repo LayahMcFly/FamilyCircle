@@ -26,7 +26,7 @@ function makeWorld() {
   };
   for (const t of [...Object.values(TABLES), ...Object.values(CHAT_TABLES), ...Object.values(GIVING_TABLES)]) world.tables[t] = new Map();
   const err = (code, m) => Object.assign(new Error(m), { code });
-  const UNIQUE = ['sendKey', 'channelKey', 'dmKey', 'reactionKey', 'blockKey', 'readKey', 'profileKey', 'itemId'];
+  const UNIQUE = ['sendKey', 'channelKey', 'dmKey', 'reactionKey', 'blockKey', 'readKey', 'profileKey', 'itemId', 'pledgeKey'];
   const match = (r, q) => {
     switch (q.method) {
       case 'equal': return q.values.includes(q.attribute === '$id' ? r.$id : r[q.attribute]);

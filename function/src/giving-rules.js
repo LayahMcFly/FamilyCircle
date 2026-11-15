@@ -91,5 +91,28 @@
     if (note.length > 500) errors.note = 'Notes can be up to 500 characters.';
     return { ok: !Object.keys(errors).length, errors: errors, value: { reason: b.reason, note: note } };
   }
+  /* ---------- Requests and pledges (Phase A). Limits are PROPOSED. ---------- */
+  var REQ = { open: 10, pledges: 20, title: 120, details: 1000, note: 300, needed: 20, amount: 60 };
+  var REQUEST_KINDS = { thing: 'A thing', time: 'Someone\u2019s time', task: 'A task' };
+  function validateRequest(b) {
+    var errors = {}; b = b || {};
+    var title = trim(b.title), details = trim(b.details), amount = trim(b.amount), kind = b.kind || 'thing';
+    if (!title) errors.title = 'Add a short title for the request.';
+    else if (title.length > REQ.title) errors.title = 'Titles can be up to ' + REQ.title + ' characters.';
+    if (details.length > REQ.details) errors.details = 'Details can be up to ' + REQ.details + ' characters.';
+    if (!REQUEST_KINDS[kind]) errors.kind = 'Choose what you need.';
+    var needed = b.needed === undefined || b.needed === '' ? 1 : Number(b.needed);
+    if (!(needed >= 1 && needed <= REQ.needed && Math.floor(needed) === needed)) errors.needed = 'How many helpers or items: a whole number from 1 to ' + REQ.needed + '.';
+    if (amount.length > REQ.amount) errors.amount = 'Keep the amount note under ' + REQ.amount + ' characters, for example "about $40".';
+    var by = trim(b.neededBy);
+    if (by && !/^\d{4}-\d{2}-\d{2}$/.test(by)) errors.neededBy = 'Use a date like 2026-12-24, or leave it empty.';
+    var audience = b.audience === 'adults' ? 'adults' : 'everyone';
+    return { ok: !Object.keys(errors).length, errors: errors, value: { title: title, details: details, kind: kind, needed: needed, amount: amount, neededBy: by, audience: audience } };
+  }
+  function validatePledge(b) {
+    var errors = {}, note = trim(b && b.note);
+    if (note.length > REQ.note) errors.note = 'Notes can be up to ' + REQ.note + ' characters.';
+    return { ok: !Object.keys(errors).length, errors: errors, value: { note: note } };
+  }
 
-export { REPORT_REASONS, AUDIENCES, validateReport, LIMITS, PRIORITIES, PRIORITY_LABEL, CURRENCIES, cleanUrl, hostOf, parseAmount, fmtMoney, totalsByCurrency, validateList, validateItem, trim };
+export { REQ, REQUEST_KINDS, validateRequest, validatePledge, REPORT_REASONS, AUDIENCES, validateReport, LIMITS, PRIORITIES, PRIORITY_LABEL, CURRENCIES, cleanUrl, hostOf, parseAmount, fmtMoney, totalsByCurrency, validateList, validateItem, trim };

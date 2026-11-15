@@ -187,6 +187,16 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await as('bob'); check('9 The buyer is told the item is no longer on the list', /no longer on the wishlist/.test(await text()), await text());
 
   // 10 off again
+  // 5h requests and pledges work against the real server code
+  await as('ann', '#/giving/requests/new'); await page.waitForSelector('#gv-rtitle');
+  check('5h real: the adult form says what kids can see', /Kids can see this request but cannot pledge/.test(await page.locator('#gv-rwhosees').innerText()), '');
+  await page.fill('#gv-rtitle', 'Rake the leaves'); await page.fill('#gv-rneeded', '2'); await page.click('#gv-rsave');
+  await page.waitForSelector('#main h1:has-text("Rake the leaves")'); await settle();
+  check('5h real: the request is saved and shows 0 of 2 pledged', /0 of 2 pledged/.test(await text()), await text());
+  check('5h real: the request rows are stored with no client permissions', rowsOf('givingRequests').length === 1 && rowsOf('givingRequests').every(r => r.$permissions.length === 0), '');
+  await as('bob', '#/giving/requests'); 
+  check('5h real: another adult sees it from the Family requests list', /Rake the leaves/.test(await text()), await text());
+
   await as('owner'); await page.locator('#gv-turnoff').click(); await dlgOk(); await page.waitForSelector('.gv-off'); await settle();
   check('10 Owner turns it off and sees the turn-on button again', await page.locator('#gv-turnon').isVisible(), await text());
   await as('ann'); check('10 Everyone else is told it is not turned on', /not turned on/.test(await text()), await text());

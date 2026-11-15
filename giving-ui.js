@@ -194,7 +194,7 @@
         page.appendChild(h('div', { class: 'gv-notice', role: 'status' }, h('span', { text: n.text }),
           h('button', { type: 'button', class: 'btn ghost small', 'data-notice': n.id, text: 'Dismiss', onclick: function () { api('noticeDismiss', { noticeId: n.id }).then(function (x) { if (x.stale) return; refresh(); }); } })));
       });
-      if (!real) page.appendChild(h('a', { class: 'gv-row gv-requestslink', id: 'gv-requestslink', href: '#/giving/requests' },
+      page.appendChild(h('a', { class: 'gv-row gv-requestslink', id: 'gv-requestslink', href: '#/giving/requests' },
         h('strong', { text: 'Family requests' }), h('span', { class: 'muted', text: r.requests ? (r.requests.open + (r.requests.open === 1 ? ' open request' : ' open requests') + (r.requests.waiting ? ', ' + r.requests.waiting + ' waiting for approval' : '')) : 'Ask for help and pledge to help' })));
       var mine = r.lists.filter(function (l) { return l.mine; }), others = r.lists.filter(function (l) { return !l.mine; });
       page.appendChild(h('h2', { class: 'gv-sub', text: 'Your wishlists' }));
