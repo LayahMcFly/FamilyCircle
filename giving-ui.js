@@ -397,14 +397,16 @@
           var url = f.url.value.trim(); setErr('gv-url', ''); setErr('gv-photofile', '');
           if (!/^https?:\/\/\S+\.\S+/i.test(url)) return setErr('gv-url', 'Enter a web address that starts with https:// first.');
           f.linkBtn.disabled = true; f.info.textContent = 'Looking for a picture at the link…';
+          var timedOut = false, slow = setTimeout(function () { timedOut = true; f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'That is taking too long. Big shops often block this. Save the picture to your phone and add it with the photo picker instead.'); }, 20000);
           api('linkPicture', { url: url }).then(function (r) {
+            clearTimeout(slow); if (timedOut) return;
             f.linkBtn.disabled = false; if (r.stale) return;
             if (!r.ok) { f.info.textContent = ''; return setErr('gv-photofile', r.message); }
             return fetch(r.image).then(function (x) { return x.blob(); }).then(function (b) {
               var file = new File([b], 'from-link', { type: b.type }); chosen = file; removePhoto = false; f.file.value = ''; process(file);
               f.info.textContent = 'Picture found at ' + r.host + '. Converting and compressing…';
             });
-          }, function () { f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'Could not look at the link. Try again, or add your own photo.'); });
+          }, function () { clearTimeout(slow); if (timedOut) return; f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'Could not look at the link. Try again, or add your own photo.'); });
         } });
         f.getReady = function () { return ready; };
       }

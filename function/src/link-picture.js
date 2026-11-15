@@ -19,7 +19,7 @@ import dns from 'node:dns/promises';
 import https from 'node:https';
 import net from 'node:net';
 
-export const LINK_LIMITS = { pageBytes: 600000, imageBytes: 1500000, redirects: 3, timeoutMs: 4000 };
+export const LINK_LIMITS = { pageBytes: 600000, imageBytes: 1500000, redirects: 3, timeoutMs: 4000, hopMs: 5000, totalMs: 10000 };
 
 /** True for any address that must never be visited. */
 export function blockedAddress(ip) {
@@ -68,8 +68,10 @@ function get(target, { maxBytes, accept }) {
       const end = () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) });
       res.on('end', end); res.on('close', end); res.on('error', reject);
     });
-    req.on('timeout', () => req.destroy(fail('timed out')));
-    req.on('error', reject);
+    const hard = setTimeout(() => req.destroy(fail('timed out', 'slow')), LINK_LIMITS.hopMs);   // a shop that drips bytes forever still ends
+    req.on('timeout', () => req.destroy(fail('timed out', 'slow')));
+    req.on('error', (e) => { clearTimeout(hard); reject(e); });
+    req.on('close', () => clearTimeout(hard));
     req.end();
   });
 }
@@ -140,8 +142,17 @@ export function findPictureUrl(html, base) {
   try { return new URL(pick, base).href; } catch (e) { return ''; }
 }
 
-/** Returns { mime, bytes } or throws an Error with .linkPicture = true. `deps` exist so tests can run without the internet. */
+/** Returns { mime, bytes } or throws an Error with .linkPicture = true. `deps` exist so tests can run without the internet.
+ *  The whole lookup (all hops, the page and the picture) gets one overall time limit, so the screen never waits forever. */
 export async function fetchLinkPicture(rawUrl, deps = { lookup: dns.lookup, get }) {
+  let timer;
+  const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(fail('took too long', 'slow')), deps.totalMs || LINK_LIMITS.totalMs); });
+  try { return await Promise.race([run(rawUrl, deps), limit]); }
+  catch (e) { if (e && e.linkPicture) throw e; throw fail('could not be reached: ' + (e && e.code || e && e.message || 'error'), 'slow'); }
+  finally { clearTimeout(timer); }
+}
+
+async function run(rawUrl, deps) {
   const page = await fetchVetted(rawUrl, { maxBytes: LINK_LIMITS.pageBytes, accept: 'text/html,application/xhtml+xml,image/*;q=0.8' }, deps);
   let bytes = page.body, mime = sniffImage(bytes);
   if (mime && bytes.length >= LINK_LIMITS.pageBytes) throw fail('picture too large');
