@@ -359,7 +359,7 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
         const { mime, bytes } = await linkPicture(url);
         return { image: 'data:' + mime + ';base64,' + Buffer.from(bytes).toString('base64'), host: new URL(url).hostname.replace(/^www\./, '') };
       } catch (e) {
-        if (e && e.linkPicture) throw new ApiError(422, 'no_picture', e.kind === 'blocked' ? 'That shop does not let Family Circle look at its pages (it shows a robot check). Save the picture to your phone and add it with the photo picker instead.' : e.kind === 'slow' ? 'That shop did not answer in time. Big shops often block this. Save the picture to your phone and add it with the photo picker instead.' : 'No picture could be found at that link. You can add your own photo instead.');
+        if (e && e.linkPicture) throw new ApiError(422, 'no_picture', (e.kind === 'blocked' ? 'That shop does not let Family Circle look at its pages (it shows a robot check). Save the picture to your phone and add it with the photo picker instead.' : e.kind === 'slow' ? 'That shop did not answer in time. Big shops often block this. Save the picture to your phone and add it with the photo picker instead.' : 'No picture could be found at that link. You can add your own photo instead.') + (e.trace && e.trace.length ? ' Details: ' + e.trace.join(' | ') : ''));
         throw e;
       }
     },
