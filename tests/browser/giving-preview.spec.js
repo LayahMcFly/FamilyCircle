@@ -261,6 +261,22 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('R ' + label + ' a saved request opens with its money note as plain text', /Money: about \$20/.test(await text(page)) && /0 of 2 pledged/.test(await text(page)), await text(page));
     await ctx.close(); }
 
+  // W. "who sees what" notes while creating
+  { const { ctx, page } = await open(browser, { hash: '#/giving/list/new' });
+    await page.waitForSelector('#gv-whosees');
+    check('W an adult making a wishlist is told what kids can see and do', /Kids in the family can see this wishlist.*cannot reserve.*never see who reserved/.test(await page.locator('#gv-whosees').innerText()), await page.locator('#gv-whosees').innerText());
+    await page.selectOption('#gv-audience', 'adults');
+    check('W choosing Adults only changes the note to say kids cannot see it', /Kids cannot see this wishlist at all/.test(await page.locator('#gv-whosees').innerText()), '');
+    await page.goto(PREVIEW() + '#/giving/requests/new'); await page.waitForSelector('#gv-rwhosees');
+    check('W an adult making a request is told kids can see it but cannot pledge', /Kids can see this request but cannot pledge.*you see who pledged/.test(await page.locator('#gv-rwhosees').innerText()), '');
+    await page.selectOption('#gv-raudience', 'adults');
+    check('W choosing Adults only on a request says kids cannot see it', /Kids cannot see this request at all/.test(await page.locator('#gv-rwhosees').innerText()), '');
+    await who(page, 'Riley Sample'); await page.goto(PREVIEW() + '#/giving/list/new'); await page.waitForSelector('#gv-whosees');
+    check('W a kid making a wishlist is told adults can see it and reserve, and the kid will not see who', /Everyone in the family can see your wishlist.*Adults can reserve.*not see who reserved/.test(await page.locator('#gv-whosees').innerText()), await page.locator('#gv-whosees').innerText());
+    await page.goto(PREVIEW() + '#/giving/requests/new'); await page.waitForSelector('#gv-rwhosees');
+    check('W a kid making a request is told an adult approves first, then adults can pledge and the kid sees who', /adult owner or admin looks at your request first.*Adults can pledge.*you will see who pledged/.test(await page.locator('#gv-rwhosees').innerText()), await page.locator('#gv-rwhosees').innerText());
+    check('W the notes do not cause sideways scrolling', !(await overflow(page)), ''); await ctx.close(); }
+
   // H. layout at phone and desktop widths, plus screenshots
   for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
     const { ctx, page } = await open(browser, { w, h });
