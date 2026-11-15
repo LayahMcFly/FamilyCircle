@@ -18,13 +18,22 @@
   function cleanUrl(raw) {
     var s = trim(raw);
     if (!s) return '';
-    if (s.length > LIMITS.url || /\s/.test(s)) return null;
+    if (/\s/.test(s) || s.length > 4000) return null;
     var u;
     try { u = new URL(s); } catch (e) { return null; }
     if (SAFE_SCHEMES.indexOf(u.protocol) === -1) return null;
     if (u.username || u.password) return null;
     if (!u.hostname || u.hostname.indexOf('.') === -1) return null;
-    return u.href;
+    stripTracking(u);
+    return u.href.length > LIMITS.url ? null : u.href;
+  }
+  /** Advertising and tracking parts of a pasted link (utm_*, gclid, wl0..wl12, and so on) are dropped so the saved link is short and shares nothing about who clicked what. */
+  var TRACKING = /^(utm_.*|gclid|gbraid|wbraid|gad_.*|fbclid|msclkid|dclid|twclid|ttclid|mc_cid|mc_eid|igshid|adid|wmlspartner|veh|sid|wl\d+|cmpid|ref_|_encoding|pd_rd_.*|pf_rd_.*|content-id|qid|sr|spLa)$/i;
+  function stripTracking(u) {
+    var keep = [];
+    u.searchParams.forEach(function (v, k) { if (!TRACKING.test(k)) keep.push([k, v]); });
+    u.search = '';
+    keep.forEach(function (kv) { u.searchParams.append(kv[0], kv[1]); });
   }
   /** The part of a link that is safe to show as text: just the site name. */
   function hostOf(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; } }

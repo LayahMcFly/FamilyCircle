@@ -224,3 +224,13 @@ test('the page never fetch()es a data: address (the page security rules block it
   assert.ok(!/\bdata:/.test(connect), 'connect-src stays strict');
   assert.match(ui, /function dataUrlToFile/);
 });
+
+test('a long pasted shop link has its advertising parts removed (and variant choices kept) instead of being rejected', () => {
+  const long = 'https://www.walmart.com/ip/Tamagotchi-nano-x-BTS-TinyTAN-Purple/939951644?wmlspartner=wlpa&selectedSellerId=16451&adid=22222222228939951644_16451_199492704626_24219758109&wl0=&wl1=g&wl2=m&wl3=823751273895&wl4=pla-2449037643288&wl5=9011339&wl6=&wl7=&wl8=&wl9=pla&wl10=120816664&wl11=online&wl12=939951644_16451&veh=sem&gad_source=1&gad_campaignid=24219758109&gbraid=0AAAAADmfBIp_l_WZFA5n5PpwqZNFhZ4CF&gclid=Cj0KCQiAzeXXBhCGARIsADO5-zHJiEEf2d9M1albChdcV4tRYnp5aOhKPqqSJbCXUcpL-3fkMYe3iY8aAh33EALw_wcB&sid=618f3ba2-e220-4d7d-bc36-2f10fa456214';
+  assert.ok(long.length > 500);
+  assert.equal(C.cleanUrl(long), 'https://www.walmart.com/ip/Tamagotchi-nano-x-BTS-TinyTAN-Purple/939951644?selectedSellerId=16451');
+  assert.equal(C.cleanUrl('https://www.amazon.com/dp/B000?th=1&psc=1&utm_source=x&ref_=abc'), 'https://www.amazon.com/dp/B000?th=1&psc=1');
+  assert.equal(C.cleanUrl('https://shop.example/a?color=blue&fbclid=zzz'), 'https://shop.example/a?color=blue');
+  assert.equal(C.cleanUrl('https://shop.example/' + 'a'.repeat(600)), null, 'still too long after cleaning');
+  assert.equal(C.cleanUrl('javascript:alert(1)'), null);
+});

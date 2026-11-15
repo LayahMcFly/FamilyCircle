@@ -155,3 +155,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.34: link-picture button no longer drops its answer as 'stale' (that could leave 'Looking…' on screen forever) and shows a small log (request sent, answer after N s).
 - v1.51.99.35: link pictures decode the returned picture directly (fetch of a data: address was blocked by the page's security rules, which is why a found picture was never applied).
 - v1.51.99.36: wishlist pictures are cropped to the square instead of squeezed (object-fit: cover).
+- v1.51.99.37: pasted shop links drop advertising/tracking parts (gclid, wl*, utm_* ...) so long Walmart/Google-ad links are accepted and saved short.

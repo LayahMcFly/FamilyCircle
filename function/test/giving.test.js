@@ -543,3 +543,10 @@ test('etsy pictures: shown for Etsy-link items to anyone who may see the item, k
   const it2 = (await w2.ok('ann', 'givingItemSave', F({ listId: l2.id, title: 'N', priority: 'high', url: 'https://www.etsy.com/listing/1426958759/x' }))).item;
   await w2.fail('bob', 'givingEtsyPicture', F({ itemId: it2.id }), 503);   // no key set up
 });
+
+test('the function cleans a long pasted shop link the same way as the page', async () => {
+  const w = await setup(); const l = await mkList(w, 'ann');
+  const long = 'https://www.walmart.com/ip/Thing/939951644?selectedSellerId=16451&wmlspartner=wlpa&gclid=' + 'x'.repeat(500) + '&sid=abc';
+  const it = (await w.ok('ann', 'givingItemSave', F({ listId: l.id, title: 'Thing', priority: 'high', url: long }))).item;
+  assert.equal(it.url, 'https://www.walmart.com/ip/Thing/939951644?selectedSellerId=16451');
+});
