@@ -78,3 +78,12 @@ test('fetchLinkPicture tells a shop that refuses or shows a robot check apart fr
   await assert.rejects(fetchLinkPicture('https://shop.example/a', mk(200, '<html>Enter the characters you see below</html>')), (e) => e.kind === 'blocked');
   await assert.rejects(fetchLinkPicture('https://shop.example/a', mk(200, '<html><head></head></html>')), (e) => e.kind === 'none');
 });
+
+test('a shop that never answers, drips forever, or drops the connection ends with a plain error inside the time limit', async () => {
+  const lookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  const t0 = Date.now();
+  await assert.rejects(fetchLinkPicture('https://shop.example/a', { lookup, get: () => new Promise(() => {}), totalMs: 150 }), (e) => e.linkPicture && e.kind === 'slow');
+  await assert.rejects(fetchLinkPicture('https://shop.example/a', { lookup, get: async () => { throw Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }); } }), (e) => e.linkPicture && e.kind === 'slow');
+  await assert.rejects(fetchLinkPicture('https://shop.example/a', { lookup: async () => { throw new Error('ENOTFOUND'); }, get: async () => ({}) }), (e) => e.linkPicture === true);
+  assert.ok(Date.now() - t0 < 2000);
+});
