@@ -59,3 +59,4 @@
 .gv-member { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .gv-report { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .gv-report p { margin: 4px 0; overflow-wrap: anywhere; }
+.gv-row .gv-badge { justify-self: start; }
