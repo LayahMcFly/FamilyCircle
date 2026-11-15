@@ -87,3 +87,12 @@ test('a shop that never answers, drips forever, or drops the connection ends wit
   await assert.rejects(fetchLinkPicture('https://shop.example/a', { lookup: async () => { throw new Error('ENOTFOUND'); }, get: async () => ({}) }), (e) => e.linkPicture === true);
   assert.ok(Date.now() - t0 < 2000);
 });
+
+test('a failed lookup carries a safe step-by-step trace (hosts, status numbers, sizes; no page text) so it can be explained on screen', async () => {
+  const page = Buffer.from('<html><head><title>Amazon.com</title></head><body>Robot Check: enter the characters you see</body></html>');
+  const deps = { lookup: async () => [{ address: '93.184.216.34', family: 4 }], get: async (t) => t.host === 'a.co' ? { status: 301, headers: { location: 'https://www.amazon.com/dp/B000' }, body: Buffer.alloc(0) } : { status: 200, headers: {}, body: page } };
+  await assert.rejects(fetchLinkPicture('https://a.co/d/abc', deps), (e) => {
+    const t = (e.trace || []).join(' | ');
+    return e.kind === 'blocked' && /step 1: a\.co answered 301/.test(t) && /redirect to www\.amazon\.com/.test(t) && /step 2: www\.amazon\.com answered 200/.test(t) && /title "Amazon\.com"/.test(t) && /no picture address found/.test(t) && /result: no picture on the page/.test(t) && !/enter the characters/.test(t);
+  });
+});

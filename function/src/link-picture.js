@@ -76,12 +76,20 @@ export function get(target, { maxBytes, accept }) {
   });
 }
 
+/** A short, safe trace of what happened (host names, status numbers, sizes, times; never page text) so a failure can be explained on screen. */
+function note(deps, text) { if (deps && deps.trace && deps.trace.length < 14) deps.trace.push(text); }
+function safeHost(loc, base) { try { return new URL(loc, base).hostname; } catch (e) { return 'unknown'; } }
+
 /** Follows up to three redirects, vetting every hop. */
 async function fetchVetted(rawUrl, opts, deps) {
   let cur = rawUrl;
   for (let hop = 0; hop <= LINK_LIMITS.redirects; hop++) {
     const target = await vet(cur, deps.lookup);
-    const res = await deps.get(target, opts);
+    const t0 = Date.now();
+    let res;
+    try { res = await deps.get(target, opts); }
+    catch (e) { note(deps, 'step ' + (hop + 1) + ': ' + target.host + ' failed after ' + (Date.now() - t0) + ' ms (' + ((e && (e.code || e.message)) || 'error') + ')'); throw e; }
+    note(deps, 'step ' + (hop + 1) + ': ' + target.host + ' answered ' + res.status + ' in ' + (Date.now() - t0) + ' ms, ' + res.body.length + ' bytes' + (res.headers && res.headers.location ? ', redirect to ' + safeHost(res.headers.location, target.url) : ''));
     if ([301, 302, 303, 307, 308].includes(res.status) && res.headers.location) { cur = new URL(res.headers.location, target.url).href; continue; }
     if ([401, 403, 429, 503, 202].includes(res.status)) throw fail('shop refused ' + res.status, 'blocked');
     if (res.status !== 200) throw fail('page answered ' + res.status);
@@ -145,10 +153,13 @@ export function findPictureUrl(html, base) {
 /** Returns { mime, bytes } or throws an Error with .linkPicture = true. `deps` exist so tests can run without the internet.
  *  The whole lookup (all hops, the page and the picture) gets one overall time limit, so the screen never waits forever. */
 export async function fetchLinkPicture(rawUrl, deps = { lookup: dns.lookup, get }) {
-  let timer;
+  let timer; const trace = []; deps = { ...deps, trace };
   const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(fail('took too long', 'slow')), deps.totalMs || LINK_LIMITS.totalMs); });
   try { return await Promise.race([run(rawUrl, deps), limit]); }
-  catch (e) { if (e && e.linkPicture) throw e; throw fail('could not be reached: ' + (e && e.code || e && e.message || 'error'), 'slow'); }
+  catch (e) {
+    const err = e && e.linkPicture ? e : fail('could not be reached: ' + (e && e.code || e && e.message || 'error'), 'slow');
+    err.trace = trace.concat(['result: ' + err.message]); throw err;
+  }
   finally { clearTimeout(timer); }
 }
 
@@ -159,9 +170,12 @@ async function run(rawUrl, deps) {
   if (!mime) {
     const text = page.body.toString('utf8');
     const pic = findPictureUrl(text, page.finalUrl);
+    const title = /<title[^>]*>([^<]{0,80})/i.exec(text);
+    note(deps, 'page: ' + (title ? 'title "' + decode(title[1]).trim().slice(0, 60) + '"' : 'no title') + (pic ? ', picture address found on ' + safeHost(pic, page.finalUrl) : ', no picture address found'));
     if (!pic) throw fail('no picture on the page', /captcha|robot check|automated access|are you a human|enter the characters/i.test(text) ? 'blocked' : 'none');
     const img = await fetchVetted(pic, { maxBytes: LINK_LIMITS.imageBytes, accept: 'image/jpeg,image/png,image/webp,image/gif,image/*;q=0.5' }, deps);
     bytes = img.body; mime = sniffImage(bytes);
+    note(deps, 'picture: ' + (mime || 'not a picture type') + ', ' + bytes.length + ' bytes');
   }
   if (!mime) throw fail('not a usable picture');
   if (bytes.length >= LINK_LIMITS.imageBytes) throw fail('picture too large');
