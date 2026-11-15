@@ -1984,3 +1984,11 @@ html, body { overflow-x: clip; }
 .orig-box .orig-head .who { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; text-align: left; }
 .orig-box .orig-head .who .small { font-size: .78rem; line-height: 1.3; }
 .orig-box .orig-head .who a { font-weight: 700; }
+
+/* Footer: "About links and pictures" */
+.site-footer .foot-linkbtn { background: none; border: 0; padding: 8px 4px; min-height: 44px; color: var(--muted); font: inherit; text-decoration: underline; cursor: pointer; }
+.site-footer .foot-linkbtn:focus-visible { outline: 3px solid var(--accent-text, currentColor); outline-offset: 2px; border-radius: 6px; }
+dialog.foot-dialog { display: grid; gap: 10px; font-size: .95rem; line-height: 1.45; }
+dialog.foot-dialog h2 { margin: 0; font-size: 1.2rem; }
+dialog.foot-dialog p { margin: 0; }
+dialog.foot-dialog .btn { justify-self: start; height: 44px; padding: 0 20px; margin: 6px 0 0; }
