@@ -30,7 +30,7 @@ export const GIVING_LIMITS = { ...R.LIMITS, hideDays: 30, reportsPerPerson: 20, 
 const DAY = 864e5;
 const MANAGER_NOTE = 'Ask another owner or tree admin to change your own setting.';
 
-export function createGiving({ linkPicture, storage, photoBucket, teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable }) {
+export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable }) {
   const T = GIVING_TABLES, L = GIVING_LIMITS;
   const iso = (t) => new Date(t === undefined ? now() : t).toISOString();
   const parse = (s) => { try { const v = JSON.parse(s); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } };
@@ -362,6 +362,23 @@ export function createGiving({ linkPicture, storage, photoBucket, teams, listRow
         if (e && e.linkPicture) throw new ApiError(422, 'no_picture', e.kind === 'blocked' ? 'That shop does not let Family Circle look at its pages (it shows a robot check). Save the picture to your phone and add it with the photo picker instead.' : e.kind === 'slow' ? 'That shop did not answer in time. Big shops often block this. Save the picture to your phone and add it with the photo picker instead.' : 'No picture could be found at that link. You can add your own photo instead.');
         throw e;
       }
+    },
+
+    /** A picture for an item whose link is an Etsy listing, from Etsy's own API (see etsy.js). Never stored: it lives in memory for up to 5 hours.
+     *  Anyone who may see the item may ask. size 'thumb' for lists, 'full' for the big view. */
+    async givingEtsyPicture({ user, body }) {
+      const c = await context(user, body.familyId);
+      const { it } = await itemRow(c, body.itemId);
+      const id = etsy && etsy.listingId(parse(it.data).url || '');
+      if (!id) throw NA();
+      if (!etsy.enabled()) throw new ApiError(503, 'no_picture', 'Etsy pictures are not set up yet.');
+      const size = body.size === 'full' ? 'full' : 'thumb', key = id + ':' + size;
+      let hit = etsy.cache.get(key);
+      if (!hit) {
+        try { hit = await etsy.fetch(id, size); etsy.cache.set(key, hit); }
+        catch (e) { if (e && e.linkPicture) throw new ApiError(e.kind === 'off' ? 503 : 422, 'no_picture', e.kind === 'off' ? 'Etsy pictures are not set up yet.' : 'No picture is available for that Etsy listing right now.'); throw e; }
+      }
+      return { image: 'data:' + hit.mime + ';base64,' + Buffer.from(hit.bytes).toString('base64'), notice: etsy.notice };
     },
 
     async givingReserve({ user, body }) {

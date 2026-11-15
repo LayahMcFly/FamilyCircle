@@ -269,13 +269,37 @@
       document.body.appendChild(d); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); reason.focus();
     }
 
+    /* Etsy listing links get their picture from Etsy's own API, shown but never saved here (Etsy's rules). The function says when it is not set up; then the tile stays. */
+    var ETSY_NOTE = "The term 'Etsy' is a trademark of Etsy, Inc. This application uses Etsy's API but is not endorsed or certified by Etsy.";
+    var etsyPics = {}, etsyOff = false;
+    function etsyListing(url) { return real && /^https?:\/\/(www\.)?etsy\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?listing\/\d{5,14}(?:[\/?#]|$)/i.test(url || ''); }
+    function etsyNote(from) {
+      var page = from.closest ? from.closest('main') || document.body : document.body;
+      if (!page.querySelector('.gv-etsy-note')) page.appendChild(h('p', { class: 'hint gv-etsy-note', text: ETSY_NOTE }));
+    }
+    function etsyLoad(it, img, hint) {
+      if (etsyOff) return;
+      var got = function (url) { if (!img.isConnected) return; img.src = url; img.removeAttribute('data-from-link'); img.classList.remove('is-from-link'); if (hint) hint.textContent = 'Picture from Etsy.'; etsyNote(img); };
+      if (etsyPics[it.id]) return got(etsyPics[it.id]);
+      api('etsyPicture', { itemId: it.id, size: 'thumb' }).then(function (r) {
+        if (r.stale) return;
+        if (r.ok && r.image) { etsyPics[it.id] = r.image; return got(r.image); }
+        if (r.error === 'no_picture' && /not set up/.test(r.message || '')) etsyOff = true;
+        if (hint) hint.textContent = 'Placeholder picture. Etsy has no picture to show for this listing right now.';
+      });
+    }
+
     function photoDialog(it) {
       var d = h('dialog', { class: 'gv-dialog', 'aria-labelledby': 'gv-p-h' });
-      var img = h('img', { class: 'gv-bigphoto', src: it.thumb, alt: 'Picture of ' + it.title }), note = h('p', { class: 'hint', id: 'gv-p-note', text: 'Loading the full picture…' });
+      var img = h('img', { class: 'gv-bigphoto', src: it.thumb || etsyPics[it.id] || '', alt: 'Picture of ' + it.title }), note = h('p', { class: 'hint', id: 'gv-p-note', text: 'Loading the full picture…' });
       d.appendChild(h('h2', { id: 'gv-p-h', text: it.title })); d.appendChild(img); d.appendChild(note);
       d.appendChild(h('div', { class: 'gv-actions' }, h('button', { type: 'button', class: 'btn secondary', id: 'gv-p-close', text: 'Close', onclick: function () { d.close(); } })));
       d.addEventListener('close', function () { d.remove(); });
       document.body.appendChild(d); if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+      if (!it.thumb && etsyListing(it.url)) {
+        d.insertBefore(h('p', { class: 'hint gv-etsy-note', text: ETSY_NOTE }), d.querySelector('.gv-actions'));
+        return api('etsyPicture', { itemId: it.id, size: 'full' }).then(function (r) { if (r.stale || !d.isConnected) return; if (r.ok && r.image) { img.src = r.image; note.textContent = ''; } else note.textContent = 'The full picture is not available right now.'; });
+      }
       api('photoGet', { itemId: it.id }).then(function (r) { if (r.stale || !d.isConnected) return; if (r.ok && r.photo) { img.src = r.photo; note.textContent = ''; } else note.textContent = 'The full picture is not available right now.'; });
     }
 
@@ -286,6 +310,7 @@
       if (!src && it.url) { src = linkTile(it.url); fromLink = true; }
       li.appendChild(h('div', { class: 'gv-item-top' },
         it.thumb ? h('button', { type: 'button', class: 'gv-photo-btn', 'data-act': 'photo', 'aria-label': 'View the picture of ' + it.title, onclick: function () { photoDialog(it); } }, h('img', { class: 'gv-photo', src: src, alt: '', width: 56, height: 56 }))
+          : src && !it.thumb && etsyListing(it.url) ? h('button', { type: 'button', class: 'gv-photo-btn', 'data-act': 'photo', 'data-etsy': 'true', 'aria-label': 'View the picture of ' + it.title, onclick: function () { photoDialog(it); } }, h('img', { class: 'gv-photo is-from-link', src: src, alt: '', width: 56, height: 56, 'data-from-link': 'true' }))
           : src ? h('img', { class: 'gv-photo' + (fromLink ? ' is-from-link' : ''), src: src, alt: '', width: 56, height: 56, 'data-from-link': fromLink ? 'true' : null }) : null,
         h('div', { class: 'gv-item-main' },
           h('strong', { class: 'gv-item-title', text: it.title }),
@@ -294,6 +319,8 @@
           it.notes ? h('p', { class: 'gv-notes', text: it.notes }) : null,
           it.url ? h('p', { class: 'gv-link' }, h('a', { href: it.url, target: '_blank', rel: 'noopener noreferrer nofollow', text: 'Open link (' + C.hostOf(it.url) + ')' }), h('span', { class: 'muted', text: ' Opens another website.' })) : null,
           fromLink ? h('p', { class: 'hint gv-linkpic', text: real ? 'Placeholder picture. Edit the item to add your own photo, or tap "Get a picture from the link".' : 'Picture from the link (simulated in this preview).' }) : null)));
+      var etsyBtn = li.querySelector('[data-etsy] img');
+      if (etsyBtn) etsyLoad(it, etsyBtn, li.querySelector('.gv-linkpic'));
       var acts = h('div', { class: 'gv-actions' });
       if (it.mine) {
         acts.appendChild(h('a', { class: 'btn secondary small', href: '#/giving/list/' + listId + '/item/' + it.id + '/edit', 'data-act': 'edit', text: 'Edit', 'aria-label': 'Edit ' + it.title }));
@@ -432,7 +459,7 @@
       } },
         h('h1', { text: existing ? 'Edit item' : 'Add an item', 'data-focus': '' }),
         field('gv-title', 'Title', f.title), field('gv-notes', 'Notes (optional)', f.notes, '', 'Anything that helps someone pick the right one: size, color, model, where you saw it.'), field('gv-priority', 'How much do you want it?', f.priority),
-        field('gv-url', 'Link (optional)', f.url, '', real ? 'A web address you choose. Family Circle only visits it if you tap "Get a picture from the link" under Photo.' : 'A web address you choose. Family Circle does not visit it or look anything up.'),
+        field('gv-url', 'Link (optional)', f.url, '', real ? 'A web address you choose. Family Circle only visits it if you tap "Get a picture from the link" under Photo. Etsy listing links show their picture automatically, straight from Etsy.' : 'A web address you choose. Family Circle does not visit it or look anything up.'),
         h('div', { class: 'gv-pair' }, field('gv-price', 'Estimated price (optional)', f.price, '', 'A guess for reference. Not a charge.'), field('gv-currency', 'Currency', f.currency)),
         real ? h('div', { class: 'gv-field' }, h('label', { for: 'gv-photofile', text: 'Photo (optional)' }), f.file, f.linkBtn, f.prev, f.sizeRow, f.info, h('p', { class: 'hint', id: 'gv-photofile-hint', text: 'Any picture type works. It is converted to a JPEG and made smaller on your device before it is sent, so big photos are fine. Leave it empty to use the placeholder from your link.' }), h('p', { class: 'gv-fielderr', id: 'gv-photofile-err', role: 'alert' })) : null,
         f.photo ? field('gv-photo', 'Photo (optional)', f.photo, '', 'Leave this blank and the picture can come from your link. Real photo upload is not part of this preview, so this only picks a sample picture.') : null,

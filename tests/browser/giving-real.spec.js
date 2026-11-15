@@ -124,6 +124,20 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await page.locator('.gv-item button:has-text("Edit"), .gv-item [data-act="edit"], .gv-item .gv-edit').first().click(); await page.waitForSelector('#gv-photoremove'); await page.locator('#gv-photoremove').click(); await page.locator('#gv-save').click(); await page.waitForSelector('.gv-item'); await settle();
   check('5b Removing the picture clears it', !(rowsOf('givingItems')[0].thumb) && !/photoId/.test(rowsOf('givingItems')[0].data) && (await page.locator('.gv-photo-btn').count()) === 0, JSON.stringify(rowsOf('givingItems')[0]).slice(0, 200));
 
+  // 5e Etsy listing links show their picture from Etsy's API, never saved, with the Etsy notice
+  await page.locator('.gv-item [data-act="edit"]').first().click(); await page.waitForSelector('#gv-url');
+  await page.fill('#gv-url', 'https://www.etsy.com/listing/1426958759/personalized-name-necklace-14k-solid');
+  check('5e The link field says Etsy listing links show their picture automatically', /Etsy listing links show their picture automatically/.test(await page.locator('#gv-url').evaluate(e => e.closest('.gv-field').innerText)), '');
+  await page.locator('#gv-save').click(); await page.waitForSelector('.gv-item'); await settle();
+  await page.waitForFunction(() => document.querySelector('[data-etsy] img') && /^data:image\/jpeg/.test(document.querySelector('[data-etsy] img').src), null, { timeout: 8000 });
+  check('5e An Etsy item shows the picture from Etsy on the list', true, '');
+  check('5e The Etsy notice is on the screen', /trademark of Etsy, Inc\..*not endorsed or certified by Etsy/.test(await page.locator('.gv-etsy-note').first().innerText()), '');
+  check('5e Nothing from Etsy was saved in the item rows', !/etsystatic/.test(JSON.stringify(rowsOf('givingItems'))) && !/^data:image/.test(rowsOf('givingItems')[0].thumb || ''), JSON.stringify(rowsOf('givingItems')[0]).slice(0, 160));
+  await page.locator('[data-etsy]').first().click(); await page.waitForSelector('.gv-bigphoto');
+  await page.waitForFunction(() => /^data:image\/jpeg/.test(document.querySelector('.gv-bigphoto').src) && document.querySelector('.gv-bigphoto').src.length > 300);
+  check('5e Tapping opens the bigger Etsy picture with the notice', (await page.locator('dialog .gv-etsy-note').count()) === 1, '');
+  await page.locator('#gv-p-close').click();
+
   // 6 a kid sees it but cannot reserve
   await as('kid'); await page.locator('.gv-row', { hasText: 'Birthday' }).click(); await page.waitForSelector('#main h1:has-text("Birthday")'); await settle();
   t = await text();

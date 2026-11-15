@@ -74,3 +74,9 @@ The real screens exist (open `#/giving` in the app). They are not linked from th
 - Add a text column `thumb` (not required) to `givingItems`. Done in production 2026-11-14.
 - Storage: the Appwrite plan allows one bucket, so photos live in the existing `family-media` bucket (override with the function variable `GIVING_BUCKET_ID`). Each photo file is created by the function with no permissions, so members cannot open it directly; the function serves it after a membership check.
 - Rollback: deleting the `thumb` column and the photo files (their ids are in each item's `photoId`) removes photos; nothing else depends on them.
+
+## Etsy pictures (optional, needs a free Etsy API key)
+1. Sign in at https://www.etsy.com/developers and create a Personal App (free; approval can take days). Describe it as a private family wishlist app that shows the picture of Etsy listings people link to.
+2. When Etsy shows the app's API key, it is two parts, `keystring:sharedsecret`. In Appwrite, open the family-api function, Settings, Variables, and add `ETSY_API_KEY` with that whole value. Redeploy is not needed; the next run reads it.
+3. Until the key exists and is approved, Etsy links keep the placeholder tile and nothing breaks.
+- Etsy's rules, followed in the code: pictures are never saved (kept in the function's memory under 5 hours), the Etsy trademark notice is shown wherever an Etsy picture appears, and only etsystatic.com addresses are downloaded. Rollback: remove the variable.

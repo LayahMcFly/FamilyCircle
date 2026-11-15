@@ -518,3 +518,28 @@ test('link pictures: a member gets the picture the link gives; bad links, strang
     assert.equal(Object.keys(w2.world.files).length, 0);   // nothing is stored by the lookup itself
   } finally { delete EXTRA_CFG.linkPicture; }
 });
+
+/* ---------- Etsy pictures (never stored) ---------- */
+test('etsy pictures: shown for Etsy-link items to anyone who may see the item, kept only in memory, and not for other links, strangers or when not set up', async () => {
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(100, 3)]);
+  let apiCalls = 0;
+  EXTRA_CFG.etsyApiKey = 'k:s';
+  EXTRA_CFG.etsyDeps = { lookup: async () => [{ address: '93.184.216.34', family: 4 }], getApi: async () => { apiCalls++; return { status: 200, body: JSON.stringify({ results: [{ rank: 1, url_170x135: 'https://i.etsystatic.com/t.jpg', url_570xN: 'https://i.etsystatic.com/f.jpg' }] }) }; }, get: async () => ({ status: 200, headers: {}, body: jpg }) };
+  try {
+    const w = await setup();
+    const l = await mkList(w, 'ann');
+    const etsyItem = (await w.ok('ann', 'givingItemSave', F({ listId: l.id, title: 'Necklace', priority: 'high', url: 'https://www.etsy.com/listing/1426958759/personalized-name-necklace' }))).item;
+    const other = (await w.ok('ann', 'givingItemSave', F({ listId: l.id, title: 'Other', priority: 'high', url: 'https://shop.example/thing' }))).item;
+    const r = await w.ok('kid', 'givingEtsyPicture', F({ itemId: etsyItem.id }));
+    assert.match(r.image, /^data:image\/jpeg;base64,/); assert.match(r.notice, /not endorsed or certified by Etsy/);
+    await w.ok('bob', 'givingEtsyPicture', F({ itemId: etsyItem.id })); assert.equal(apiCalls, 1, 'the second ask comes from memory');
+    await w.ok('bob', 'givingEtsyPicture', F({ itemId: etsyItem.id, size: 'full' })); assert.equal(apiCalls, 2);
+    await w.fail('bob', 'givingEtsyPicture', F({ itemId: other.id }), 404);
+    await w.fail('zed', 'givingEtsyPicture', { familyId: 'famB', itemId: etsyItem.id }, 404);
+    assert.equal(Object.keys(w.world.files).length, 0, 'nothing from Etsy is saved');
+    assert.ok(!/etsystatic|data:image/.test(JSON.stringify(rows(w, 'givingItems'))), 'nothing from Etsy is in the item rows');
+  } finally { delete EXTRA_CFG.etsyApiKey; delete EXTRA_CFG.etsyDeps; }
+  const w2 = await setup(); const l2 = await mkList(w2, 'ann');
+  const it2 = (await w2.ok('ann', 'givingItemSave', F({ listId: l2.id, title: 'N', priority: 'high', url: 'https://www.etsy.com/listing/1426958759/x' }))).item;
+  await w2.fail('bob', 'givingEtsyPicture', F({ itemId: it2.id }), 503);   // no key set up
+});
