@@ -17,6 +17,8 @@ function makeWorld() {
     async updateFile({ fileId, permissions }) { world.files[fileId].$permissions = permissions; return world.files[fileId]; },
     async deleteFile({ fileId }) { delete world.files[fileId]; },
     async listFiles() { return { files: [] }; },
+    async createFile({ fileId, file, bucketId }) { world.files[fileId] = { $id: fileId, bucketId, buf: Buffer.from(await file.arrayBuffer()), $permissions: [] }; return world.files[fileId]; },
+    async getFileDownload({ fileId }) { const f = world.files[fileId]; if (!f) { const e = new Error('nf'); e.code = 404; throw e; } return f.buf.buffer.slice(f.buf.byteOffset, f.buf.byteOffset + f.buf.length); },
   };
   for (const t of [...Object.values(TABLES), ...Object.values(CHAT_TABLES), ...Object.values(GIVING_TABLES)]) world.tables[t] = new Map();
   const err = (code, m) => Object.assign(new Error(m), { code });
@@ -419,4 +421,81 @@ test('slow down: more than 60 giving actions a minute from one person are refuse
   let refused = 0;
   for (let i = 0; i < 70; i++) if ((await w.call('ann', 'givingStatus', F())).status === 429) refused++;
   assert.ok(refused >= 5);
+});
+
+/* ---------- photos ---------- */
+const jpegUrl = (bytes, fill = 7) => 'data:image/jpeg;base64,' + Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(bytes, fill)]).toString('base64');
+const photoOf = (w) => rows(w, 'givingItems')[0];
+
+test('photos: the owner adds one; the small picture rides with the list, the full one is fetched on request', async () => {
+  const w = await setup();
+  const l = await mkList(w, 'ann'); const it = await mkItem(w, 'ann', l.id);
+  const thumb = jpegUrl(500), photo = jpegUrl(5000);
+  const saved = (await w.ok('ann', 'givingPhotoSave', F({ itemId: it.id, thumb, photo }))).item;
+  assert.equal(saved.thumb, thumb);
+  assert.equal(Object.keys(w.world.files).length, 1);
+  assert.deepEqual(rows(w, 'givingItems')[0].$permissions, []);
+  assert.equal(w.world.files[Object.keys(w.world.files)[0]].$permissions.length, 0);           // the file has no client permission at all
+  for (const u of ['ann', 'bob', 'kid']) assert.equal((await w.ok(u, 'givingListGet', F({ listId: l.id }))).items[0].thumb, thumb);
+  assert.equal((await w.ok('bob', 'givingPhotoGet', F({ itemId: it.id }))).photo, photo);
+  assert.equal((await w.ok('kid', 'givingPhotoGet', F({ itemId: it.id }))).photo, photo);       // kids may see the pictures on lists they can see
+  await w.fail('zed', 'givingPhotoGet', { familyId: 'famB', itemId: it.id }, 404);              // another family
+  await w.fail('bob', 'givingPhotoSave', F({ itemId: it.id, thumb, photo }), 404);              // only the list owner
+  await w.fail('bob', 'givingPhotoRemove', F({ itemId: it.id }), 404);
+});
+
+test('photos: an adults-only item picture is not reachable by a kid, and the reservation rules still hold', async () => {
+  const w = await setup();
+  const l = await mkList(w, 'ann', 'secret', 'adults'); const it = await mkItem(w, 'ann', l.id);
+  await w.ok('ann', 'givingPhotoSave', F({ itemId: it.id, thumb: jpegUrl(100), photo: jpegUrl(1000) }));
+  await w.fail('kid', 'givingPhotoGet', F({ itemId: it.id }), 404, 'not_available');
+  await w.ok('bob', 'givingReserve', F({ itemId: it.id }));
+  const forAnn = await w.ok('ann', 'givingListGet', F({ listId: l.id }));
+  assert.deepEqual(keysOf(forAnn).filter((k) => RESERVATION_WORDS.test(k)), []);
+});
+
+test('photos: only real JPEG data inside the size limits is accepted', async () => {
+  const w = await setup();
+  const l = await mkList(w, 'ann'); const it = await mkItem(w, 'ann', l.id);
+  const send = (thumb, photo) => w.fail('ann', 'givingPhotoSave', F({ itemId: it.id, thumb, photo }), 400);
+  await send('not a picture', jpegUrl(100));
+  await send(jpegUrl(100), 'data:image/png;base64,AAAA');
+  await send('data:image/jpeg;base64,' + Buffer.from('<svg onload=alert(1)>').toString('base64'), jpegUrl(100));   // says JPEG, is not
+  await send(jpegUrl(10001), jpegUrl(100));
+  await send(jpegUrl(100), jpegUrl(250001));
+  await send(jpegUrl(100), undefined);
+  assert.equal(Object.keys(w.world.files).length, 0);
+  assert.equal(photoOf(w).thumb, undefined);
+});
+
+test('photos: replacing and removing delete the old file; editing the item keeps the photo', async () => {
+  const w = await setup();
+  const l = await mkList(w, 'ann'); const it = await mkItem(w, 'ann', l.id);
+  await w.ok('ann', 'givingPhotoSave', F({ itemId: it.id, thumb: jpegUrl(100, 1), photo: jpegUrl(1000, 1) }));
+  const first = Object.keys(w.world.files)[0];
+  await w.ok('ann', 'givingPhotoSave', F({ itemId: it.id, thumb: jpegUrl(100, 2), photo: jpegUrl(1000, 2) }));
+  assert.equal(Object.keys(w.world.files).length, 1);
+  assert.ok(!w.world.files[first]);
+  const edited = (await w.ok('ann', 'givingItemSave', F({ listId: l.id, itemId: it.id, title: 'Renamed' }))).item;
+  assert.ok(edited.thumb);
+  assert.equal((await w.ok('bob', 'givingPhotoGet', F({ itemId: it.id }))).photo, jpegUrl(1000, 2));
+  const gone = (await w.ok('ann', 'givingPhotoRemove', F({ itemId: it.id }))).item;
+  assert.equal(gone.thumb, undefined);
+  assert.equal(Object.keys(w.world.files).length, 0);
+  await w.fail('bob', 'givingPhotoGet', F({ itemId: it.id }), 404);
+});
+
+test('photos: deleting an item or a list, or the 30-day cleanup, deletes the files too', async () => {
+  const w = await setup();
+  const l = await mkList(w, 'ann'); const a = await mkItem(w, 'ann', l.id), b = await mkItem(w, 'ann', l.id, { title: 'Pen' });
+  for (const x of [a, b]) await w.ok('ann', 'givingPhotoSave', F({ itemId: x.id, thumb: jpegUrl(100), photo: jpegUrl(1000) }));
+  assert.equal(Object.keys(w.world.files).length, 2);
+  await w.ok('ann', 'givingItemDelete', F({ itemId: a.id }));
+  assert.equal(Object.keys(w.world.files).length, 1);
+  w.removeMember('famA', 'ann');
+  await w.ok('owner', 'givingHome', F());
+  assert.equal(Object.keys(w.world.files).length, 1);                // hidden for 30 days, not deleted yet
+  w.world.bump(31 * DAY);
+  await w.api.handle({ user: null, body: {}, deadline: Number.MAX_SAFE_INTEGER });
+  assert.equal(Object.keys(w.world.files).length, 0);
 });

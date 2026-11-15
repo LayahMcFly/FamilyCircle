@@ -104,7 +104,7 @@ A gift list owner must never learn who reserved what. The design blocks every le
 
 | Option | Works how | Risk | Recommendation |
 |---|---|---|---|
-| Upload a photo | Resized in the browser, stored in a **private** bucket `givingPhotos`, served only through the function with a membership check | Storage cost; photos are personal | Yes, Step 6 |
+| Upload a photo | Resized in the browser, stored in a **private** bucket `family-media`, served only through the function with a membership check | Storage cost; photos are personal | Yes, Step 6 |
 | Paste an image address | Stored as text, shown via `<img>` | The CSP currently limits images to your own sources; allowing any site weakens it and leaks the viewer's IP to that site | Not recommended |
 | Server fetch from a product link | The function downloads the page's picture and saves a copy | Fetching arbitrary sites from your server is an abuse path (SSRF); retailers block bots; copyright | **Not authorised.** Needs a separate yes and its own design |
 | Keep the simulated tile | A coloured tile with the site name | None | Default until you approve more |

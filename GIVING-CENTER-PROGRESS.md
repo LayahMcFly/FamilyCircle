@@ -134,3 +134,7 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - Real mode differences: no sample banner, no viewer switcher, no photo picker, owner-only turn on/off buttons, "not turned on" screen.
 - Reached only at `#/giving`. The Hub card stays "Planned" and does not link there.
 - Tests: `tests/browser/giving-real.spec.js` (37 checks: real screens + real function code on an in-memory database), `tests/browser/giving-in-app.spec.js` (7 checks: wiring into the app), preview 81 checks and rule tests 22 unchanged and passing.
+
+## Step 6 (photos) and layout fix, 2026-11-14
+- Photo picker, viewer and remove are in the real screens; function needs `family-media` (plan allows one bucket) and the `thumb` column (added).
+- Layout fix (v1.51.99.25): side padding on the Giving screens, equal-height buttons with no stray top margin, item actions in their own row.

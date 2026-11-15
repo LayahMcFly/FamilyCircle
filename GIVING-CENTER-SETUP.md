@@ -69,3 +69,8 @@ The real screens exist (open `#/giving` in the app). They are not linked from th
 - A person who is removed and re-invited **before** anyone opens Giving Center would get their old lists back (the hide step had not run yet). Reservations they held stay released.
 - The per-minute limit (60 actions) is kept in the function's memory, so it is a brake, not a guarantee.
 - Error messages show one problem at a time; per-field highlighting arrives with the real screens.
+
+## Photos (Step 6)
+- Add a text column `thumb` (not required) to `givingItems`. Done in production 2026-11-14.
+- Storage: the Appwrite plan allows one bucket, so photos live in the existing `family-media` bucket (override with the function variable `GIVING_BUCKET_ID`). Each photo file is created by the function with no permissions, so members cannot open it directly; the function serves it after a membership check.
+- Rollback: deleting the `thumb` column and the photo files (their ids are in each item's `photoId`) removes photos; nothing else depends on them.

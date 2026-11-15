@@ -14,6 +14,9 @@ function makeWorld() {
     async getFile({ fileId }) { const f = world.files[fileId]; if (!f) { const e = new Error('nf'); e.code = 404; throw e; } return f; },
     async updateFile({ fileId, permissions }) { world.files[fileId].$permissions = permissions; return world.files[fileId]; },
     async deleteFile({ fileId }) { delete world.files[fileId]; },
+    async listFiles() { return { files: [] }; },
+    async createFile({ fileId, file, bucketId }) { world.files[fileId] = { $id: fileId, bucketId, buf: Buffer.from(await file.arrayBuffer()), $permissions: [] }; return world.files[fileId]; },
+    async getFileDownload({ fileId }) { const f = world.files[fileId]; if (!f) { const e = new Error('nf'); e.code = 404; throw e; } return f.buf.buffer.slice(f.buf.byteOffset, f.buf.byteOffset + f.buf.length); },
   };
   for (const t of [...Object.values(TABLES), ...Object.values(CHAT_TABLES), ...Object.values(GIVING_TABLES)]) world.tables[t] = new Map();
   const err = (code, m) => Object.assign(new Error(m), { code });

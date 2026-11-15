@@ -20,17 +20,17 @@ import * as R from './giving-rules.js';
 
 export const GIVING_TABLES = {
   lists: 'givingLists',               // familyId, ownerId, audience, hiddenAt, data (JSON: name)
-  items: 'givingItems',               // familyId, listId, received, version, data (JSON: title, notes, priority, url, priceCents, currency)
+  items: 'givingItems',               // familyId, listId, received, version, thumb (a small JPEG as text), data (JSON: title, notes, priority, url, priceCents, currency, photoId)
   reservations: 'givingReservations', // familyId, itemId (UNIQUE index), buyerId, version
   reports: 'givingReports',           // familyId, reporterId, kind, targetId, listId, data (JSON: reason, note)
   notices: 'givingNotices',           // familyId, userId, data (JSON: text)
   state: 'givingState'                // row id = familyId; enabled (bool), enabledBy, enabledAt
 };
-export const GIVING_LIMITS = { ...R.LIMITS, hideDays: 30, reportsPerPerson: 20, noticesShown: 20, perMinute: 60 };
+export const GIVING_LIMITS = { ...R.LIMITS, hideDays: 30, reportsPerPerson: 20, noticesShown: 20, perMinute: 60, thumbBytes: 10000, photoBytes: 250000 };
 const DAY = 864e5;
 const MANAGER_NOTE = 'Ask another owner or tree admin to change your own setting.';
 
-export function createGiving({ teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable }) {
+export function createGiving({ storage, photoBucket, teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable }) {
   const T = GIVING_TABLES, L = GIVING_LIMITS;
   const iso = (t) => new Date(t === undefined ? now() : t).toISOString();
   const parse = (s) => { try { const v = JSON.parse(s); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } };
@@ -105,6 +105,7 @@ export function createGiving({ teams, listRows, createRow, updateRow, deleteRow,
   function itemView(c, it, list, res) {
     const d = parse(it.data);
     const v = { id: it.$id, listId: it.listId, title: d.title || '', notes: d.notes || '', priority: d.priority || 'medium', url: d.url || '', priceCents: d.priceCents || 0, currency: d.currency || '', received: !!it.received, mine: list.ownerId === c.me.userId };
+    if (d.photoId && it.thumb) v.thumb = it.thumb;   // a small picture, kept in the row; the full picture is fetched on request
     if (v.mine) return v;                       // the owner gets NO reservation fields of any kind
     if (!c.me.adult) { v.kid = true; return v; } // a kid gets none either, and cannot reserve
     const r = liveRes(c, res);
@@ -137,7 +138,12 @@ export function createGiving({ teams, listRows, createRow, updateRow, deleteRow,
     const rows = await all(T.reports, [Query.equal('targetId', [targetId]), Query.equal('kind', [kind])], 200);
     for (const r of rows) await deleteRow(T.reports, r.$id);
   }
+  async function dropPhoto(fileId) {
+    if (!fileId || !storage) return;
+    try { await storage.deleteFile({ bucketId: photoBucket, fileId }); } catch (e) { /* already gone, or storage not set up: nothing to delete */ }
+  }
   async function removeItem(c, it, reason) {
+    await dropPhoto(parse(it.data).photoId);
     await dropReservations(c, it.$id, reason, parse(it.data).title);
     await dropReports('item', it.$id);
     await deleteRow(T.items, it.$id);
@@ -173,6 +179,18 @@ export function createGiving({ teams, listRows, createRow, updateRow, deleteRow,
       for (const l of page.rows) { await removeList({ familyId: l.familyId, notify: false }, l, ''); purged += 1; }
     }
     return { purged };
+  }
+
+
+  /** A picture sent as a data address. Only JPEG, checked by its first bytes (never by what the sender says it is), and only up to the size limit. */
+  const JPEG_URL = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/;
+  function jpegOf(url, max, label) {
+    const m = typeof url === 'string' ? JPEG_URL.exec(url) : null;
+    if (!m) throw bad('Choose a JPEG, PNG or WebP picture.');
+    const buf = Buffer.from(m[1], 'base64');
+    if (!buf.length || buf[0] !== 0xff || buf[1] !== 0xd8 || buf[2] !== 0xff) throw bad('That picture could not be read.');
+    if (buf.length > max) throw bad('The ' + label + ' picture is too large. Try a smaller picture.');
+    return buf;
   }
 
   const setupHint = (e) => { if (sdkCode(e) === 400) throw bad('Giving Center needs one more setup step: add the givingAdult column to the profiles table (see GIVING-CENTER-SETUP.md).'); throw e; };
@@ -264,7 +282,7 @@ export function createGiving({ teams, listRows, createRow, updateRow, deleteRow,
         if (!it || it.listId !== l.$id) throw NA();
         const o = parse(it.data), n = v.value;
         const material = o.title !== n.title || (o.url || '') !== n.url || (o.priceCents || 0) !== n.priceCents || (o.currency || '') !== n.currency;   // notes and priority are not a change a buyer needs to hear about
-        const patch = { data: JSON.stringify(n), ...(material ? { version: (it.version || 1) + 1 } : {}) };
+        const patch = { data: JSON.stringify({ ...o, ...n }), ...(material ? { version: (it.version || 1) + 1 } : {}) };   // keeps the photo id
         await updateRow(T.items, it.$id, patch);
         return { item: itemView(c, { ...it, ...patch }, l, null) };
       }
@@ -288,6 +306,42 @@ export function createGiving({ teams, listRows, createRow, updateRow, deleteRow,
       await updateRow(T.items, it.$id, { received });
       if (received) await dropReservations({ ...c, notify: true }, it.$id, 'An item you reserved ({item}) was marked received.', parse(it.data).title);
       return { item: itemView(c, { ...it, received }, list, null) };
+    },
+
+    /* ----- photos (the owner of a list adds one picture per item) ----- */
+    async givingPhotoSave({ user, body }) {
+      const c = await context(user, body.familyId);
+      const { it, list } = await itemRow(c, body.itemId);
+      if (list.ownerId !== user.$id) throw NA();
+      const thumb = jpegOf(body.thumb, L.thumbBytes, 'small'), full = jpegOf(body.photo, L.photoBytes, 'full-size');
+      if (!storage) throw bad('Photos are not set up yet.');
+      const fileId = ID.unique(), d = parse(it.data);
+      try { await storage.createFile({ bucketId: photoBucket, fileId, file: new File([full], 'photo.jpg', { type: 'image/jpeg' }), permissions: [] }); }
+      catch (e) { if (sdkCode(e) === 404) throw bad('Photos need one more setup step: check the storage bucket name (see GIVING-CENTER-SETUP.md).'); throw e; }
+      const patch = { thumb: 'data:image/jpeg;base64,' + thumb.toString('base64'), data: JSON.stringify({ ...d, photoId: fileId }) };
+      try { await updateRow(T.items, it.$id, patch); } catch (e) { await dropPhoto(fileId); if (sdkCode(e) === 400) throw bad('Photos need one more setup step: add the thumb column to the givingItems table (see GIVING-CENTER-SETUP.md).'); throw e; }
+      await dropPhoto(d.photoId);
+      return { item: itemView(c, { ...it, ...patch }, list, null) };
+    },
+    async givingPhotoRemove({ user, body }) {
+      const c = await context(user, body.familyId);
+      const { it, list } = await itemRow(c, body.itemId);
+      if (list.ownerId !== user.$id) throw NA();
+      const d = parse(it.data), photoId = d.photoId; delete d.photoId;
+      const patch = { thumb: '', data: JSON.stringify(d) };
+      await updateRow(T.items, it.$id, patch);
+      await dropPhoto(photoId);
+      return { item: itemView(c, { ...it, ...patch }, list, null) };
+    },
+    /** The full-size picture, for anyone who is allowed to see the item (the same checks as the list itself). */
+    async givingPhotoGet({ user, body }) {
+      const c = await context(user, body.familyId);
+      const { it } = await itemRow(c, body.itemId);
+      const photoId = parse(it.data).photoId;
+      if (!photoId || !storage) throw NA();
+      let bytes;
+      try { bytes = await storage.getFileDownload({ bucketId: photoBucket, fileId: photoId }); } catch (e) { if (sdkCode(e) === 404) throw NA(); throw e; }
+      return { photo: 'data:image/jpeg;base64,' + Buffer.from(bytes).toString('base64') };
     },
 
     async givingReserve({ user, body }) {

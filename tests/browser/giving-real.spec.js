@@ -73,7 +73,22 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await page.fill('#gv-url', 'https://shop.example.com/mug'); await page.fill('#gv-notes', 'Any shade of blue'); await page.fill('#gv-price', '24'); await page.selectOption('#gv-currency', 'USD');
   await page.locator('#gv-save').click(); await page.waitForSelector('.gv-item'); await settle();
   check('5 Item is saved with its link, price and notes', rowsOf('givingItems').length === 1 && /shop.example.com/.test(rowsOf('givingItems')[0].data), '');
-  check('5 The link shows a placeholder tile and says real pictures come later', (await page.locator('.gv-photo[data-from-link="true"]').count()) === 1 && /Real pictures from links and photo uploads come later/.test(await text()), await text());
+  check('5 The link shows a placeholder tile and says real pictures come later', (await page.locator('.gv-photo[data-from-link="true"]').count()) === 1 && /Pictures from links come later/.test(await text()), await text());
+
+  // 5b photo upload, view and removal
+  const png = fs.readFileSync(__dirname + '/support/pic.png');
+  await page.locator('.gv-item [data-act="edit"], .gv-item .gv-edit, .gv-item button:has-text("Edit")').first().click(); await page.waitForSelector('#gv-photofile');
+  check('5b The edit form has a themed photo picker', await page.locator('#gv-photofile').isVisible() && await page.evaluate(() => { const c = getComputedStyle(document.getElementById('gv-photofile')); return c.borderTopWidth !== '0px' && c.borderTopLeftRadius !== '0px'; }), '');
+  if (process.env.SHOT) await page.screenshot({ path: '/tmp/shot-form.png', fullPage: true });
+  await page.setInputFiles('#gv-photofile', { name: 'pic.png', mimeType: 'image/png', buffer: png });
+  await page.waitForSelector('#gv-photoprev img'); await page.locator('#gv-save').click(); await page.waitForSelector('.gv-photo-btn'); await settle();
+  check('5b The picture is saved: a small copy on the item and the full one in the private bucket', /^data:image\/jpeg;base64,/.test(rowsOf('givingItems')[0].thumb || '') && /photoId/.test(rowsOf('givingItems')[0].data), JSON.stringify(rowsOf('givingItems')[0]).slice(0, 200));
+  if (process.env.SHOT) await page.screenshot({ path: '/tmp/shot-list.png' });
+  await page.locator('.gv-photo-btn').first().click(); await page.waitForSelector('.gv-bigphoto'); await page.waitForFunction(() => /^data:image\/jpeg/.test(document.querySelector('.gv-bigphoto').src) && document.querySelector('.gv-bigphoto').src.length > 500); await settle();
+  check('5b Tapping the picture opens the full one', await page.locator('#gv-p-note').innerText() === '', '');
+  await page.locator('#gv-p-close').click();
+  await page.locator('.gv-item button:has-text("Edit"), .gv-item [data-act="edit"], .gv-item .gv-edit').first().click(); await page.waitForSelector('#gv-photoremove'); await page.locator('#gv-photoremove').click(); await page.locator('#gv-save').click(); await page.waitForSelector('.gv-item'); await settle();
+  check('5b Removing the picture clears it', !(rowsOf('givingItems')[0].thumb) && !/photoId/.test(rowsOf('givingItems')[0].data) && (await page.locator('.gv-photo-btn').count()) === 0, JSON.stringify(rowsOf('givingItems')[0]).slice(0, 200));
 
   // 6 a kid sees it but cannot reserve
   await as('kid'); await page.locator('.gv-row', { hasText: 'Birthday' }).click(); await page.waitForSelector('#main h1:has-text("Birthday")'); await settle();
