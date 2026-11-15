@@ -62,3 +62,19 @@ test('fetchLinkPicture: page then picture, a link that is itself a picture, redi
   await assert.rejects(fetchLinkPicture('https://evil.example/item', deps), (e) => e.linkPicture === true);
   assert.equal(seen.length, before, 'a private address is never even requested');
 });
+
+test('findPictureUrl also reads schema.org Product data and the main product image tag', () => {
+  assert.equal(findPictureUrl('<script type="application/ld+json">{"@graph":[{"@type":"Product","image":["https://cdn.example/p1.jpg","https://cdn.example/p2.jpg"]}]}</script>', 'https://shop.example/'), 'https://cdn.example/p1.jpg');
+  assert.equal(findPictureUrl('<script type="application/ld+json">{"@type":"Product","image":{"url":"https://cdn.example/o.png"}}</script>', 'https://shop.example/'), 'https://cdn.example/o.png');
+  assert.equal(findPictureUrl('<img id="landingImage" src="data:image/gif;base64,xx" data-old-hires="https://m.example/I/big.jpg">', 'https://shop.example/'), 'https://m.example/I/big.jpg');
+  assert.equal(findPictureUrl('<img id="landingImage" data-a-dynamic-image="{&quot;https://m.example/I/a._SX300_.jpg&quot;:[300,300]}" src="data:x">', 'https://shop.example/'), 'https://m.example/I/a._SX300_.jpg');
+});
+
+test('fetchLinkPicture tells a shop that refuses or shows a robot check apart from a page with no picture', async () => {
+  const lookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  const mk = (status, html) => ({ lookup, get: async () => ({ status, headers: {}, body: Buffer.from(html) }) });
+  await assert.rejects(fetchLinkPicture('https://shop.example/a', mk(503, '')), (e) => e.linkPicture && e.kind === 'blocked');
+  await assert.rejects(fetchLinkPicture('https://shop.example/a', mk(403, '')), (e) => e.kind === 'blocked');
+  await assert.rejects(fetchLinkPicture('https://shop.example/a', mk(200, '<html>Enter the characters you see below</html>')), (e) => e.kind === 'blocked');
+  await assert.rejects(fetchLinkPicture('https://shop.example/a', mk(200, '<html><head></head></html>')), (e) => e.kind === 'none');
+});
