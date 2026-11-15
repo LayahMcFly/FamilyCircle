@@ -14,6 +14,7 @@
 import { Query, Permission, Role, ID } from 'node-appwrite';
 import { createChat } from './chat.js';
 import { createBoard } from './board.js';
+import { createGiving } from './giving.js';
 
 export const TABLES = {
   families: 'families',
@@ -538,10 +539,14 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
   // Family calendar, chores and shopping list. See board.js.
   const board = createBoard({ teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, textOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable: TABLES.profiles });
 
+  // Family wishlists and gift reservations. Built but OFF for every family until its owner turns it on. See giving.js.
+  const giving = createGiving({ teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable: TABLES.profiles });
+
   const actions = {
     addressGet, addressSave, addressDelete, addressView,
     ...chat.actions,
     ...board.actions,
+    ...giving.actions,
     /** Lists the caller's confirmed, registered families. Also keeps the `family` label in sync. */
     async listFamilies({ user }) {
       const mine = await confirmedMemberships(user);
@@ -1373,7 +1378,11 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       cursor = page.files[page.files.length - 1].$id;
       if (page.files.length < 50) break;
     }
-    return { removed };
+    // Giving Center: delete wishlists that have been hidden for 30 days. Best effort: if its tables are not set up yet, or anything fails,
+    // the file cleanup above is unaffected and the next run tries again.
+    let givingPurged = 0;
+    try { givingPurged = (await giving.sweepGiving(deadline)).purged; } catch (e) { givingPurged = 0; }
+    return { removed, givingPurged };
   }
 
   /* ---------- entry ---------- */
