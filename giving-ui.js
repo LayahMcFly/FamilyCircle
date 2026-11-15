@@ -377,6 +377,17 @@
     }
 
     /* ---------- forms ---------- */
+
+    /* Plain "who sees what" notes shown while creating something, written for the person creating it. */
+    var WHO = {
+      listAdultEveryone: 'Kids in the family can see this wishlist and its items, and can report it. They cannot reserve anything and never see who reserved. Other adults can reserve items. You never see reservations.',
+      listAdultAdults: 'Kids cannot see this wishlist at all. Other adults can see it and reserve items. You never see reservations.',
+      listKid: 'Everyone in the family can see your wishlist, adults and kids. Adults can reserve items to buy as gifts. You will not see who reserved anything.',
+      reqAdultEveryone: 'Kids can see this request but cannot pledge. Adults can pledge to help, and you see who pledged.',
+      reqAdultAdults: 'Kids cannot see this request at all. Other adults can see it and pledge, and you see who pledged.',
+      reqKid: 'An adult owner or admin looks at your request first. After they approve it, everyone in the family can see it. Adults can pledge to help and you will see who pledged. Other kids can see it but cannot pledge.'
+    };
+    function whoNote(id, text) { return h('p', { class: 'hint gv-who', id: id, text: text }); }
     function field(id, label, control, err, hint) {
       return h('div', { class: 'gv-field' }, h('label', { for: id, text: label }), control, hint ? h('p', { class: 'hint', id: id + '-hint', text: hint }) : null, h('p', { class: 'gv-fielderr', id: id + '-err', role: 'alert', text: err || '' }));
     }
@@ -390,8 +401,10 @@
           toast('Wishlist saved.'); go('#/giving/list/' + r.list.id);
         });
       } }, h('h1', { text: existing ? 'Rename wishlist' : 'New wishlist', 'data-focus': '' }), field('gv-name', 'Wishlist name', name, '', 'Up to ' + C.LIMITS.listName + ' characters.'),
-        audience ? field('gv-audience', 'Who can see it', audience, '', 'Choose Adults only for a list that must stay a surprise, such as gift ideas for a child.') : null, msg,
+        audience ? field('gv-audience', 'Who can see it', audience, '', 'Choose Adults only for a list that must stay a surprise, such as gift ideas for a child.') : null,
+        whoNote('gv-whosees', audience ? (audience.value === 'adults' ? WHO.listAdultAdults : WHO.listAdultEveryone) : WHO.listKid), msg,
         h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-save', text: 'Save' }), h('a', { class: 'btn secondary', href: existing ? '#/giving/list/' + existing.id : '#/giving', text: 'Cancel' })));
+      if (audience) audience.addEventListener('change', function () { document.getElementById('gv-whosees').textContent = audience.value === 'adults' ? WHO.listAdultAdults : WHO.listAdultEveryone; });
       return h('div', { class: 'gv-page' }, backLink(existing ? '#/giving/list/' + existing.id : '#/giving', 'Back'), form);
     }
     function setErr(id, text) { var e = document.getElementById(id + '-err'), c = document.getElementById(id); if (e) e.textContent = text; if (c) { if (text) c.setAttribute('aria-invalid', 'true'); else c.removeAttribute('aria-invalid'); } }
@@ -573,8 +586,10 @@
         field('gv-rkind', 'It is', f.kind), field('gv-rdetails', 'Details (optional)', f.details),
         field('gv-rneeded', 'How many helpers or items', f.needed), field('gv-rby', 'Needed by (optional)', f.by),
         field('gv-ramount', 'Money, if any (optional)', f.amount, '', 'Plain text for reference only. Family Circle never collects or sends money.'),
-        f.audience ? field('gv-raudience', 'Who can see it', f.audience, '', 'Adults only keeps it from kids, for example a gift for a child.') : h('p', { class: 'hint', text: 'An adult will look at your request before the family sees it.' }), msg,
+        f.audience ? field('gv-raudience', 'Who can see it', f.audience, '', 'Adults only keeps it from kids, for example a gift for a child.') : null,
+        whoNote('gv-rwhosees', f.audience ? (f.audience.value === 'adults' ? WHO.reqAdultAdults : WHO.reqAdultEveryone) : WHO.reqKid), msg,
         h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-rsave', text: 'Save request' }), h('a', { class: 'btn secondary', href: existing ? '#/giving/requests/' + existing.id : '#/giving/requests', text: 'Cancel' })));
+      if (f.audience) f.audience.addEventListener('change', function () { document.getElementById('gv-rwhosees').textContent = f.audience.value === 'adults' ? WHO.reqAdultAdults : WHO.reqAdultEveryone; });
       return h('div', { class: 'gv-page' }, backLink(existing ? '#/giving/requests/' + existing.id : '#/giving/requests', 'Back'), form);
     }
     function renderRequest(r) {
