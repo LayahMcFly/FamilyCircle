@@ -124,6 +124,9 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await page.locator('.gv-item button:has-text("Edit"), .gv-item [data-act="edit"], .gv-item .gv-edit').first().click(); await page.waitForSelector('#gv-photoremove'); await page.locator('#gv-photoremove').click(); await page.locator('#gv-save').click(); await page.waitForSelector('.gv-item'); await settle();
   check('5b Removing the picture clears it', !(rowsOf('givingItems')[0].thumb) && !/photoId/.test(rowsOf('givingItems')[0].data) && (await page.locator('.gv-photo-btn').count()) === 0, JSON.stringify(rowsOf('givingItems')[0]).slice(0, 200));
 
+  // 5g list pictures are cropped to fill the square, never squeezed
+  check('5g List pictures use object-fit: cover', (await page.locator('.gv-item .gv-photo').first().evaluate(e => getComputedStyle(e).objectFit)) === 'cover', '');
+
   // 5f a blocked shop shows what happened, step by step
   await page.locator('.gv-item [data-act="edit"]').first().click(); await page.waitForSelector('#gv-url');
   await page.fill('#gv-url', 'https://www.amazon.com/dp/amazonblock'); await page.locator('#gv-linkpic').click();
