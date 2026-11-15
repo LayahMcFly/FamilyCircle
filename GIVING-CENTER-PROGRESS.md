@@ -39,6 +39,7 @@ Branch `giving-center-preview` (from `main` at v1.51.99.22, commit `bb6ed16`). S
 **Not finished**
 - [ ] You have not yet tested the preview (checklist F in the handoff)
 - [ ] Your answers on the 12 decisions below, especially which accounts are eligible
+- [ ] Decide how the real version gets a picture from an item's link (you chose: keep simulated for now; settle at Step 4)
 - [ ] Step 4: real backend design (tables, function actions, permissions) with risks and rollback. Needs your approval before any build
 - [ ] Step 5: real backend built and tested without turning anything on. Needs approval
 - [ ] Step 6: real photo upload. Needs approval
