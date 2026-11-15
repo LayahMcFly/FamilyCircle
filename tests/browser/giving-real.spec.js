@@ -84,6 +84,26 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await page.waitForSelector('#gv-photoprev img'); await page.locator('#gv-save').click(); await page.waitForSelector('.gv-photo-btn'); await settle();
   check('5b The picture is saved: a small copy on the item and the full one in the private bucket', /^data:image\/jpeg;base64,/.test(rowsOf('givingItems')[0].thumb || '') && /photoId/.test(rowsOf('givingItems')[0].data), JSON.stringify(rowsOf('givingItems')[0]).slice(0, 200));
   if (process.env.SHOT) await page.screenshot({ path: '/tmp/shot-list.png' });
+  // 5c compress and convert: BMP and GIF are converted, a huge photo is compressed, an unreadable HEIC gets a plain message
+  await page.locator('.gv-item [data-act="edit"]').first().click(); await page.waitForSelector('#gv-photofile');
+  const sizesOk = await page.evaluate(() => [...document.querySelectorAll('#gv-photofile, #gv-photosize')].length);
+  for (const [name, type] of [['pic.bmp', 'image/bmp'], ['pic.gif', 'image/gif']]) {
+    await page.setInputFiles('#gv-photofile', { name, mimeType: type, buffer: fs.readFileSync(__dirname + '/support/' + name) });
+    await page.waitForFunction(() => /Will be sent as a JPEG/.test(document.getElementById('gv-photoinfo').textContent), null, { timeout: 8000 });
+    check('5c ' + name + ' is converted to a JPEG and the size is shown', /Original .*Will be sent as a JPEG of \d+ KB/.test(await page.locator('#gv-photoinfo').innerText()), await page.locator('#gv-photoinfo').innerText());
+  }
+  if (process.env.SHOT) await page.screenshot({ path: '/tmp/shot-size.png', fullPage: true });
+  await page.evaluate(() => new Promise(res => { const c = document.createElement('canvas'); c.width = 3600; c.height = 2400; const x = c.getContext('2d'); const d = x.createImageData(3600, 2400); for (let i = 0; i < d.data.length; i += 4) { d.data[i] = Math.random() * 255; d.data[i + 1] = Math.random() * 255; d.data[i + 2] = Math.random() * 255; d.data[i + 3] = 255; } x.putImageData(d, 0, 0); c.toBlob(b => { const f = new File([b], 'huge.png', { type: 'image/png' }); const dt = new DataTransfer(); dt.items.add(f); const i = document.getElementById('gv-photofile'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); res(); }, 'image/png'); }));
+  await page.waitForFunction(() => /Will be sent as a JPEG/.test(document.getElementById('gv-photoinfo').textContent) && /huge|MB/.test(document.getElementById('gv-photoinfo').textContent), null, { timeout: 30000 });
+  const info = await page.locator('#gv-photoinfo').innerText(); const kbSent = +(/JPEG of (\d+) KB/.exec(info) || [])[1];
+  check('5c A huge photo (many MB) is compressed to under 250 KB', /MB/.test(info) && kbSent > 0 && kbSent <= 250, info);
+  await page.selectOption('#gv-photosize', 'small'); await page.waitForTimeout(600);
+  check('5c The size choice re-compresses the picture', /Will be sent as a JPEG/.test(await page.locator('#gv-photoinfo').innerText()), await page.locator('#gv-photoinfo').innerText());
+  await page.setInputFiles('#gv-photofile', { name: 'IMG_1.heic', mimeType: 'image/heic', buffer: Buffer.from('not really a picture') });
+  await page.waitForFunction(() => /cannot open HEIC/.test(document.getElementById('gv-photofile-err').textContent), null, { timeout: 8000 });
+  check('5c An unreadable HEIC gets a plain message with what to do', /Most Compatible/.test(await page.locator('#gv-photofile-err').innerText()), await page.locator('#gv-photofile-err').innerText());
+  check('5c The size picker is themed', await page.evaluate(() => { const e = document.getElementById('gv-photosize'); const c = getComputedStyle(e); return c.borderTopWidth !== '0px' && c.borderTopLeftRadius !== '0px'; }), '');
+  await page.locator('a:has-text("Cancel")').first().click(); await page.waitForSelector('.gv-item');
   await page.locator('.gv-photo-btn').first().click(); await page.waitForSelector('.gv-bigphoto'); await page.waitForFunction(() => /^data:image\/jpeg/.test(document.querySelector('.gv-bigphoto').src) && document.querySelector('.gv-bigphoto').src.length > 500); await settle();
   check('5b Tapping the picture opens the full one', await page.locator('#gv-p-note').innerText() === '', '');
   await page.locator('#gv-p-close').click();

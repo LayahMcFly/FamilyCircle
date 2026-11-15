@@ -33,27 +33,46 @@
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
-  /* Real photos: the picture is made smaller on the person's own device before anything is sent (a small one for the list, one up to 800 pixels for the full view). */
-  function fitPicture(img, max, quality, limit) {
-    var w = img.naturalWidth, h2 = img.naturalHeight, s = Math.min(1, max / Math.max(w, h2)), url = '';
-    for (var tries = 0; tries < 8; tries++) {
+  /* Real photos: whatever picture type the browser can open (JPEG, PNG, WebP, GIF, BMP, AVIF, HEIC where supported) is converted to JPEG and
+     made smaller on the person's own device before anything is sent: a small one for the list and one for the full view (at most 250 KB). */
+  var PIC_SIZES = { small: 600, balanced: 800, sharp: 1000 };
+  function fitPicture(src, max, quality, limit) {
+    var w = src.width, h2 = src.height, s = Math.min(1, max / Math.max(w, h2)), url = '';
+    for (var tries = 0; tries < 10; tries++) {
       var cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h2 * s)), cv = document.createElement('canvas');
       cv.width = cw; cv.height = ch;
-      var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cw, ch); cx.drawImage(img, 0, 0, cw, ch);
+      var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cw, ch); cx.drawImage(src, 0, 0, cw, ch);
       url = cv.toDataURL('image/jpeg', quality);
       if ((url.length - 23) * 0.75 <= limit) return url;
       if (quality > 0.45) quality -= 0.12; else s *= 0.8;
     }
-    throw new Error('That picture is too large. Try a smaller one.');
+    throw new Error('That picture could not be made small enough. Try a different one.');
   }
-  function shrinkPicture(file) {
+  function openPicture(file) {
+    var heic = /heic|heif/i.test(file.type + ' ' + file.name);
+    var fail = function () { throw new Error(heic ? 'This browser cannot open HEIC pictures. On an iPhone, open the picture in Photos, tap Share, and choose a JPEG copy, or set Camera formats to Most Compatible. Then choose it again.' : 'That picture could not be read. Try a JPEG, PNG, WebP, GIF or BMP picture.'); };
+    if (window.createImageBitmap) return createImageBitmap(file).catch(function () { return viaImage(file).catch(fail); });
+    return viaImage(file).catch(fail);
+  }
+  function viaImage(file) {
     return new Promise(function (resolve, reject) {
       var url = URL.createObjectURL(file), img = new Image();
-      img.onload = function () { try { resolve({ photo: fitPicture(img, 800, 0.82, 240000), thumb: fitPicture(img, 128, 0.7, 9500) }); } catch (e) { reject(e); } finally { URL.revokeObjectURL(url); } };
-      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('That picture could not be read. Choose a JPEG, PNG or WebP picture.')); };
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('unreadable')); };
       img.src = url;
+    }).then(function (img) { return { width: img.naturalWidth, height: img.naturalHeight, img: img }; }).then(function (o) { var c = document.createElement('canvas'); c.width = o.width; c.height = o.height; c.getContext('2d').drawImage(o.img, 0, 0); return c; });
+  }
+  function shrinkPicture(file, size) {
+    if (file.size > 60 * 1024 * 1024) return Promise.reject(new Error('That picture file is over 60 MB. Choose a smaller one.'));
+    return openPicture(file).then(function (src) {
+      if (!src.width || !src.height) throw new Error('That picture could not be read.');
+      var out = { photo: fitPicture(src, PIC_SIZES[size] || 800, 0.82, 240000), thumb: fitPicture(src, 128, 0.7, 9500) };
+      if (src.close) src.close();
+      return out;
     });
   }
+  function kb(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+  function dataBytes(u) { return Math.round((u.length - 23) * 0.75); }
 
   function mount(o) {
     var server = o.server, viewers = o.viewers, main = o.main, controls = o.controls, toasts = o.toasts, net = o.net || { mode: 'normal', wrap: function (run) { return Promise.resolve(run()); } };
@@ -347,19 +366,33 @@
       f.photo = real ? null : h('select', { id: 'gv-photo' }, Object.keys(PHOTO_LABEL).map(function (k) { return h('option', { value: k, text: PHOTO_LABEL[k], selected: existing && existing.photo === k }); }));
       var removePhoto = false;
       if (real) {
-        f.file = h('input', { type: 'file', id: 'gv-photofile', accept: 'image/jpeg,image/png,image/webp', 'aria-describedby': 'gv-photofile-hint' });
+        f.file = h('input', { type: 'file', id: 'gv-photofile', accept: 'image/*,.heic,.heif,.avif,.bmp,.gif', 'aria-describedby': 'gv-photofile-hint gv-photoinfo' });
         f.prev = h('div', { class: 'gv-photoprev', id: 'gv-photoprev' });
+        f.size = h('select', { id: 'gv-photosize', 'aria-label': 'Picture size' }, h('option', { value: 'small', text: 'Smaller file (600 px)' }), h('option', { value: 'balanced', text: 'Balanced (800 px)', selected: true }), h('option', { value: 'sharp', text: 'Sharper (1000 px)' }));
+        f.info = h('p', { class: 'hint', id: 'gv-photoinfo', role: 'status' });
+        var ready = null, working = 0;
         var showPrev = function (src) { f.prev.textContent = ''; if (src) f.prev.appendChild(h('img', { class: 'gv-photo', src: src, alt: 'Picture to use for this item', width: 56, height: 56 })); };
         if (existing && existing.thumb) {
           showPrev(existing.thumb);
-          f.prev.appendChild(h('button', { type: 'button', class: 'btn ghost small', id: 'gv-photoremove', text: 'Remove the picture', onclick: function () { removePhoto = true; f.file.value = ''; showPrev(''); toast('The picture will be removed when you save.'); } }));
+          f.prev.appendChild(h('button', { type: 'button', class: 'btn ghost small', id: 'gv-photoremove', text: 'Remove the picture', onclick: function () { removePhoto = true; ready = null; f.file.value = ''; f.info.textContent = ''; f.sizeRow.hidden = true; showPrev(''); toast('The picture will be removed when you save.'); } }));
         }
+        f.sizeRow = h('div', { class: 'gv-sizerow', hidden: true }, h('label', { for: 'gv-photosize', text: 'Picture size' }), f.size);
+        var process = function () {
+          var file = f.file.files && f.file.files[0]; if (!file) return;
+          var token = ++working; ready = null; f.info.textContent = 'Converting and compressing…'; setErr('gv-photofile', '');
+          ready = shrinkPicture(file, f.size.value).then(function (p) {
+            if (token !== working) return null;
+            f.info.textContent = 'Original ' + kb(file.size) + (file.type ? ' (' + file.type.replace('image/', '').toUpperCase() + ')' : '') + '. Will be sent as a JPEG of ' + kb(dataBytes(p.photo)) + '.';
+            showPrev(p.thumb); f.sizeRow.hidden = false; return p;
+          }, function (e) { if (token !== working) return null; f.info.textContent = ''; f.sizeRow.hidden = true; f.file.value = ''; ready = null; showPrev(existing && existing.thumb || ''); setErr('gv-photofile', e.message); return null; });
+        };
+        f.size.addEventListener('change', process);
         f.file.addEventListener('change', function () {
           var file = f.file.files && f.file.files[0]; removePhoto = false; setErr('gv-photofile', '');
-          if (!file) return showPrev(existing && existing.thumb || '');
-          if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { f.file.value = ''; return setErr('gv-photofile', 'Choose a JPEG, PNG or WebP picture.'); }
-          showPrev(URL.createObjectURL(file));
+          if (!file) { ready = null; f.info.textContent = ''; f.sizeRow.hidden = true; return showPrev(existing && existing.thumb || ''); }
+          process();
         });
+        f.getReady = function () { return ready; };
       }
       var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
       var ids = { title: 'gv-title', notes: 'gv-notes', priority: 'gv-priority', url: 'gv-url', price: 'gv-price', currency: 'gv-currency' };
@@ -374,7 +407,7 @@
           var done = function (note) { toast(note || 'Item saved.'); go('#/giving/list/' + listId); };
           if (file) {
             msg.textContent = 'Sending the picture…';
-            return shrinkPicture(file).then(function (p) { return api('photoSave', { itemId: itemId, thumb: p.thumb, photo: p.photo }); })
+            return Promise.resolve(f.getReady()).then(function (p) { if (!p) throw new Error('the picture could not be prepared'); return api('photoSave', { itemId: itemId, thumb: p.thumb, photo: p.photo }); })
               .then(function (x) { if (x.stale) return; done(x.ok ? 'Item saved.' : 'Item saved, but the picture was not added: ' + x.message); }, function (e) { done('Item saved, but the picture was not added: ' + e.message); });
           }
           if (real && removePhoto && existing && existing.thumb) return api('photoRemove', { itemId: itemId }).then(function (x) { if (x.stale) return; done(); });
@@ -385,7 +418,7 @@
         field('gv-title', 'Title', f.title), field('gv-notes', 'Notes (optional)', f.notes, '', 'Anything that helps someone pick the right one: size, color, model, where you saw it.'), field('gv-priority', 'How much do you want it?', f.priority),
         field('gv-url', 'Link (optional)', f.url, '', 'A web address you choose. Family Circle does not visit it or look anything up.'),
         h('div', { class: 'gv-pair' }, field('gv-price', 'Estimated price (optional)', f.price, '', 'A guess for reference. Not a charge.'), field('gv-currency', 'Currency', f.currency)),
-        real ? h('div', { class: 'gv-field' }, h('label', { for: 'gv-photofile', text: 'Photo (optional)' }), f.file, f.prev, h('p', { class: 'hint', id: 'gv-photofile-hint', text: 'A picture of the item. It is made smaller on your device before it is sent. Leave it empty to use the placeholder from your link.' }), h('p', { class: 'gv-fielderr', id: 'gv-photofile-err', role: 'alert' })) : null,
+        real ? h('div', { class: 'gv-field' }, h('label', { for: 'gv-photofile', text: 'Photo (optional)' }), f.file, f.prev, f.sizeRow, f.info, h('p', { class: 'hint', id: 'gv-photofile-hint', text: 'Any picture type works. It is converted to a JPEG and made smaller on your device before it is sent, so big photos are fine. Leave it empty to use the placeholder from your link.' }), h('p', { class: 'gv-fielderr', id: 'gv-photofile-err', role: 'alert' })) : null,
         f.photo ? field('gv-photo', 'Photo (optional)', f.photo, '', 'Leave this blank and the picture can come from your link. Real photo upload is not part of this preview, so this only picks a sample picture.') : null,
         msg, h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-save', text: 'Save item' }), h('a', { class: 'btn secondary', href: '#/giving/list/' + listId, text: 'Cancel' })));
       return h('div', { class: 'gv-page' }, backLink('#/giving/list/' + listId, 'Back to wishlist'), form);
