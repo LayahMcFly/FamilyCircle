@@ -1,5 +1,5 @@
-/* Giving Center preview: the screens (PREVIEW CODE, not wired into the live app).
- * Talks only to the `server` object it is given (the in-memory fake in the preview), so nothing here reaches Appwrite.
+/* Giving Center screens. Used by the preview (on the in-memory fake server) and, with `real: true`, by the app (through giving.js).
+ * Talks only to the `server` object it is given, so these screens never reach Appwrite by themselves.
  * Text is always set with textContent, so anything typed into a field is shown as plain text and keeps the case it was typed in.
  * Private state (lists, reservations, notices) is held only in `st` and is cleared whenever the person or family changes.
  * No localStorage, sessionStorage, cookies or URL parameters carry any of it. */
@@ -34,18 +34,20 @@
   }
 
   function mount(o) {
-    var server = o.server, viewers = o.viewers, main = o.main, controls = o.controls, toasts = o.toasts, net = o.net || { mode: 'normal' };
-    var st = { userId: viewers[0].userId, familyId: null, gen: 0, data: null };
+    var server = o.server, viewers = o.viewers, main = o.main, controls = o.controls, toasts = o.toasts, net = o.net || { mode: 'normal', wrap: function (run) { return Promise.resolve(run()); } };
+    var real = !!o.real;
+    if (real) { main = document.createElement('div'); o.main.appendChild(main); }   // the app puts its own "Back to Hub" link in its main area first; these screens fill only their own box
+    var st = { userId: real ? 'me' : viewers[0].userId, familyId: real ? (o.famId ? o.famId() : null) : null, gen: 0, data: null };
 
     /* One entry point for every request. A reply that arrives after the person or family changed is dropped, never drawn. */
     function api(action, body) {
-      var gen = st.gen, uid = st.userId, fam = st.familyId;
+      var gen = st.gen, uid = st.userId, fam = real && o.famId ? o.famId() : st.familyId;
       var b = Object.assign({ familyId: fam }, body || {});
       return Promise.resolve().then(function () { return net.wrap(function () { return server.call(uid, action, b); }); })
         .catch(function () { return { ok: false, error: 'network', message: 'Could not reach the server. Check your connection and try again.' }; })
         .then(function (r) { if (gen !== st.gen) return { ok: false, error: 'stale', stale: true }; return r; });
     }
-    function toast(msg) { var t = h('div', { class: 'toast', text: msg }); toasts.appendChild(t); setTimeout(function () { t.remove(); }, 3500); }
+    function toast(msg) { if (o.toast) return o.toast(msg); var t = h('div', { class: 'toast', text: msg }); toasts.appendChild(t); setTimeout(function () { t.remove(); }, 3500); }
     function route() {
       var p = (location.hash || '').replace(/^#\/?/, '').split('/');
       if (p[0] !== 'giving') return { name: 'home' };
@@ -90,6 +92,26 @@
       return h('section', { class: 'card gv-blocked' }, h('h1', { text: 'Giving Center', 'data-focus': '' }), h('p', { text: r.error === 'no_access' ? 'Giving Center is not available for this account.' : 'That is not available.' }),
         h('p', { class: 'muted', text: 'Nothing about wishlists or gifts is shown here.' }));
     }
+    /* real app only: Giving Center is off for the family. The owner sees a button; everyone else is told it is not turned on. */
+    function renderOff(status) {
+      var box = h('section', { class: 'card gv-blocked gv-off' }, h('h1', { text: 'Giving Center', 'data-focus': '' }),
+        h('p', { text: 'Giving Center is not turned on for your family yet.' }), h('div', { class: 'gv-errslot' }));
+      if (status && status.canTurnOn) {
+        box.appendChild(h('p', { class: 'muted', text: 'You are the family owner, so you can turn it on. Until you do, no one in the family sees wishlists or gift reservations.' }));
+        box.appendChild(h('button', { type: 'button', class: 'btn', id: 'gv-turnon', text: 'Turn on Giving Center', onclick: function () {
+          confirmDialog('Turn on Giving Center?', 'Everyone in your family will be able to make wishlists. Everyone starts as a kid; you choose who is an adult. You can turn it off again at any time.', 'Turn on', function () {
+            api('setEnabled', { enabled: true }).then(function (r) { if (r.stale) return; if (!r.ok) return showErr(r); toast('Giving Center is on.'); render(); }); }, true); } }));
+      } else box.appendChild(h('p', { class: 'muted', text: 'Ask the family owner to turn it on.' }));
+      return box;
+    }
+    function ownerSwitchPanel() {
+      var box = h('section', { class: 'card gv-panel', id: 'gv-switch' }, h('h2', { class: 'gv-sub', text: 'Giving Center is on' }),
+        h('p', { class: 'muted', text: 'Turning it off hides it from everyone. Nothing is deleted, and turning it on again brings everything back.' }), h('div', { class: 'gv-errslot' }));
+      box.appendChild(h('button', { type: 'button', class: 'btn secondary small', id: 'gv-turnoff', text: 'Turn off Giving Center', onclick: function () {
+        confirmDialog('Turn off Giving Center?', 'No one in the family will see wishlists or reservations until you turn it on again. Nothing is deleted.', 'Turn off', function () {
+          api('setEnabled', { enabled: false }).then(function (r) { if (r.stale) return; if (!r.ok) return showErr(r); toast('Giving Center is off.'); render(); }); }, true); } }));
+      return box;
+    }
     function backLink(href, text) { return h('p', { class: 'gv-back' }, h('a', { class: 'link-btn back-btn', href: href, text: text })); }
     function money(it) { return it.priceCents && it.currency ? C.fmtMoney(it.priceCents, it.currency) + ' (estimate)' : ''; }
     function itemStatus(it) {
@@ -102,11 +124,11 @@
       }
       return b;
     }
-    function confirmDialog(title, text, okText, onOk) {
+    function confirmDialog(title, text, okText, onOk, plain) {
       var d = h('dialog', { class: 'gv-dialog', 'aria-labelledby': 'gv-d-h' });
       var cancel = h('button', { type: 'button', class: 'btn secondary', id: 'gv-d-cancel', text: 'Cancel', onclick: function () { d.close(); } });
       d.appendChild(h('h2', { id: 'gv-d-h', text: title })); d.appendChild(h('p', { text: text }));
-      d.appendChild(h('div', { class: 'gv-actions' }, cancel, h('button', { type: 'button', class: 'btn danger', id: 'gv-d-ok', text: okText, onclick: function () { d.close(); onOk(); } })));
+      d.appendChild(h('div', { class: 'gv-actions' }, cancel, h('button', { type: 'button', class: plain ? 'btn' : 'btn danger', id: 'gv-d-ok', text: okText, onclick: function () { d.close(); onOk(); } })));
       d.addEventListener('close', function () { d.remove(); });
       document.body.appendChild(d);
       if (d.showModal) d.showModal(); else d.setAttribute('open', '');
@@ -219,7 +241,7 @@
           money(it) ? h('p', { class: 'muted gv-price', text: money(it) }) : null,
           it.notes ? h('p', { class: 'gv-notes', text: it.notes }) : null,
           it.url ? h('p', { class: 'gv-link' }, h('a', { href: it.url, target: '_blank', rel: 'noopener noreferrer nofollow', text: 'Open link (' + C.hostOf(it.url) + ')' }), h('span', { class: 'muted', text: ' Opens another website.' })) : null,
-          fromLink ? h('p', { class: 'hint gv-linkpic', text: 'Picture from the link (simulated in this preview).' }) : null)));
+          fromLink ? h('p', { class: 'hint gv-linkpic', text: real ? 'Placeholder picture. Real pictures from links and photo uploads come later.' : 'Picture from the link (simulated in this preview).' }) : null)));
       var acts = h('div', { class: 'gv-actions' });
       if (it.mine) {
         acts.appendChild(h('a', { class: 'btn secondary small', href: '#/giving/list/' + listId + '/item/' + it.id + '/edit', 'data-act': 'edit', text: 'Edit', 'aria-label': 'Edit ' + it.title }));
@@ -289,12 +311,13 @@
       f.url = h('input', { type: 'text', id: 'gv-url', inputmode: 'url', autocomplete: 'off', value: existing ? existing.url : '' });
       f.price = h('input', { type: 'text', id: 'gv-price', inputmode: 'decimal', autocomplete: 'off', value: existing && existing.priceCents ? (existing.priceCents / 100).toFixed(2) : '' });
       f.currency = h('select', { id: 'gv-currency' }, h('option', { value: '', text: 'Choose currency' }), Object.keys(C.CURRENCIES).map(function (c) { return h('option', { value: c, text: c + ' \u00b7 ' + C.CURRENCIES[c].name, selected: existing && existing.currency === c }); }));
-      f.photo = h('select', { id: 'gv-photo' }, Object.keys(PHOTO_LABEL).map(function (k) { return h('option', { value: k, text: PHOTO_LABEL[k], selected: existing && existing.photo === k }); }));
+      f.photo = real ? null : h('select', { id: 'gv-photo' }, Object.keys(PHOTO_LABEL).map(function (k) { return h('option', { value: k, text: PHOTO_LABEL[k], selected: existing && existing.photo === k }); }));
       var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
       var ids = { title: 'gv-title', notes: 'gv-notes', priority: 'gv-priority', url: 'gv-url', price: 'gv-price', currency: 'gv-currency' };
       var form = h('form', { class: 'card gv-form', novalidate: '', onsubmit: function (e) {
         e.preventDefault(); msg.textContent = ''; Object.keys(ids).forEach(function (k) { setErr(ids[k], ''); });
-        var body = { listId: listId, itemId: existing && existing.id, title: f.title.value, notes: f.notes.value, priority: f.priority.value, url: f.url.value, price: f.price.value, currency: f.currency.value, photo: f.photo.value };
+        var body = { listId: listId, itemId: existing && existing.id, title: f.title.value, notes: f.notes.value, priority: f.priority.value, url: f.url.value, price: f.price.value, currency: f.currency.value };
+        if (f.photo) body.photo = f.photo.value;
         api('itemSave', body).then(function (r) {
           if (r.stale) return;
           if (!r.ok) { var first = null; Object.keys(r.fields || {}).forEach(function (k) { setErr(ids[k], r.fields[k]); if (!first) first = document.getElementById(ids[k]); }); msg.textContent = r.message; if (first) first.focus(); return; }
@@ -305,7 +328,7 @@
         field('gv-title', 'Title', f.title), field('gv-notes', 'Notes (optional)', f.notes, '', 'Anything that helps someone pick the right one: size, color, model, where you saw it.'), field('gv-priority', 'How much do you want it?', f.priority),
         field('gv-url', 'Link (optional)', f.url, '', 'A web address you choose. Family Circle does not visit it or look anything up.'),
         h('div', { class: 'gv-pair' }, field('gv-price', 'Estimated price (optional)', f.price, '', 'A guess for reference. Not a charge.'), field('gv-currency', 'Currency', f.currency)),
-        field('gv-photo', 'Photo (optional)', f.photo, '', 'Leave this blank and the picture can come from your link. Real photo upload is not part of this preview, so this only picks a sample picture.'),
+        f.photo ? field('gv-photo', 'Photo (optional)', f.photo, '', 'Leave this blank and the picture can come from your link. Real photo upload is not part of this preview, so this only picks a sample picture.') : null,
         msg, h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-save', text: 'Save item' }), h('a', { class: 'btn secondary', href: '#/giving/list/' + listId, text: 'Cancel' })));
       return h('div', { class: 'gv-page' }, backLink('#/giving/list/' + listId, 'Back to wishlist'), form);
     }
@@ -318,7 +341,13 @@
       main.setAttribute('aria-busy', 'true');
       var fin = function (node) { if (mine !== token) return; main.removeAttribute('aria-busy'); put(node); };
       if (st.familyId === 'none') return fin(blocked({ error: 'not_available' }));
-      if (rt.name === 'home') return api('home').then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); st.data = r; fin(renderHome(r)); });
+      if (rt.name === 'home') return api('home').then(function (r) {
+        if (r.stale) return;
+        if (!r.ok && real && r.error === 'not_available') return api('status').then(function (s) { if (s.stale) return; fin(s.ok && !s.enabled ? renderOff(s) : blocked(r)); });
+        if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r));
+        st.data = r; var page = renderHome(r); fin(page);
+        if (real) api('status').then(function (s) { if (s.stale || mine !== token || !s.ok || !s.canTurnOn || !page.isConnected) return; page.appendChild(ownerSwitchPanel()); });
+      });
       if (rt.name === 'listNew') return api('home').then(function (r) { if (r.stale) return; if (!r.ok) return fin(blocked(r)); fin(r.canCreateList ? renderListForm(null, r.me.adult) : limitMsg()); });
       if (rt.name === 'listEdit' || rt.name === 'itemNew' || rt.name === 'itemEdit' || rt.name === 'list') {
         return api('listGet', { listId: rt.id }).then(function (r) {
@@ -341,9 +370,12 @@
         if (r.stale || mineToken !== token) return;
         if (!r.ok) { if (rt.name !== 'home') { main.textContent = ''; main.appendChild(blocked(r)); } return; }
         main.removeAttribute('aria-busy');
-        main.textContent = ''; main.appendChild(rt.name === 'home' ? renderHome(r) : renderList(r, rt.id)); window.scrollTo(0, y);
+        var node = rt.name === 'home' ? renderHome(r) : renderList(r, rt.id);
+        main.textContent = ''; main.appendChild(node); window.scrollTo(0, y);
+        if (real && rt.name === 'home') api('status').then(function (s) { if (s.stale || mineToken !== token || !s.ok || !s.canTurnOn || !node.isConnected) return; node.appendChild(ownerSwitchPanel()); });
       });
     }
+    if (real) { render(); return { state: st, render: render, refresh: refresh, destroy: function () { token++; st.gen++; } }; }
     window.addEventListener('hashchange', render);
     drawControls(); render();
     return { state: st, render: render, refresh: refresh };

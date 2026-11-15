@@ -1,0 +1,48 @@
+/* Giving Center screens: layout only (classes only, the page CSP is style-src 'self'). Colours come from the app's tokens.
+ * Used by the real app and by the preview. Copyright (C) 2026 Leia. GNU GPL v3 or later (see LICENSE-GPL-3.0.txt). */
+[hidden] { display: none !important; }
+.gv-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.gv-head h1 { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+.gv-sub { margin: 22px 0 8px; font-size: 1.1rem; }
+.gv-back { margin: 0 0 10px; }
+.gv-rows, .gv-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gv-row { display: grid; gap: 3px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); text-decoration: none !important; min-height: 44px; }
+.gv-row:hover { background: var(--surface-2); }
+.gv-row-title, .gv-item-title { overflow-wrap: anywhere; }
+.gv-badge { display: inline-block; padding: 1px 9px; border: 1px solid var(--border); border-radius: 999px; font-size: .78rem; font-weight: 700; background: var(--surface-2); color: var(--text); }
+.gv-badge.is-reserved { border-style: dashed; }
+.gv-badge.is-mine { border-color: var(--accent); }
+.gv-badge.is-warn { border-color: var(--danger); color: var(--danger); }
+.gv-badge.is-done { border-color: var(--muted); color: var(--muted); }
+.gv-badge.is-prio-high { border-color: var(--accent); }
+.gv-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.gv-item { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.gv-item.is-received { opacity: .8; }
+.gv-item-top { display: flex; gap: 12px; align-items: flex-start; }
+.gv-item-main { min-width: 0; flex: 1; }
+.gv-item-main p { margin: 4px 0; }
+.gv-photo { width: 56px; height: 56px; border-radius: 10px; flex: none; }
+.gv-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.gv-link a { overflow-wrap: anywhere; }
+.gv-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 0; }
+.gv-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 14px; margin: 10px 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); font-weight: 600; }
+.gv-form h1 { margin-top: 0; }
+.gv-field { margin-bottom: 4px; }
+.gv-fielderr, .gv-formmsg { color: var(--danger); font-weight: 600; margin: 4px 0; }
+.gv-fielderr:empty, .gv-formmsg:empty { display: none; }
+.gv-pair { display: grid; gap: 0 12px; grid-template-columns: 2fr 1fr; }
+@media (max-width: 420px) { .gv-pair { grid-template-columns: 1fr; } }
+.gv-field input[aria-invalid="true"], .gv-field textarea[aria-invalid="true"], .gv-field select[aria-invalid="true"] { border-color: var(--danger); }
+.gv-dialog h2 { margin-top: 0; }
+.gv-blocked h1 { margin-top: 0; }
+.gv-photo.is-from-link { opacity: .9; }
+.gv-linkpic { margin: 2px 0; }
+
+.gv-badge.is-adults { border-color: var(--accent); color: var(--accent-text); }
+.gv-panel { margin: 18px 0; }
+.gv-panel .gv-sub { margin-top: 0; }
+.gv-member { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.gv-report { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.gv-report p { margin: 4px 0; overflow-wrap: anywhere; }
+.gv-row .gv-badge { justify-self: start; }
+.gv-off h1 { margin-top: 0; }

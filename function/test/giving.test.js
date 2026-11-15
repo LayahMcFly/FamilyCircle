@@ -111,7 +111,7 @@ const keysOf = (o, out = []) => { if (o && typeof o === 'object') for (const [k,
 const call404 = async (w, u, a, b) => { const r = await w.call(u, a, b); assert.equal(r.status, 404); return r.json; };
 
 test('the rules match the preview you tested: same answers for prices, links, items, reports', async () => {
-  const P = createRequire(import.meta.url)('../../giving-preview/giving-core.js');
+  const P = createRequire(import.meta.url)('../../giving-core.js');
   const M = await import('../src/giving-rules.js');
   for (const x of ['25', '24.99', '1,250.00', '1,5', '0', '', 'abc', '100000', '100001', ' 12.5 ']) assert.equal(M.parseAmount(x), P.parseAmount(x), 'price ' + x);
   for (const x of ['https://a.example.com/x', 'javascript:alert(1)', 'http://u:p@a.com', 'data:text/html,hi', 'a b.com', '', 'https://nodot']) assert.equal(M.cleanUrl(x), P.cleanUrl(x), 'url ' + x);

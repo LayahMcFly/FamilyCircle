@@ -17,7 +17,7 @@
  *    only "reserved", never who.
  *  - Anyone who can see a list or item, and does not own it, can report it. Owners and admins who are adults review reports. */
 (function (root, factory) {
-  var C = typeof module === 'object' && module.exports ? require('./giving-core.js') : root.GivingCore;
+  var C = typeof module === 'object' && module.exports ? require('../giving-core.js') : root.GivingCore;
   var api = factory(C);
   if (typeof module === 'object' && module.exports) module.exports = api; else root.GivingFake = api;
 })(typeof self !== 'undefined' ? self : this, function (C) {

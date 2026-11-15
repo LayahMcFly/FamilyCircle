@@ -1,4 +1,4 @@
-/* Giving Center rules for the real backend. Copied from giving-preview/giving-core.js (the version you tested on your phone) and
+/* Giving Center rules for the real backend. Copied from giving-core.js (the version you tested on your phone) and
  * converted to a module. function/test/giving.test.js checks that both copies give the same answers, so they cannot drift apart.
  * Copyright (C) 2026 Leia. GNU GPL v3 or later (see LICENSE-GPL-3.0.txt). */
   var LIMITS = { lists: 10, items: 100, listName: 60, title: 120, notes: 1000, url: 500, maxPrice: 100000 };

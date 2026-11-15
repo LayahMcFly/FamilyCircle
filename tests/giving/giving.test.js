@@ -2,7 +2,7 @@
  * Run:  node --test tests/giving/        No dependencies. Nothing here touches a network or any Appwrite project. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../../giving-preview/giving-core.js');
+const C = require('../../giving-core.js');
 const F = require('../../giving-preview/giving-fake-server.js');
 
 /* Family A: owner (adult), admin Ada (adult), tree admin Tess (adult), adults Olive/Bea/Bo, kid Kit, member Gus (adult, removed later). Family B: Xan. */

@@ -45,6 +45,7 @@ Branch `giving-center-preview` (from `main` at v1.51.99.22, commit `bb6ed16`). S
 - [x] Adult flag location proposed in the design (profiles column, managers only, never self); needs your yes
 - [x] Step 4: real backend design written (`GIVING-CENTER-BACKEND-DESIGN.md`). approved by you 2026-11-14 (third answer: removed members' lists hidden 30 days, then deleted)
 - [x] Step 5: real backend built and tested (23 new tests), OFF for every family. Not yet uploaded: tables and function are your actions (`GIVING-CENTER-SETUP.md`)
+- [x] Step 5b: real screens built and tested (`giving-ui.js` real mode, `giving.js`, `giving.css`, route `#/giving`), version 1.51.99.24. Hub card still "Planned". On the branch only, not merged
 - [ ] Step 6: real photo upload. Needs approval
 - [ ] Step 7: staged turn-on for real family members. Needs approval
 - [ ] Hub card still says Planned and is not clickable (change only after approval)
@@ -70,9 +71,9 @@ Tree-name work, role-membership binding, Events, Recipes and Family Board migrat
 ## File plan (all new, no existing file changed)
 
 - `giving-preview/index.html`: preview page with its own CSP (`connect-src 'none'`), banner, controls.
-- `giving-preview/giving-core.js`: validation and rules shared by the fake server, the screens and the tests (text, safe links, estimated prices with currency, limits).
+- `giving-core.js` (moved to the repository root so the real app can use it): validation and rules shared by the fake server, the screens and the tests (text, safe links, estimated prices with currency, limits).
 - `giving-preview/giving-fake-server.js`: in-memory fake of the proposed server actions, with synthetic accounts and families.
-- `giving-preview/giving-ui.js`: the screens.
+- `giving-ui.js` (moved to the repository root; the preview and the real app both use it): the screens.
 - `giving-preview/giving-preview.js`: starts it.
 - `giving-preview/giving.css`: layout only.
 - `tests/giving/giving.test.js`: rule tests (Node, no dependencies).
@@ -125,3 +126,11 @@ Defaults shown are what the preview does. They are proposals, not approvals.
 Kids can have wishlists, see public lists and report. They cannot reserve, cannot see adults-only lists, and never receive reservation information. Reports are reviewed by owners, admins and family tree admins who are marked as adults. The owner of a reported item is told only that an admin removed it, never who reported it.
 
 Later phases (requests and pledges, gift exchanges, emergency assistance, processed contributions) stay mapped only and are not built.
+
+## Step 5b: real screens (2026-11-14)
+
+- Files: `giving-core.js`, `giving-ui.js` (moved out of `giving-preview/`), `giving.css` (the screen styles, shared with the preview), `giving.js` (the adapter to the function).
+- The preview still works the same: `giving-preview/index.html` loads the shared files from the root. Its own CSS now holds only the preview page shell.
+- Real mode differences: no sample banner, no viewer switcher, no photo picker, owner-only turn on/off buttons, "not turned on" screen.
+- Reached only at `#/giving`. The Hub card stays "Planned" and does not link there.
+- Tests: `tests/browser/giving-real.spec.js` (37 checks: real screens + real function code on an in-memory database), `tests/browser/giving-in-app.spec.js` (7 checks: wiring into the app), preview 81 checks and rule tests 22 unchanged and passing.

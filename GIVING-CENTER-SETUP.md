@@ -51,7 +51,7 @@ Console > Functions > family-api > Deployments > Create deployment > Manual. Ent
 
 ## 5. Turning it on for one family (Step 7, not yet)
 
-There is no screen for this yet. The owner turns it on by an action call (`givingSetEnabled`, `enabled: true`) that I will wire into a button at Step 7. To turn it off again, the same call with `enabled: false` hides it at once, with no upload.
+The real screens exist (open `#/giving` in the app). They are not linked from the Hub (the card still says "Planned"). When Giving Center is off, the **family owner** sees a **Turn on Giving Center** button there, and everyone else is told it is not turned on. Once it is on, the owner sees a **Turn off Giving Center** button at the bottom of the home screen. Turning it off hides everything at once, deletes nothing, and needs no upload. Turning it on only works after the tables in sections 1 to 3 exist.
 
 ## 6. What the backend does, in plain words
 
@@ -61,7 +61,7 @@ There is no screen for this yet. The owner turns it on by an action call (`givin
 - Two people reserving the same item at once: one wins, the other is told "Someone has already reserved this item."
 - Reports go to owners and tree admins who are adults. The list owner is only told "removed by a family admin".
 - If someone leaves the family, their lists are hidden at once and deleted after 30 days. Their reservations are released. If they are invited back, they return as a kid and their hidden lists do not come back.
-- No photos yet (Step 6). Links are saved as plain text and only `https://` and `http://` are accepted.
+- No photos yet (Step 6). The item form has no photo picker; a link shows a plain placeholder tile (the site's first letter), nothing is fetched. Links are saved as plain text and only `https://` and `http://` are accepted.
 
 ## 7. Known limits
 
