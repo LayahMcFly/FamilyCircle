@@ -11,7 +11,8 @@ import { createApi } from './logic.js';
 const cfg = {
   databaseId: process.env.DATABASE_ID || 'family',
   bucketId: process.env.BUCKET_ID || 'family-media',
-  givingBucketId: process.env.GIVING_BUCKET_ID || 'family-media',   // the project's one bucket (the plan allows one); photo files are created with no permissions, so only the function can read them
+  etsyApiKey: process.env.ETSY_API_KEY || '',
+    givingBucketId: process.env.GIVING_BUCKET_ID || 'family-media',   // the project's one bucket (the plan allows one); photo files are created with no permissions, so only the function can read them
   maxOwnedFamilies: Number(process.env.MAX_OWNED_FAMILIES || 3),
   maxVideoMB: Number(process.env.MAX_VIDEO_MB || 15),
   familyStorageMB: Number(process.env.FAMILY_STORAGE_MB || 500),

@@ -55,7 +55,7 @@ export async function vet(rawUrl, lookup = dns.lookup) {
   return { url: u, host, ip: answers[0].address, family: answers[0].family };
 }
 
-function get(target, { maxBytes, accept }) {
+export function get(target, { maxBytes, accept }) {
   return new Promise((resolve, reject) => {
     const req = https.request({
       protocol: 'https:', hostname: target.host, port: 443, path: target.url.pathname + target.url.search, method: 'GET',

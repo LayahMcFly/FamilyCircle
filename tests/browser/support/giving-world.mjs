@@ -6,7 +6,9 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 const PIC = fs.readFileSync(fileURLToPath(new URL('./pic.gif', import.meta.url)));
 // Stand-in for the shop page lookup: no internet in tests. "nopic" links have no picture, everything else gives the fixture picture.
-const EXTRA_CFG = { linkPicture: async (url) => { if (/nopic/.test(url)) throw Object.assign(new Error('none'), { linkPicture: true }); return { mime: 'image/gif', bytes: PIC }; } };
+const JPG = fs.readFileSync(fileURLToPath(new URL('./pic.jpg', import.meta.url)));
+// Etsy's API stand-in: any listing has one picture.
+const EXTRA_CFG = { etsyApiKey: 'test:key', etsyDeps: { lookup: async () => [{ address: '93.184.216.34', family: 4 }], getApi: async () => ({ status: 200, body: JSON.stringify({ results: [{ rank: 1, url_170x135: 'https://i.etsystatic.com/t.jpg', url_570xN: 'https://i.etsystatic.com/f.jpg' }] }) }), get: async () => ({ status: 200, headers: {}, body: JPG }) }, linkPicture: async (url) => { if (/nopic/.test(url)) throw Object.assign(new Error('none'), { linkPicture: true }); return { mime: 'image/gif', bytes: PIC }; } };
 
 /* ---------- in-memory fake of the server services (queries, unique keys, permissions) ---------- */
 function makeWorld() {
