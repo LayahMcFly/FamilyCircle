@@ -4,14 +4,49 @@ Branch `giving-center-preview` (from `main` at v1.51.99.22, commit `bb6ed16`). S
 
 ## Status
 
-| Step | Implementation | Deployed / production effect | My manual verification |
+| Step | Implementation | Deployed / production effect | Your manual verification |
 |---|---|---|---|
-| 0 Inspect and plan | Done (this file) | None | Waiting for your review |
-| 1 Synthetic UI preview | Built on this branch | None | Not yet tested by you |
-| 2 Wishlist behavior (fake backend) | Built on this branch | None | Not yet tested by you |
-| 3 Reservations and surprise privacy (fake backend) | Built on this branch | None | Not yet tested by you |
+| 0 Inspect and plan | Done | None | Waiting for your review |
+| 1 Synthetic UI preview | Done, commit `6613f08` | None | Not yet tested by you |
+| 2 Wishlist behavior (fake backend) | Done | None | Not yet tested by you |
+| 3 Reservations and surprise privacy (fake backend) | Done | None | Not yet tested by you |
 | 4 Real backend design and approval gate | Not started | None | n/a |
 | 5 to 7 | Not started, need your approvals | None | n/a |
+
+## Checklist
+
+**Finished (built and tested on my side only)**
+- [x] Step 0: inspected the repo, wrote the plan, file list and 12 decisions
+- [x] Preview page with a strict "no network" rule and a banner that says it is sample data
+- [x] Sample people: a wishlist owner, two gift-givers, two accounts without access, a removed member, and a second family
+- [x] Wishlists: create, rename, delete (with confirmation), up to 10 per person
+- [x] Items: add, edit, delete, mark received and not received, up to 100 per list
+- [x] Item fields: title, notes, priority, optional link, estimated price with a currency, simulated photo
+- [x] Safe links only (https or http), prices parsed strictly (a bug that read "1,5" as 15 was found and fixed)
+- [x] Estimated totals shown per currency, never mixed, labeled reference only
+- [x] Reserve and release, with only one active reservation per item
+- [x] Surprise privacy: the list owner never receives any reservation information; the buyer sees their own; other givers see "Reserved" with no name
+- [x] "Changed since you reserved" flag for title, link and price edits
+- [x] Received or deleted items release the reservation and the buyer gets a notice
+- [x] Removed buyer releases reservations; removed owner makes lists unreachable; re-invite starts clean
+- [x] No access for accounts without eligibility, no owner bypass; other family and made-up ids get the same plain answer
+- [x] Network conditions: slow, server error, fail once, access denied
+- [x] Switching person or family clears the screen and drops late answers
+- [x] Phone and desktop screenshots, no sideways scroll, every control themed
+- [x] 16 rule tests and 51 browser checks passing
+- [x] Pushed to branch `giving-center-preview` (nothing deployed)
+
+**Not finished**
+- [ ] You have not yet tested the preview (checklist F in the handoff)
+- [ ] Your answers on the 12 decisions below, especially which accounts are eligible
+- [ ] Step 4: real backend design (tables, function actions, permissions) with risks and rollback. Needs your approval before any build
+- [ ] Step 5: real backend built and tested without turning anything on. Needs approval
+- [ ] Step 6: real photo upload. Needs approval
+- [ ] Step 7: staged turn-on for real family members. Needs approval
+- [ ] Hub card still says Planned and is not clickable (change only after approval)
+- [ ] Merge to main (not requested yet)
+- [ ] Later phases only mapped, never built: requests and pledges, gift exchanges, emergency assistance, processed contributions
+- [ ] Never in scope: shop or Printify, checkout, wallet, charging, ads or affiliate links
 
 ## Step 0 inspection record
 
