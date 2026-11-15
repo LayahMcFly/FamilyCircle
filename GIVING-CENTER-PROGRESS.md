@@ -138,3 +138,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 ## Step 6 (photos) and layout fix, 2026-11-14
 - Photo picker, viewer and remove are in the real screens; function needs `family-media` (plan allows one bucket) and the `thumb` column (added).
 - Layout fix (v1.51.99.25): side padding on the Giving screens, equal-height buttons with no stray top margin, item actions in their own row.
+- v1.51.99.26: photo picker accepts any picture type the browser can open (JPEG, PNG, WebP, GIF, BMP, AVIF, HEIC where supported), converts it to JPEG, shows original and sent sizes, and has a Picture size choice (600 / 800 / 1000 px). Photos up to 60 MB are compressed on the device to under 250 KB. An unreadable HEIC gets a plain message.
