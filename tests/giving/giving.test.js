@@ -214,3 +214,13 @@ test('seeded sample world behaves as described', () => {
   assert.equal(call('u-sam', 'home', { familyId: fam }).reservations.length, 1);
   assert.equal(call('u-quinn', 'home', { familyId: fam }).error, 'not_available'); assert.equal(call('u-olive', 'home', { familyId: fam }).error, 'not_available');
 });
+
+test('the page never fetch()es a data: address (the page security rules block it); link pictures are decoded directly', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const ui = fs.readFileSync(path.join(__dirname, '../../giving-ui.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+  assert.ok(!/fetch\(\s*r\.image/.test(ui) && !/fetch\(\s*['"]data:/.test(ui));
+  const connect = /connect-src([^;]*)/.exec(html)[1];
+  assert.ok(!/\bdata:/.test(connect), 'connect-src stays strict');
+  assert.match(ui, /function dataUrlToFile/);
+});
