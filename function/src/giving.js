@@ -3,7 +3,7 @@
  * Ported from the Giving Center preview (giving-preview/giving-fake-server.js), which you tested on your phone. Same rules, real tables.
  * Copyright (C) 2026 Leia. GNU GPL v3 or later (see LICENSE-GPL-3.0.txt).
  *
- * STATUS: built but OFF. Nothing here runs for a family until its owner turns it on (givingSetEnabled), and the app has no screen for it yet.
+ * STATUS: live, and off for each family until its owner turns it on. Nothing here runs for a family until its owner turns it on (givingSetEnabled), and the app has no screen for it yet.
  *
  * Trust model (same as board.js and chat.js)
  *  - `user` is the account Appwrite verified from the caller's own JWT. No body field can name a person.
@@ -26,17 +26,18 @@ export const GIVING_TABLES = {
   notices: 'givingNotices',           // familyId, userId, data (JSON: text)
   state: 'givingState'                // row id = familyId; enabled (bool), enabledBy, enabledAt
 };
-export const GIVING_LIMITS = { ...R.LIMITS, hideDays: 30, reportsPerPerson: 20, noticesShown: 20, perMinute: 60, thumbBytes: 10000, photoBytes: 250000 };
+export const GIVING_LIMITS = { ...R.LIMITS, hideDays: 30, reportsPerPerson: 20, noticesShown: 20, perMinute: 60, thumbBytes: 10000, photoBytes: 250000, linkPicturesPer10Min: 10 };
 const DAY = 864e5;
 const MANAGER_NOTE = 'Ask another owner or tree admin to change your own setting.';
 
-export function createGiving({ storage, photoBucket, teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable }) {
+export function createGiving({ linkPicture, storage, photoBucket, teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable }) {
   const T = GIVING_TABLES, L = GIVING_LIMITS;
   const iso = (t) => new Date(t === undefined ? now() : t).toISOString();
   const parse = (s) => { try { const v = JSON.parse(s); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } };
   const NA = () => new ApiError(404, 'not_available', 'That is not available.');
   const invalid = (errors) => new ApiError(400, 'invalid', Object.values(errors)[0] || 'Check what you entered.');
 
+  const linkHits = new Map();   // link pictures: a few tries per person per 10 minutes (in memory, so a brake)
   const hits = new Map();   // light per-person brake; it lives in memory, so it is a brake rather than a guarantee
   function brake(userId) {
     const k = userId, t = now(), from = t - 60000;
@@ -342,6 +343,25 @@ export function createGiving({ storage, photoBucket, teams, listRows, createRow,
       let bytes;
       try { bytes = await storage.getFileDownload({ bucketId: photoBucket, fileId: photoId }); } catch (e) { if (sdkCode(e) === 404) throw NA(); throw e; }
       return { photo: 'data:image/jpeg;base64,' + Buffer.from(bytes).toString('base64') };
+    },
+
+    /** Only when the person taps "Get a picture from the link": visits the link they typed (see link-picture.js for the safety rules)
+     *  and returns its preview picture. The app then shrinks it and saves it like an uploaded photo. Nothing is stored here. */
+    async givingLinkPicture({ user, body }) {
+      const c = await context(user, body.familyId);
+      const url = R.cleanUrl(body.url);
+      if (!url) throw new ApiError(400, 'invalid', 'Enter a web address that starts with https:// first.');
+      if (!linkPicture) throw new ApiError(503, 'no_picture', 'Getting pictures from links is not available right now. You can add your own photo instead.');
+      const t = now(), from = t - 600000, list = (linkHits.get(user.$id) || []).filter((x) => x > from);
+      if (list.length >= L.linkPicturesPer10Min) throw new ApiError(429, 'rate_limited', 'You have tried several links. Wait a few minutes and try again, or add your own photo.');
+      list.push(t); linkHits.set(user.$id, list); if (linkHits.size > 2000) linkHits.delete(linkHits.keys().next().value);
+      try {
+        const { mime, bytes } = await linkPicture(url);
+        return { image: 'data:' + mime + ';base64,' + Buffer.from(bytes).toString('base64'), host: new URL(url).hostname.replace(/^www\./, '') };
+      } catch (e) {
+        if (e && e.linkPicture) throw new ApiError(422, 'no_picture', 'No picture could be found at that link. Many shops do not allow this. You can add your own photo instead.');
+        throw e;
+      }
     },
 
     async givingReserve({ user, body }) {

@@ -73,7 +73,7 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await page.fill('#gv-url', 'https://shop.example.com/mug'); await page.fill('#gv-notes', 'Any shade of blue'); await page.fill('#gv-price', '24'); await page.selectOption('#gv-currency', 'USD');
   await page.locator('#gv-save').click(); await page.waitForSelector('.gv-item'); await settle();
   check('5 Item is saved with its link, price and notes', rowsOf('givingItems').length === 1 && /shop.example.com/.test(rowsOf('givingItems')[0].data), '');
-  check('5 The link shows a placeholder tile and says real pictures come later', (await page.locator('.gv-photo[data-from-link="true"]').count()) === 1 && /Pictures from links come later/.test(await text()), await text());
+  check('5 The link shows a placeholder tile and points to the photo and link-picture options', (await page.locator('.gv-photo[data-from-link="true"]').count()) === 1 && /tap .Get a picture from the link./.test(await text()), await text());
 
   // 5b photo upload, view and removal
   const png = fs.readFileSync(__dirname + '/support/pic.png');
@@ -104,6 +104,20 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   check('5c An unreadable HEIC gets a plain message with what to do', /Most Compatible/.test(await page.locator('#gv-photofile-err').innerText()), await page.locator('#gv-photofile-err').innerText());
   check('5c The size picker is themed', await page.evaluate(() => { const e = document.getElementById('gv-photosize'); const c = getComputedStyle(e); return c.borderTopWidth !== '0px' && c.borderTopLeftRadius !== '0px'; }), '');
   await page.locator('a:has-text("Cancel")').first().click(); await page.waitForSelector('.gv-item');
+  // 5d picture from the link (only when the button is tapped)
+  await page.locator('.gv-item [data-act="edit"]').first().click(); await page.waitForSelector('#gv-linkpic');
+  const linkVal = await page.locator('#gv-url').inputValue();
+  check('5d The link field says it is only visited if you tap the button', /only visits it if you tap/i.test(await page.locator('#gv-url').evaluate(e => e.closest('.gv-field').innerText)), '');
+  await page.fill('#gv-url', 'not a link'); await page.locator('#gv-linkpic').click();
+  check('5d A bad link is refused on the screen without asking the server', /starts with https/.test(await page.locator('#gv-url-err').innerText()), await page.locator('#gv-url-err').innerText());
+  await page.fill('#gv-url', 'https://nopic.example/thing'); await page.locator('#gv-linkpic').click();
+  await page.waitForFunction(() => /No picture could be found/.test(document.getElementById('gv-photofile-err').textContent), null, { timeout: 8000 });
+  check('5d A link with no picture says so and offers your own photo', /add your own photo/.test(await page.locator('#gv-photofile-err').innerText()), '');
+  await page.fill('#gv-url', 'https://shop.example/thing'); await page.locator('#gv-linkpic').click();
+  await page.waitForFunction(() => /Will be sent as a JPEG/.test(document.getElementById('gv-photoinfo').textContent), null, { timeout: 8000 });
+  check('5d A link with a picture fills the picture area and compresses it like an upload', /Picture found at shop\.example/.test(await page.locator('#gv-photoinfo').innerText()) || /Will be sent as a JPEG/.test(await page.locator('#gv-photoinfo').innerText()), await page.locator('#gv-photoinfo').innerText());
+  await page.locator('#gv-save').click(); await page.waitForSelector('.gv-photo-btn'); await settle();
+  check('5d Saving stores the picture from the link', /^data:image\/jpeg;base64,/.test(rowsOf('givingItems')[0].thumb || '') && /shop\.example/.test(rowsOf('givingItems')[0].data), JSON.stringify(rowsOf('givingItems')[0]).slice(0, 200));
   await page.locator('.gv-photo-btn').first().click(); await page.waitForSelector('.gv-bigphoto'); await page.waitForFunction(() => /^data:image\/jpeg/.test(document.querySelector('.gv-bigphoto').src) && document.querySelector('.gv-bigphoto').src.length > 500); await settle();
   check('5b Tapping the picture opens the full one', await page.locator('#gv-p-note').innerText() === '', '');
   await page.locator('#gv-p-close').click();
