@@ -10,7 +10,12 @@
   var LIMITS = { lists: 10, items: 100, listName: 60, title: 120, notes: 1000, url: 500, maxPrice: 100000 };
   var PRIORITIES = ['low', 'medium', 'high'];
   var PRIORITY_LABEL = { low: 'Nice to have', medium: 'Would like', high: 'Really want' };
-  var CURRENCIES = { USD: { symbol: '$', name: 'US dollar' }, CAD: { symbol: 'CA$', name: 'Canadian dollar' }, GBP: { symbol: '£', name: 'British pound' }, EUR: { symbol: '€', name: 'Euro' }, AUD: { symbol: 'A$', name: 'Australian dollar' } };
+  /* Two-decimal currencies only for now. Currencies with no cents (for example JPY and KRW) need their own handling and are not offered yet. */
+  var CURRENCIES = { USD: { symbol: '$', name: 'US dollar' }, CAD: { symbol: 'CA$', name: 'Canadian dollar' }, GBP: { symbol: '\u00a3', name: 'British pound' }, EUR: { symbol: '\u20ac', name: 'Euro' }, AUD: { symbol: 'A$', name: 'Australian dollar' },
+    NZD: { symbol: 'NZ$', name: 'New Zealand dollar' }, MXN: { symbol: 'MX$', name: 'Mexican peso' }, BRL: { symbol: 'R$', name: 'Brazilian real' }, INR: { symbol: '\u20b9', name: 'Indian rupee' }, PKR: { symbol: 'Rs ', name: 'Pakistani rupee' },
+    PHP: { symbol: '\u20b1', name: 'Philippine peso' }, NGN: { symbol: '\u20a6', name: 'Nigerian naira' }, ZAR: { symbol: 'R ', name: 'South African rand' }, KES: { symbol: 'KSh ', name: 'Kenyan shilling' }, AED: { symbol: 'AED ', name: 'UAE dirham' },
+    SGD: { symbol: 'S$', name: 'Singapore dollar' }, HKD: { symbol: 'HK$', name: 'Hong Kong dollar' }, CHF: { symbol: 'CHF ', name: 'Swiss franc' }, SEK: { symbol: 'kr ', name: 'Swedish krona' }, NOK: { symbol: 'kr ', name: 'Norwegian krone' },
+    DKK: { symbol: 'kr ', name: 'Danish krone' }, PLN: { symbol: 'z\u0142 ', name: 'Polish zloty' } };
   var SAFE_SCHEMES = ['https:', 'http:'];
 
   var trim = function (s) { return typeof s === 'string' ? s.replace(/^\s+|\s+$/g, '') : ''; };

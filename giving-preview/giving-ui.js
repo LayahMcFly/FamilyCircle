@@ -221,7 +221,7 @@
       f.priority = h('select', { id: 'gv-priority' }, C.PRIORITIES.map(function (p) { return h('option', { value: p, text: C.PRIORITY_LABEL[p], selected: (existing ? existing.priority : 'medium') === p }); }));
       f.url = h('input', { type: 'text', id: 'gv-url', inputmode: 'url', autocomplete: 'off', value: existing ? existing.url : '' });
       f.price = h('input', { type: 'text', id: 'gv-price', inputmode: 'decimal', autocomplete: 'off', value: existing && existing.priceCents ? (existing.priceCents / 100).toFixed(2) : '' });
-      f.currency = h('select', { id: 'gv-currency' }, h('option', { value: '', text: 'Choose currency' }), Object.keys(C.CURRENCIES).map(function (c) { return h('option', { value: c, text: c, selected: existing && existing.currency === c }); }));
+      f.currency = h('select', { id: 'gv-currency' }, h('option', { value: '', text: 'Choose currency' }), Object.keys(C.CURRENCIES).map(function (c) { return h('option', { value: c, text: c + ' \u00b7 ' + C.CURRENCIES[c].name, selected: existing && existing.currency === c }); }));
       f.photo = h('select', { id: 'gv-photo' }, Object.keys(PHOTO_LABEL).map(function (k) { return h('option', { value: k, text: PHOTO_LABEL[k], selected: existing && existing.photo === k }); }));
       var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
       var ids = { title: 'gv-title', notes: 'gv-notes', priority: 'gv-priority', url: 'gv-url', price: 'gv-price', currency: 'gv-currency' };

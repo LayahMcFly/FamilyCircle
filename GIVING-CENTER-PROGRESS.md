@@ -98,8 +98,20 @@ Defaults shown are what the preview does. They are proposals, not approvals.
 7. **Member removed.** Preview: a buyer's reservations are released; a recipient's lists become unreachable and reservations on them are void. **Re-invite:** starts clean, old reservations are not revived, and the person's old lists are not restored automatically. Confirm.
 8. **Who sees which lists.** Preview: every eligible member of the family sees every member's lists. The data model keeps room for a per-list audience later.
 9. **Limits (proposed, not approved).** 10 wishlists per person, 100 items per list, title 120 characters, notes 1000, list name 60.
-10. **Currencies (proposed).** USD, CAD, GBP, EUR, AUD, chosen per item. Estimated prices are reference only and totals are shown per currency, never added across currencies.
+10. **Currencies.** You asked for more. The preview now offers 22 two-decimal currencies (USD, CAD, GBP, EUR, AUD, NZD, MXN, BRL, INR, PKR, PHP, NGN, ZAR, KES, AED, SGD, HKD, CHF, SEK, NOK, DKK, PLN), chosen per item. Currencies with no cents, such as JPY, are not offered yet. Estimated prices are reference only and totals are shown per currency, never added across currencies.
 11. **Photos.** Preview simulates sample photos from a list; no upload. Real photos need your approval of formats, limits, private storage and cleanup first.
 12. **Reporting gap** (above): reuse chat reporting, or accept the gap for a first private release?
+
+## Your answers so far (2026-11-14)
+
+| # | Decision | Your answer |
+|---|---|---|
+| 1 | Who is eligible | "Automatically a kid" (meaning to confirm, see my questions) |
+| 2 to 7 | Surprise, expiry, abandoned, edits, received, removal | Not answered yet, explained in plain words |
+| 8 | Who sees which lists | Everyone in the family sees every list. Approved |
+| 9 | Limits | Approved: 10 lists per person, 100 items per list, title 120, notes 1000, list name 60 |
+| 10 | Currencies | Wants more. Preview now offers 22 |
+| 11 | Photos | Approved as planned: simulated in preview, real upload needs its own approval later |
+| 12 | Reporting gap | Asked what the gap is, explained |
 
 Later phases (requests and pledges, gift exchanges, emergency assistance, processed contributions) stay mapped only and are not built.
