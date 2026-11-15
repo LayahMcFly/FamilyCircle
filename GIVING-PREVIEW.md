@@ -16,4 +16,4 @@ Everything resets when you reload, or press **Reset sample data**. The page's CS
 Photos (sample pictures only), Appwrite tables, permissions, the real function, real eligibility, notifications beyond a simple in-page notice, and anything financial.
 
 ## Tests
-`node --test tests/giving/giving.test.js` (16 rule tests) and `cd tests/browser && node giving-preview.spec.js` (51 checks). These prove the simulated rules and screens, not Appwrite.
+`node --test tests/giving/giving.test.js` (22 rule tests) and `cd tests/browser && node giving-preview.spec.js` (81 checks). These prove the simulated rules and screens, not Appwrite.

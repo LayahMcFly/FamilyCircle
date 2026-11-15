@@ -52,3 +52,10 @@
 .pv input:focus-visible, .pv select:focus-visible, .pv textarea:focus-visible, .pv button:focus-visible, .pv a:focus-visible { outline: 3px solid var(--accent-text) !important; outline-offset: 2px; }
 .gv-photo.is-from-link { opacity: .9; }
 .gv-linkpic { margin: 2px 0; }
+
+.gv-badge.is-adults { border-color: var(--accent); color: var(--accent-text); }
+.gv-panel { margin: 18px 0; }
+.gv-panel .gv-sub { margin-top: 0; }
+.gv-member { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.gv-report { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.gv-report p { margin: 4px 0; overflow-wrap: anywhere; }

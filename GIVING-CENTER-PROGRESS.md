@@ -29,17 +29,20 @@ Branch `giving-center-preview` (from `main` at v1.51.99.22, commit `bb6ed16`). S
 - [x] "Changed since you reserved" flag for title, link and price edits
 - [x] Received or deleted items release the reservation and the buyer gets a notice
 - [x] Removed buyer releases reservations; removed owner makes lists unreachable; re-invite starts clean
-- [x] No access for accounts without eligibility, no owner bypass; other family and made-up ids get the same plain answer
+- [x] Adult or kid control by owners, admins and family tree admins (nobody changes their own); kids cannot reserve or see adults-only lists, no owner bypass; other family and made-up ids get the same plain answer
 - [x] Network conditions: slow, server error, fail once, access denied
 - [x] Switching person or family clears the screen and drops late answers
 - [x] Phone and desktop screenshots, no sideways scroll, every control themed
 - [x] 16 rule tests and 51 browser checks passing
+- [x] Adults-only wishlists, so a gift list for a child stays a surprise
+- [x] Reporting for lists and items, with an admin review list (dismiss or remove)
 - [x] Pushed to branch `giving-center-preview` (nothing deployed)
 
 **Not finished**
 - [ ] You have not yet tested the preview (checklist F in the handoff)
-- [ ] Your answers on the 12 decisions below, especially which accounts are eligible
+- [x] Your answers on the 12 decisions (recorded above)
 - [ ] Decide how the real version gets a picture from an item's link (you chose: keep simulated for now; settle at Step 4)
+- [ ] Settle where a member's adult flag is stored in the real app (needs a design and your approval at Step 4)
 - [ ] Step 4: real backend design (tables, function actions, permissions) with risks and rollback. Needs your approval before any build
 - [ ] Step 5: real backend built and tested without turning anything on. Needs approval
 - [ ] Step 6: real photo upload. Needs approval
@@ -102,16 +105,23 @@ Defaults shown are what the preview does. They are proposals, not approvals.
 11. **Photos.** Preview simulates sample photos from a list; no upload. Real photos need your approval of formats, limits, private storage and cleanup first.
 12. **Reporting gap** (above): reuse chat reporting, or accept the gap for a first private release?
 
-## Your answers so far (2026-11-14)
+## Your answers (2026-11-14)
 
-| # | Decision | Your answer |
-|---|---|---|
-| 1 | Who is eligible | "Automatically a kid" (meaning to confirm, see my questions) |
-| 2 to 7 | Surprise, expiry, abandoned, edits, received, removal | Not answered yet, explained in plain words |
-| 8 | Who sees which lists | Everyone in the family sees every list. Approved |
-| 9 | Limits | Approved: 10 lists per person, 100 items per list, title 120, notes 1000, list name 60 |
-| 10 | Currencies | Wants more. Preview now offers 22 |
-| 11 | Photos | Approved as planned: simulated in preview, real upload needs its own approval later |
-| 12 | Reporting gap | Asked what the gap is, explained |
+| # | Decision | Your answer | In the preview |
+|---|---|---|---|
+| 1 | Who is an adult | Everyone is a kid automatically. Owners, admins and family tree admins control someone's age. Only adults can keep a wishlist public or adults only (for example a gift for the child) | Built |
+| 2 | Surprise rule | Yes | Built |
+| 3 | No reservation expiry in v1 | Yes | Built |
+| 4 | Only the buyer releases | Yes | Built |
+| 5 | Edit flag for title, link, price | Yes | Built |
+| 6 | Received closes the reservation | Yes | Built |
+| 7 | Removal and re-invite rules | Yes (a re-invited person is a kid again) | Built |
+| 8 | Everyone sees every list | Yes, except adults-only lists | Built |
+| 9 | Limits | Approved | Built |
+| 10 | Currencies | More wanted | 22 currencies |
+| 11 | Photos | Approved as planned | Simulated, link picture simulated |
+| 12 | Reporting | Wanted for wishlists too | Built (report, admin review, dismiss or remove) |
+
+Kids can have wishlists, see public lists and report. They cannot reserve, cannot see adults-only lists, and never receive reservation information. Reports are reviewed by owners, admins and family tree admins who are marked as adults. The owner of a reported item is told only that an admin removed it, never who reported it.
 
 Later phases (requests and pledges, gift exchanges, emergency assistance, processed contributions) stay mapped only and are not built.

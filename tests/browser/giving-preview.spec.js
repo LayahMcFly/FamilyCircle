@@ -100,8 +100,8 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('B2 no photo and no link: no picture box at all', await item(page, 'Plain thing').locator('img').count() === 0, '');
     await page.locator('.gv-item', { hasText: 'fern for the window' }).locator('img:not([data-from-link])').first().waitFor();
     check('B2 a chosen sample photo still wins over the link', await item(page, 'Blue ceramic mug').locator('img[data-from-link]').count() === 0, '');
-    await who(page, 'Tia Sample'); await page.click('.gv-row:has-text("Kid wishes")'); await page.waitForSelector('#gv-items'); await settle(page);
-    check('B2 Tia\'s Bubble gun (link, no photo) shows the link picture', await item(page, 'Bubble gun').locator('img[data-from-link=true]').count() === 1, '');
+    await who(page, 'Tia Sample'); await page.click('.gv-row:has-text("wishes")'); await page.waitForSelector('#gv-items'); await settle(page);
+    check('B2 Riley\'s Bubble gun (link, no photo) shows the link picture', await item(page, 'Bubble gun').locator('img[data-from-link=true]').count() === 1, '');
     await ctx.close(); }
 
   // C. givers: Sam and Tia
@@ -122,20 +122,69 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('C back as Rae: the list looks exactly as before, with no sign of the new reservation', !/Reserved|\bTia\b|by you|reserve/i.test(await text(page)) && !/reserv|\bTia\b|u-tia/i.test(await html(page)), await text(page));
     await ctx.close(); }
 
-  // E. no access, other family, removed member
+  // E. kids, removed member, other family
   { const { ctx, page } = await open(browser);
     await who(page, 'Riley Sample'); let t = await text(page);
-    check('E Riley (no access) sees only a plain message and no wishlist data', /not available for this account/.test(t) && !/Birthday|Rae|Blue ceramic|Home projects/.test(t), t);
+    check('E Riley (a kid) sees the family\'s public lists and her own', /Riley.s wishes/.test(t) && /Birthday ideas/.test(t) && /Home projects/.test(t), t);
+    check('E a kid sees the adults-only list nowhere', !/birthday gifts|Bike helmet/.test(t), t);
+    check('E a kid gets a plain note and no reservations section', /Gift reservations are for adults/.test(t) && !/Items you reserved/.test(t), t);
+    await openList(page, 'Birthday ideas'); const lt = await text(page), lh = await html(page);
+    check('E a kid sees Rae\'s list with no Reserve button and no reservation information of any kind', !/Reserve|Reserved|by you/.test(lt) && !/data-act="reserve"|data-act="release"|reserv/i.test(lh.replace(/Gift reservations/g, '')), lt);
+    check('E a kid can still report', await page.locator('#gv-reportlist').count() === 1 && await item(page, 'Blue ceramic mug').locator('[data-act=report]').count() === 1, '');
     await who(page, 'Una Sample'); t = await text(page);
-    check('E Una (no access) is blocked the same way', /not available for this account/.test(t) && !/Birthday|Rae/.test(t), t);
+    check('E Una (a kid by default) sees the same limited view', /Gift reservations are for adults/.test(t), t);
     await who(page, 'Quinn Sample'); t = await text(page);
     check('E Quinn (removed) sees "not available" and no data', /That is not available/.test(t) && !/Birthday|Rae/.test(t), t);
     await who(page, 'Olive Example'); t = await text(page);
-    check('E Olive (family B) sees an empty Family B and none of Family A', /Giving Center/.test(t) && !/Birthday|Rae|Home projects/.test(t), t);
+    check('E Olive (family B) sees none of Family A', /Giving Center/.test(t) && !/Birthday|Rae|Home projects/.test(t), t);
     await page.goto(PREVIEW() + '#/giving/list/l1'); await page.waitForSelector('.gv-page, .gv-blocked'); await settle(page);
-    check('E Olive opening a Family A list id directly is refused the same way as a missing list', /That is not available/.test(await text(page)) && !/Birthday|mug/i.test(await text(page)), await text(page));
+    check('E Olive opening a Family A list id directly is refused', /That is not available/.test(await text(page)) && !/Birthday|mug/i.test(await text(page)), await text(page));
     await page.goto(PREVIEW() + '#/giving/list/zzz'); await settle(page); await page.waitForSelector('.gv-blocked');
     check('E a made-up list id gives the identical message', /That is not available/.test(await text(page)), await text(page));
+    await ctx.close(); }
+
+  // K. adult or kid control, adults-only lists, reporting
+  { const { ctx, page } = await open(browser);
+    await who(page, 'Rae Sample');
+    check('K a plain adult has no adult/kid panel and no reports panel', await page.locator('#gv-members').count() === 0 && await page.locator('#gv-reports').count() === 0, '');
+    await page.click('#gv-newlist'); await page.waitForSelector('#gv-name');
+    check('K an adult sees "Who can see it" when making a list', await page.locator('#gv-audience').count() === 1, '');
+    await page.fill('#gv-name', 'Surprise ideas'); await page.selectOption('#gv-audience', 'adults'); await page.click('#gv-save'); await page.waitForSelector('#gv-additem'); await settle(page);
+    check('K the new list shows "Adults only"', /Only adults can see it/.test(await text(page)) && await page.locator('.gv-badge.is-adults').count() === 1, await text(page));
+    await who(page, 'Riley Sample');
+    check('K Riley (a kid) does not see that list', !/Surprise ideas/.test(await text(page)), '');
+    await page.click('#gv-newlist'); await page.waitForSelector('#gv-name');
+    check('K a kid\'s new-list form has no audience choice', await page.locator('#gv-audience').count() === 0, '');
+    await page.goto(PREVIEW() + '#/giving'); await settle(page); await page.waitForSelector('.gv-page');
+    await who(page, 'Ada Admin');
+    check('K the admin sees the adult/kid panel', await page.locator('#gv-members').count() === 1 && await page.locator('[data-member=u-una]').innerText().then(x => /Kid/.test(x)), '');
+    check('K the admin cannot change their own setting (no button on their row)', await page.locator('[data-member=u-ada] button').count() === 0, '');
+    await page.locator('[data-member=u-una] button').click(); await page.waitForFunction(() => /Adult/.test(document.querySelector('[data-member=u-una]').innerText)); await settle(page);
+    check('K marking Una as an adult updates her row', /Adult/.test(await page.locator('[data-member=u-una]').innerText()), '');
+    await who(page, 'Una Sample');
+    check('K Una now has adult powers (reservations section, no kid note)', /Items you reserved/.test(await text(page)) && !/Gift reservations are for adults/.test(await text(page)), await text(page));
+    // reporting
+    await who(page, 'Riley Sample'); await openList(page, 'Birthday ideas');
+    await item(page, 'Blue ceramic mug').locator('[data-act=report]').click(); await page.waitForSelector('dialog[open] #gv-r-reason'); await page.waitForTimeout(400);
+    await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(250);
+    const ctrl = await page.evaluate(() => [...document.querySelectorAll('dialog select, dialog textarea')].filter(el => parseFloat(getComputedStyle(el).borderTopWidth) < 1 || parseFloat(getComputedStyle(el).borderTopLeftRadius) < 8).map(el => el.id));
+
+    check('K the report dialog\'s controls are themed', ctrl.length === 0, ctrl.join());
+    await page.click('#gv-r-send'); await settle(page);
+    check('K sending with no reason shows an error and stays open', /Choose a reason/.test(await page.locator('dialog').innerText()), '');
+    await page.selectOption('#gv-r-reason', 'unsafe'); await page.fill('#gv-r-note', 'The link looks odd'); await page.click('#gv-r-send'); await settle(page);
+    check('K a sent report closes the dialog and thanks you without naming anyone', await page.locator('dialog[open]').count() === 0 && /Thanks\. An owner or admin will take a look/.test(await page.locator('.toast').last().innerText()), '');
+    await who(page, 'Rae Sample'); await openList(page, 'Birthday ideas');
+    check('K Rae (the owner) sees nothing about the report', !/report|Riley/i.test(await text(page).then(x => x.replace(/Report this wishlist/g, ''))) && await item(page, 'Blue ceramic mug').locator('[data-act=report]').count() === 0, '');
+    await who(page, 'Ada Admin');
+    check('K the admin sees Reports (1) with the item, the reporter and the reason', /Reports \(1\)/.test(await text(page)) && /Blue ceramic mug/.test(await page.locator('#gv-reports').innerText()) && /Riley Sample/.test(await page.locator('#gv-reports').innerText()) && /Unsafe or suspicious link/.test(await page.locator('#gv-reports').innerText()), await text(page));
+    check('K the report shows no reservation information', !/Reserved|Sam Sample|by you/.test(await page.locator('#gv-reports').innerText()), '');
+    await page.locator('#gv-reports [data-act=remove]').click(); await page.waitForSelector('dialog[open]'); await page.click('#gv-d-ok'); await settle(page);
+    check('K removing clears the report', /Nothing has been reported|Reports \(0\)/.test(await text(page)), await text(page));
+    await who(page, 'Rae Sample');
+    check('K Rae is told an admin removed the item, with no name of who reported it', /removed by a family admin/.test(await text(page)) && !/Riley/.test(await page.locator('.gv-notice').innerText()), await text(page));
+    await who(page, 'Sam Sample');
+    check('K Sam, who had reserved it, is told it is gone', /Blue ceramic mug\) is no longer on the wishlist|is no longer on the wishlist/.test(await text(page)), await text(page));
     await ctx.close(); }
 
   // F. only the owner reaches forms; direct URLs
@@ -181,7 +230,9 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     const small = await page.evaluate(() => [...document.querySelectorAll('#main a.btn, #main button, #main input, #main select, #main textarea')].filter(el => el.getBoundingClientRect().height < 36).map(el => el.id || el.textContent.trim()));
     check('H ' + label + ' tap targets are at least 36px tall', small.length === 0, small.join());
     await who(page, 'Tia Sample'); await openList(page, 'Birthday ideas'); await page.screenshot({ path: path.join(shots, 'giving-' + label + '-giver-list.png'), fullPage: true });
-    await who(page, 'Riley Sample'); await page.screenshot({ path: path.join(shots, 'giving-' + label + '-no-access.png'), fullPage: true });
+    await who(page, 'Riley Sample'); await page.screenshot({ path: path.join(shots, 'giving-' + label + '-kid.png'), fullPage: true });
+    await who(page, 'Ada Admin'); await page.screenshot({ path: path.join(shots, 'giving-' + label + '-admin.png'), fullPage: true });
+    check('H ' + label + ' admin home has no sideways scroll', !(await overflow(page)), '');
     await ctx.close(); }
 
   await browser.close(); server.close();

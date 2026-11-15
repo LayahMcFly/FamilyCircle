@@ -119,6 +119,8 @@
       page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Giving Center', 'data-focus': '' }),
         r.canCreateList ? h('a', { class: 'btn small', href: '#/giving/list/new', id: 'gv-newlist', text: 'New wishlist' }) : null));
       page.appendChild(h('p', { class: 'muted', text: 'Wishlists for the people in your family. Prices are estimates for reference only. Nothing here is bought or paid through Family Circle.' }));
+      if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidnote', text: 'You can make your own wishlist and see the family’s lists. Gift reservations are for adults.' }));
+      if (r.canModerate) page.appendChild(reportsPanel(r.openReports));
       (r.notices || []).forEach(function (n) {
         page.appendChild(h('div', { class: 'gv-notice', role: 'status' }, h('span', { text: n.text }),
           h('button', { type: 'button', class: 'btn ghost small', 'data-notice': n.id, text: 'Dismiss', onclick: function () { api('noticeDismiss', { noticeId: n.id }).then(function (x) { if (x.stale) return; refresh(); }); } })));
@@ -129,8 +131,10 @@
       else page.appendChild(listRows(mine));
       page.appendChild(h('h2', { class: 'gv-sub', text: 'Family wishlists' }));
       if (!others.length) page.appendChild(h('p', { class: 'muted', text: 'No one else has shared a wishlist yet.' })); else page.appendChild(listRows(others));
-      page.appendChild(h('h2', { class: 'gv-sub', text: 'Items you reserved' }));
-      if (!r.reservations.length) page.appendChild(h('p', { class: 'muted', id: 'gv-noresv', text: 'You have not reserved anything. Only you can see your reservations.' }));
+      if (r.canManageAges) page.appendChild(membersPanel());
+      if (r.me.adult) page.appendChild(h('h2', { class: 'gv-sub', text: 'Items you reserved' }));
+      if (!r.me.adult) { /* kids have no reservations section */ }
+      else if (!r.reservations.length) page.appendChild(h('p', { class: 'muted', id: 'gv-noresv', text: 'You have not reserved anything. Only you can see your reservations.' }));
       else page.appendChild(h('ul', { class: 'gv-rows', id: 'gv-resv' }, r.reservations.map(function (x) {
         return h('li', null, h('a', { class: 'gv-row', href: '#/giving/list/' + x.listId, 'data-resv': x.itemId },
           h('strong', { text: x.title }), h('span', { class: 'muted', text: 'On ' + x.ownerName + '’s wishlist' }),
@@ -140,10 +144,66 @@
     }
     function listRows(ls) {
       return h('ul', { class: 'gv-rows' }, ls.map(function (l) {
-        var meta = l.mine ? l.itemCount + ' to give' + (l.receivedCount ? ', ' + l.receivedCount + ' received' : '') : l.availableCount + ' of ' + l.itemCount + ' still available';
+        var meta = l.mine ? l.itemCount + ' to give' + (l.receivedCount ? ', ' + l.receivedCount + ' received' : '') : (l.availableCount === undefined ? l.itemCount + ' items' : l.availableCount + ' of ' + l.itemCount + ' still available');
         return h('li', null, h('a', { class: 'gv-row', href: '#/giving/list/' + l.id, 'data-list': l.id },
-          h('strong', { class: 'gv-row-title', text: l.name }), h('span', { class: 'muted', text: l.mine ? 'Yours' : l.ownerName }), h('span', { class: 'muted', text: meta })));
+          h('strong', { class: 'gv-row-title', text: l.name }), h('span', { class: 'muted', text: l.mine ? 'Yours' : l.ownerName }), l.audience === 'adults' ? badge('Adults only', 'is-adults') : null, h('span', { class: 'muted', text: meta })));
       }));
+    }
+
+    /* ---------- who is an adult (owners, admins and family-tree admins only) ---------- */
+    function membersPanel() {
+      var box = h('section', { class: 'card gv-panel', id: 'gv-members' }, h('h2', { class: 'gv-sub', text: 'Family members: adult or kid' }),
+        h('p', { class: 'muted', text: 'Everyone is a kid until an owner, admin or family tree admin marks them as an adult. Adults can reserve gifts and keep a wishlist adults only.' }));
+      var ul = h('ul', { class: 'gv-rows' }); box.appendChild(ul);
+      api('members').then(function (r) {
+        if (r.stale || !r.ok) return;
+        r.members.forEach(function (m) {
+          ul.appendChild(h('li', { class: 'gv-member', 'data-member': m.userId }, h('span', null, h('strong', { text: m.name }), ' ', badge(m.adult ? 'Adult' : 'Kid', m.adult ? 'is-mine' : '')),
+            m.self ? h('span', { class: 'muted', text: 'This is you' }) : h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'age', text: m.adult ? 'Mark as kid' : 'Mark as adult', 'aria-label': (m.adult ? 'Mark as kid: ' : 'Mark as adult: ') + m.name,
+              onclick: function () { api('memberSetAdult', { userId: m.userId, adult: !m.adult }).then(function (x) { if (x.stale) return; if (!x.ok) return toast(x.message); toast(m.name + ' is now marked as ' + (m.adult ? 'a kid.' : 'an adult.')); refresh(); }); } })));
+        });
+      });
+      return box;
+    }
+    function reportsPanel(count) {
+      var box = h('section', { class: 'card gv-panel', id: 'gv-reports' }, h('h2', { class: 'gv-sub', text: 'Reports (' + count + ')' }));
+      if (!count) { box.appendChild(h('p', { class: 'muted', text: 'Nothing has been reported.' })); return box; }
+      var ul = h('ul', { class: 'gv-rows' }); box.appendChild(ul);
+      api('reports').then(function (r) {
+        if (r.stale || !r.ok) return;
+        r.reports.forEach(function (x) {
+          ul.appendChild(h('li', { class: 'gv-report', 'data-report': x.id },
+            h('strong', { text: (x.kind === 'list' ? 'Wishlist: ' : 'Item: ') + x.title }),
+            h('p', { class: 'muted', text: 'On ' + x.ownerName + '’s list “' + x.listName + '”. Reported by ' + x.reporterName + ': ' + x.reasonLabel + '.' }),
+            x.note ? h('p', { class: 'gv-notes', text: 'Their note: ' + x.note }) : null,
+            x.notes ? h('p', { class: 'gv-notes', text: 'Notes on the item: ' + x.notes }) : null,
+            x.url ? h('p', { class: 'muted', text: 'Link: ' + C.hostOf(x.url) }) : null,
+            h('div', { class: 'gv-actions' },
+              h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'dismiss', text: 'Dismiss report', onclick: function () { api('reportResolve', { reportId: x.id, action: 'dismiss' }).then(function (y) { if (y.stale) return; toast('Report dismissed.'); refresh(); }); } }),
+              h('button', { type: 'button', class: 'btn danger small', 'data-act': 'remove', text: x.kind === 'list' ? 'Remove wishlist' : 'Remove item', onclick: function () {
+                confirmDialog('Remove this?', '“' + x.title + '” will be removed and the owner is told an admin removed it. They are not told who reported it.', 'Remove', function () { api('reportResolve', { reportId: x.id, action: 'remove' }).then(function (y) { if (y.stale) return; toast('Removed.'); refresh(); }); }); } }))));
+        });
+      });
+      return box;
+    }
+    function reportDialog(kind, targetId, title) {
+      var d = h('dialog', { class: 'gv-dialog', 'aria-labelledby': 'gv-r-h' });
+      var reason = h('select', { id: 'gv-r-reason' }, h('option', { value: '', text: 'Choose a reason' }), Object.keys(C.REPORT_REASONS).map(function (k) { return h('option', { value: k, text: C.REPORT_REASONS[k] }); }));
+      var note = h('textarea', { id: 'gv-r-note', rows: 3, placeholder: 'For example: the link goes somewhere that is not a store' });
+      var msg = h('p', { class: 'gv-formmsg', role: 'alert' });
+      var send = h('button', { type: 'submit', class: 'btn', id: 'gv-r-send', text: 'Send report' });
+      var form = h('form', { novalidate: '', onsubmit: function (e) {
+        e.preventDefault(); msg.textContent = ''; setErr('gv-r-reason', ''); send.disabled = true;
+        api('report', { kind: kind, targetId: targetId, reason: reason.value, note: note.value }).then(function (r) {
+          send.disabled = false; if (r.stale) { d.close(); return; }
+          if (!r.ok) { if (r.fields && r.fields.reason) setErr('gv-r-reason', r.fields.reason); msg.textContent = r.fields ? '' : r.message; return; }
+          d.close(); toast(r.message);
+        });
+      } }, field('gv-r-reason', 'Why are you reporting this?', reason), field('gv-r-note', 'More detail (optional)', note), msg,
+        h('div', { class: 'gv-actions' }, h('button', { type: 'button', class: 'btn secondary', id: 'gv-r-cancel', text: 'Cancel', onclick: function () { d.close(); } }), send));
+      d.appendChild(h('h2', { id: 'gv-r-h', text: 'Report this' })); d.appendChild(h('p', { class: 'muted', text: '“' + title + '”. An owner or admin will review it. The person who wrote it is not told who reported it.' })); d.appendChild(form);
+      d.addEventListener('close', function () { d.remove(); });
+      document.body.appendChild(d); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); reason.focus();
     }
 
     /* ---------- one list ---------- */
@@ -167,6 +227,8 @@
           onclick: function () { api('itemReceived', { itemId: it.id, received: !it.received }).then(function (r) { if (r.stale) return; if (!r.ok) return showErr(r); toast(it.received ? 'Moved back to your list.' : 'Marked as received.'); refresh(); }); } }));
         acts.appendChild(h('button', { type: 'button', class: 'btn danger small', 'data-act': 'delete', text: 'Delete', 'aria-label': 'Delete ' + it.title,
           onclick: function () { confirmDialog('Delete this item?', '“' + it.title + '” will be removed from your wishlist.', 'Delete item', function () { api('itemDelete', { itemId: it.id }).then(function (r) { if (r.stale) return; if (!r.ok) return showErr(r); toast('Item deleted.'); refresh(); }); }); } }));
+      } else if (it.kid) {
+        /* kids see no reservation controls at all */
       } else if (it.reservedByMe) {
         acts.appendChild(h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'release', text: 'Release reservation', 'aria-label': 'Release reservation: ' + it.title,
           onclick: function () { api('release', { itemId: it.id }).then(function (r) { if (r.stale) return; if (!r.ok) return showErr(r); toast('Reservation released.'); refresh(); }); } }));
@@ -174,6 +236,7 @@
         acts.appendChild(h('button', { type: 'button', class: 'btn small', 'data-act': 'reserve', text: 'Reserve this gift', 'aria-label': 'Reserve this gift: ' + it.title,
           onclick: function () { api('reserve', { itemId: it.id }).then(function (r) { if (r.stale) return; if (!r.ok) { toast(r.message); return refresh(); } toast('Reserved. Only you can see this.'); refresh(); }); } }));
       }
+      if (!it.mine) acts.appendChild(h('button', { type: 'button', class: 'btn ghost small', 'data-act': 'report', text: 'Report', 'aria-label': 'Report: ' + it.title, onclick: function () { reportDialog('item', it.id, it.title); } }));
       if (acts.childNodes.length) li.appendChild(acts);
       return li;
     }
@@ -183,7 +246,9 @@
       page.appendChild(backLink('#/giving', 'Back to Giving Center'));
       page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: l.name, 'data-focus': '' }),
         l.mine ? h('a', { class: 'btn small', href: '#/giving/list/' + id + '/item/new', id: 'gv-additem', text: 'Add an item' }) : null));
-      page.appendChild(h('p', { class: 'muted', text: l.mine ? 'Your wishlist. Family members can see what is on it.' : l.ownerName + '’s wishlist. Reserving is private: ' + l.ownerName + ' will not know who reserved what.' }));
+      page.appendChild(h('p', { class: 'muted', text: l.mine ? (l.audience === 'adults' ? 'Your wishlist. Only adults can see it.' : 'Your wishlist. Family members can see what is on it.') : (r.me.adult ? l.ownerName + '’s wishlist. Reserving is private: ' + l.ownerName + ' will not know who reserved what.' : l.ownerName + '’s wishlist.') }));
+      if (l.audience === 'adults') page.appendChild(h('p', null, badge('Adults only', 'is-adults')));
+      if (!l.mine) page.appendChild(h('p', null, h('button', { type: 'button', class: 'btn ghost small', id: 'gv-reportlist', text: 'Report this wishlist', onclick: function () { reportDialog('list', id, l.name); } })));
       page.appendChild(h('div', { class: 'gv-errslot' }));
       if (l.mine) page.appendChild(h('div', { class: 'gv-actions' },
         h('a', { class: 'btn secondary small', href: '#/giving/list/' + id + '/edit', id: 'gv-renamelist', text: 'Rename wishlist' }),
@@ -201,15 +266,17 @@
     function field(id, label, control, err, hint) {
       return h('div', { class: 'gv-field' }, h('label', { for: id, text: label }), control, hint ? h('p', { class: 'hint', id: id + '-hint', text: hint }) : null, h('p', { class: 'gv-fielderr', id: id + '-err', role: 'alert', text: err || '' }));
     }
-    function renderListForm(existing) {
+    function renderListForm(existing, adult) {
+      var audience = adult ? h('select', { id: 'gv-audience' }, Object.keys(C.AUDIENCES).map(function (k) { return h('option', { value: k, text: C.AUDIENCES[k], selected: (existing ? existing.audience : 'everyone') === k }); })) : null;
       var name = h('input', { type: 'text', id: 'gv-name', maxlength: C.LIMITS.listName * 2, autocomplete: 'off', value: existing ? existing.name : '' }), msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
       var form = h('form', { class: 'card gv-form', novalidate: '', onsubmit: function (e) {
         e.preventDefault(); msg.textContent = ''; setErr('gv-name', '');
-        api('listSave', { listId: existing && existing.id, name: name.value }).then(function (r) {
+        api('listSave', { listId: existing && existing.id, name: name.value, audience: audience ? audience.value : undefined }).then(function (r) {
           if (r.stale) return; if (!r.ok) { if (r.fields && r.fields.name) setErr('gv-name', r.fields.name); msg.textContent = r.message; return; }
           toast('Wishlist saved.'); go('#/giving/list/' + r.list.id);
         });
-      } }, h('h1', { text: existing ? 'Rename wishlist' : 'New wishlist', 'data-focus': '' }), field('gv-name', 'Wishlist name', name, '', 'Up to ' + C.LIMITS.listName + ' characters.'), msg,
+      } }, h('h1', { text: existing ? 'Rename wishlist' : 'New wishlist', 'data-focus': '' }), field('gv-name', 'Wishlist name', name, '', 'Up to ' + C.LIMITS.listName + ' characters.'),
+        audience ? field('gv-audience', 'Who can see it', audience, '', 'Choose Adults only for a list that must stay a surprise, such as gift ideas for a child.') : null, msg,
         h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-save', text: 'Save' }), h('a', { class: 'btn secondary', href: existing ? '#/giving/list/' + existing.id : '#/giving', text: 'Cancel' })));
       return h('div', { class: 'gv-page' }, backLink(existing ? '#/giving/list/' + existing.id : '#/giving', 'Back'), form);
     }
@@ -252,13 +319,13 @@
       var fin = function (node) { if (mine !== token) return; main.removeAttribute('aria-busy'); put(node); };
       if (st.familyId === 'none') return fin(blocked({ error: 'not_available' }));
       if (rt.name === 'home') return api('home').then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); st.data = r; fin(renderHome(r)); });
-      if (rt.name === 'listNew') return api('home').then(function (r) { if (r.stale) return; if (!r.ok) return fin(blocked(r)); fin(r.canCreateList ? renderListForm(null) : limitMsg()); });
+      if (rt.name === 'listNew') return api('home').then(function (r) { if (r.stale) return; if (!r.ok) return fin(blocked(r)); fin(r.canCreateList ? renderListForm(null, r.me.adult) : limitMsg()); });
       if (rt.name === 'listEdit' || rt.name === 'itemNew' || rt.name === 'itemEdit' || rt.name === 'list') {
         return api('listGet', { listId: rt.id }).then(function (r) {
           if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r));
           if (rt.name === 'list') return fin(renderList(r, rt.id));
           if (!r.list.mine) return fin(blocked({ error: 'not_available' }));   // only the owner reaches a form
-          if (rt.name === 'listEdit') return fin(renderListForm(r.list));
+          if (rt.name === 'listEdit') return fin(renderListForm(r.list, r.me.adult));
           if (rt.name === 'itemNew') return fin(renderItemForm(rt.id, null));
           var it = r.items.filter(function (i) { return i.id === rt.item; })[0];
           fin(it ? renderItemForm(rt.id, it) : blocked({ error: 'not_available' }));

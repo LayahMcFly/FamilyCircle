@@ -79,6 +79,16 @@
     return { ok: !Object.keys(errors).length, errors: errors, value: { title: title, notes: notes, priority: priority, url: url || '', priceCents: cents || 0, currency: cents ? currency : '' } };
   }
 
-  return { LIMITS: LIMITS, PRIORITIES: PRIORITIES, PRIORITY_LABEL: PRIORITY_LABEL, CURRENCIES: CURRENCIES, cleanUrl: cleanUrl, hostOf: hostOf, parseAmount: parseAmount, fmtMoney: fmtMoney,
+  var REPORT_REASONS = { inappropriate: 'Inappropriate or not kind', unsafe: 'Unsafe or suspicious link', private: 'Shares something private', other: 'Something else' };
+  var AUDIENCES = { everyone: 'Everyone in the family', adults: 'Adults only' };
+  function validateReport(b) {
+    var errors = {}; b = b || {};
+    var note = trim(b.note);
+    if (!REPORT_REASONS[b.reason]) errors.reason = 'Choose a reason.';
+    if (note.length > 500) errors.note = 'Notes can be up to 500 characters.';
+    return { ok: !Object.keys(errors).length, errors: errors, value: { reason: b.reason, note: note } };
+  }
+
+  return { REPORT_REASONS: REPORT_REASONS, AUDIENCES: AUDIENCES, validateReport: validateReport, LIMITS: LIMITS, PRIORITIES: PRIORITIES, PRIORITY_LABEL: PRIORITY_LABEL, CURRENCIES: CURRENCIES, cleanUrl: cleanUrl, hostOf: hostOf, parseAmount: parseAmount, fmtMoney: fmtMoney,
     totalsByCurrency: totalsByCurrency, validateList: validateList, validateItem: validateItem };
 });
