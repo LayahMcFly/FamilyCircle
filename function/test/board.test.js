@@ -222,3 +222,42 @@ test('the bell marks notes read', async () => {
   assert.equal((await w.ok('bob', 'boardNotesRead', { familyId: 'famA' })).marked, 1);
   assert.equal((await w.ok('bob', 'boardLoad', { familyId: 'famA' })).notes.filter((n) => !n.read).length, 0);
 });
+
+test('private tasks: a task only for yourself defaults to private; only the maker and assignees see it, owners and admins do not', async () => {
+  const w = await setup();
+  const mine = (await w.ok('ann', 'boardTaskSave', { familyId: 'famA', task: task({ title: 'Surprise gift', assigneeIds: ['ann'] }) })).task;
+  assert.equal(mine.private, true, 'assigned only to yourself: private by default');
+  const shared = (await w.ok('ann', 'boardTaskSave', { familyId: 'famA', task: task({ title: 'Trash', assigneeIds: ['ann'], private: false }) })).task;
+  assert.equal(shared.private, false, 'turning Private off makes it public');
+  const none = (await w.ok('ann', 'boardTaskSave', { familyId: 'famA', task: task({ title: 'Nobody', assigneeIds: [] }) })).task;
+  assert.equal(none.private, false);
+  const titles = async (u) => (await w.ok(u, 'boardLoad', { familyId: 'famA' })).tasks.map((t) => t.title).sort();
+  assert.deepEqual(await titles('ann'), ['Nobody', 'Surprise gift', 'Trash']);
+  assert.deepEqual(await titles('bob'), ['Nobody', 'Trash']);
+  assert.deepEqual(await titles('owner'), ['Nobody', 'Trash'], 'owners are not an exception');
+  for (const [u, act, extra] of [['bob', 'boardStep', { stepId: 'x' }], ['bob', 'boardTaskComplete', {}], ['bob', 'boardTaskMove', { groupId: '' }], ['bob', 'boardTaskDelete', {}], ['owner', 'boardTaskDelete', {}], ['owner', 'boardTaskComplete', {}], ['bob', 'boardRequest', { kind: 'deleteTask' }]])
+    await w.fail(u, act, { familyId: 'famA', taskId: mine.id, ...extra }, 404);
+  await w.fail('bob', 'boardTaskSave', { familyId: 'famA', task: task({ id: mine.id, title: 'Hacked' }) }, 404);
+  await w.fail('yan', 'boardLoad', { familyId: 'famA' }, 403);
+});
+test('private tasks: assignees can see and finish it, only the maker can change privacy or delete it, and requests cannot expose it', async () => {
+  const w = await setup();
+  const t = (await w.ok('ann', 'boardTaskSave', { familyId: 'famA', task: task({ title: 'Plan party', assigneeIds: ['ann', 'bob'], private: true }) })).task;
+  assert.equal((await w.ok('bob', 'boardLoad', { familyId: 'famA' })).tasks.length, 1, 'an assignee sees it');
+  await w.ok('bob', 'boardTaskComplete', { familyId: 'famA', taskId: t.id, done: true });
+  await w.fail('bob', 'boardTaskDelete', { familyId: 'famA', taskId: t.id }, 403);
+  const edited = (await w.ok('bob', 'boardTaskSave', { familyId: 'famA', task: task({ id: t.id, title: 'Plan party', assigneeIds: ['ann', 'bob'], private: false }) })).task;
+  assert.equal(edited.private, true, 'an assignee cannot make it public');
+  const open = (await w.ok('ann', 'boardTaskSave', { familyId: 'famA', task: task({ id: t.id, title: 'Plan party', assigneeIds: ['ann', 'bob'], private: false }) })).task;
+  assert.equal(open.private, false); assert.ok(open.history.some((e) => e.type === 'privacy'));
+  assert.equal((await w.ok('owner', 'boardLoad', { familyId: 'famA' })).tasks.length, 1, 'visible to everyone once public');
+  const p = (await w.ok('ann', 'boardTaskSave', { familyId: 'famA', task: task({ title: 'Hidden', assigneeIds: ['ann'] }) })).task;
+  assert.equal(rows(w, BOARD_TABLES.requests).length, 0);
+  await w.ok('ann', 'boardTaskDelete', { familyId: 'famA', taskId: p.id });
+});
+test('editing keeps a task\'s privacy when the form does not send it', async () => {
+  const w = await setup();
+  const t = (await w.ok('ann', 'boardTaskSave', { familyId: 'famA', task: task({ assigneeIds: ['ann'] }) })).task;
+  const again = (await w.ok('ann', 'boardTaskSave', { familyId: 'famA', task: task({ id: t.id, title: 'Renamed', assigneeIds: ['ann'] }) })).task;
+  assert.equal(again.private, true);
+});

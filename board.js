@@ -105,7 +105,7 @@
       var main = h('button', { type: 'button', class: 'bd-task-main', onclick: function () { openTask(t.id); } },
         h('span', { class: 'bd-task-title' + (done ? ' is-done' : ''), text: (t.special ? '★ ' : '') + t.title }),
         h('span', { class: 'bd-task-meta small muted', text: [opts.noDate ? '' : (t.start ? nice(t.start) + ' to ' + nice(t.due) : nice(t.due)), time12(t.time), who ? 'For ' + who : 'Unassigned', steps.length ? stepsDone + '/' + steps.length + ' steps' : '', t.repeat ? 'Repeats' : ''].filter(Boolean).join(' · ') }));
-      return h('li', { class: 'bd-task' + (done ? ' done' : '') }, box, main, g ? chip(g.name, 'bd-group', g.color) : null);
+      return h('li', { class: 'bd-task' + (done ? ' done' : '') }, box, main, t.private ? chip('Private', 'bd-private') : null, g ? chip(g.name, 'bd-group', g.color) : null);
     }
     function taskList(list, empty) {
       if (!list.length) return h('p', { class: 'muted bd-empty', text: empty });
@@ -183,6 +183,22 @@
         var c = h('input', { type: 'checkbox' }); c.checked = (t.assigneeIds || []).indexOf(m.userId) >= 0; picks[m.userId] = c;
         return h('label', { class: 'bd-check' }, c, h('span', { text: m.name + (m.userId === me().userId ? ' (me)' : '') }));
       }));
+      /* Private: turns on by itself when a new task is for you alone. The maker can switch it off to share the task with the family. */
+      var priv = h('input', { type: 'checkbox', id: 'bd-private' }), privTouched = !!task;
+      priv.checked = !!t.private;
+      var privNote = h('p', { class: 'bd-callout', role: 'status', hidden: '' });
+      function privText() { return priv.checked ? (Object.keys(picks).filter(function (k) { return picks[k].checked && k !== me().userId; }).length ? 'Private: only you and the people on this task can see it.' : 'Private: only you can see this task. Turn off Private to share it with the family.') : ''; }
+      function privSync(fromPick) {
+        if (fromPick && !privTouched) {
+          var others = Object.keys(picks).filter(function (k) { return picks[k].checked && k !== me().userId; }).length, mineOn = !!picks[me().userId] && picks[me().userId].checked;
+          var want = mineOn && !others;
+          if (want !== priv.checked) { priv.checked = want; if (want) toast('This task is private. Only you can see it.'); }
+        }
+        privNote.textContent = privText(); privNote.hidden = !priv.checked;
+      }
+      Object.keys(picks).forEach(function (k) { picks[k].addEventListener('change', function () { privSync(true); }); });
+      priv.addEventListener('change', function () { privTouched = true; privSync(false); if (priv.checked) toast('This task is private. Only the people on it can see it.'); });
+      privSync(false);
       var steps = (t.steps || []).map(function (s) { return { id: s.id, text: s.text, done: s.done }; });
       var stepBox = h('div', { class: 'bd-steps-edit' });
       function paintSteps() {
@@ -202,6 +218,7 @@
         labelled('Repeats', repeat, 'The next one appears when you finish this one.'),
         labelled('Time per day', perDay, 'For tasks with a start date.'),
         labelled('Group', group), h('fieldset', { class: 'bd-fieldset' }, h('legend', { text: 'Who does it' }), people),
+        h('label', { class: 'bd-check', for: 'bd-private' }, priv, h('span', { text: 'Private (only you and the people on it can see this task)' })), privNote,
         h('label', { class: 'bd-check' }, special, h('span', { text: 'Special day (birthday, holiday, trip)' })),
         labelled('Description', desc), h('fieldset', { class: 'bd-fieldset' }, h('legend', { text: 'Steps' }), stepBox), err);
       return dialog(task ? 'Edit task' : 'New task', function (close) {
@@ -212,7 +229,7 @@
           if (B.busy) return;
           B.busy = true; save.setAttribute('aria-busy', 'true'); err.hidden = true;
           try {
-            await call('boardTaskSave', { task: { id: task ? task.id : undefined, title: title.value, due: due.value, start: start.value, time: time.value, repeat: repeat.value, perDay: Number(perDay.value), groupId: group.value, special: special.checked, description: desc.value,
+            await call('boardTaskSave', { task: { id: task ? task.id : undefined, title: title.value, due: due.value, start: start.value, time: time.value, repeat: repeat.value, perDay: Number(perDay.value), groupId: group.value, special: special.checked, private: priv.checked, description: desc.value,
               assigneeIds: Object.keys(picks).filter(function (k) { return picks[k].checked; }), steps: steps } });
             close(); B.busy = false; if (due.value) { B.day = due.value; B.cur = parseYmd(due.value); } await refresh(); toast(task ? 'Task saved.' : 'Task added.');
           } catch (ex) { err.textContent = ex.message || 'Could not save.'; err.hidden = false; }
@@ -227,7 +244,7 @@
     function openTask(id) {
       var t = B.data.tasks.filter(function (x) { return x.id === id; })[0];
       if (!t) return;
-      var mineMade = t.createdBy === me().userId, canDelete = me().manager || mineMade;
+      var mineMade = t.createdBy === me().userId, canDelete = t.private ? mineMade : (me().manager || mineMade);
       dialog(t.title, function (close) {
         var g = groupOf(t.groupId), done = t.status === 'complete';
         var stepList = (t.steps || []).length ? h('ul', { class: 'bd-list' }, t.steps.map(function (s) {
@@ -245,10 +262,10 @@
         var toggle = h('button', { type: 'button', class: 'btn' + (done ? ' secondary' : ''), onclick: guard(async function () { await call('boardTaskComplete', { taskId: t.id, done: !done, today: today() }); close(); await refresh(); }) }, icon('check'), h('span', { text: done ? 'Mark not done' : 'Mark done' }));
         var del = canDelete
           ? h('button', { type: 'button', class: 'btn danger', onclick: async function () { if (await X.confirmDialog('Delete this task?', t.title, 'Delete')) guard(async function () { await call('boardTaskDelete', { taskId: t.id }); close(); await refresh(); toast('Task deleted.'); })(); } }, icon('trash'), h('span', { text: 'Delete' }))
-          : h('button', { type: 'button', class: 'btn secondary', onclick: guard(async function () { await call('boardRequest', { kind: 'deleteTask', taskId: t.id }); close(); await refresh(); toast('Request sent to the owners and admins.'); }) }, 'Ask to delete');
+          : t.private ? null : h('button', { type: 'button', class: 'btn secondary', onclick: guard(async function () { await call('boardRequest', { kind: 'deleteTask', taskId: t.id }); close(); await refresh(); toast('Request sent to the owners and admins.'); }) }, 'Ask to delete');
         return h('div', { class: 'bd-detail' },
           h('p', { class: 'muted', text: facts.join(' · ') }),
-          g ? h('p', null, chip(g.name, 'bd-group', g.color)) : null,
+          g || t.private ? h('p', null, t.private ? chip('Private', 'bd-private') : null, g ? chip(g.name, 'bd-group', g.color) : null) : null,
           done ? h('p', { class: 'bd-record' }, icon('check'), h('span', { text: 'Done by ' + (t.completedByName || 'someone') + (t.completedForName ? ' for ' + t.completedForName : '') + (t.completedAt ? ' on ' + nice(t.completedAt.slice(0, 10)) : '') })) : null,
           t.description ? h('p', { class: 'bd-desc', text: t.description }) : null,
           stepList ? h('div', null, h('h3', { text: 'Steps' }), stepList) : null,
@@ -259,7 +276,7 @@
     function historyText(e) {
       var who = e.actorName || 'Someone', day = e.at ? nice(e.at.slice(0, 10)) : '';
       var what = { created: 'added this task' + (e.assigneeName ? ' for ' + e.assigneeName : ''), edited: 'changed ' + (e.fields || 'details'), assigned: 'moved it from ' + (e.fromName || 'Unassigned') + ' to ' + (e.toName || 'Unassigned'),
-        group: 'moved it from ' + (e.fromName || 'No group') + ' to ' + (e.toName || 'No group'), completed: 'finished it' + (e.forName ? ' for ' + e.forName : ''), reopened: 'marked it not done' }[e.type] || e.type;
+        group: 'moved it from ' + (e.fromName || 'No group') + ' to ' + (e.toName || 'No group'), completed: 'finished it' + (e.forName ? ' for ' + e.forName : ''), reopened: 'marked it not done', privacy: 'made it ' + (e.toName || 'private') }[e.type] || e.type;
       return who + ' ' + what + (day ? ' on ' + day : '') + '.';
     }
 
@@ -394,6 +411,7 @@
       ['Month', 'A calendar grid. Tap a day to see its tasks and add one. Dots show tasks, a star shows a special day, and a task that lasts several days shows on each of them.'],
       ['Week', 'The same tasks as seven stacked days, so you can see the whole week at once.'],
       ['Tasks', 'Your to-do list by due date. Tick the box to finish a task and the app records who did it. Tap a task to see its steps, history and edit it. A repeating task makes its next copy when you finish it.'],
+      ['Private tasks', 'A task you give only to yourself is private automatically, and a message pops up to tell you. Only you can see it: not the family, and not owners or admins. To make it public, open the task, tap Edit, and turn off Private, or tick Private in the form to hide any task. A private task with other people on it is visible to them too. Only the person who made it can change Private or delete it.'],
       ['Shopping', 'Things your family buys again and again. Tap Running low to tell everyone how many are left, and Bought it to clear it.'],
       ['Groups', 'Labels for sorting tasks, like Chores or School. Owners and admins make and change them. Everyone else can ask for one.'],
       ['Requests', 'For things you cannot do alone: asking for a new group, or asking to delete a task someone else made. Owners and admins see the request here and choose Accept, Reject or Ignore. Accept does it, Reject leaves things as they are and tells you, and Ignore closes it quietly. You only see your own requests.'],
