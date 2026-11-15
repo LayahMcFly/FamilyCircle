@@ -60,6 +60,12 @@ async function newPage(ctx, mock, errors) {
   check('4 A deep link inside Giving Center (new wishlist form) opens', (await page.locator('main h1').innerText()) === 'New wishlist', await page.locator('main h1').innerText());
   await page.evaluate(() => { location.hash = '#/hub'; }); await page.waitForSelector('[data-hub="giving"]');
   check('5 Back on the Hub the card is still a link', (await page.locator('[data-hub="giving"]').evaluate(e => e.tagName)) === 'A', '');
+  await page.locator('#foot-about-btn').click(); await page.waitForSelector('dialog.foot-dialog');
+  const dlg = await page.locator('dialog.foot-dialog').innerText();
+  check('7 The footer link opens "About links and pictures" with the Etsy notice and the no-payments line', /sells nothing and takes no payments/.test(dlg) && /trademark of Etsy, Inc\..*not endorsed or certified by Etsy/.test(dlg), dlg);
+  await page.locator('#foot-about-close').click();
+  await page.waitForSelector('dialog.foot-dialog', { state: 'detached' });
+  check('7 Closing it removes the dialog', (await page.locator('dialog.foot-dialog').count()) === 0, '');
   check('6 No page errors or CSP violations in the app', errors.filter(e => !/status of 4\d\d/.test(e)).length === 0, errors.join(' | '));
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

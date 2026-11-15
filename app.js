@@ -27,6 +27,22 @@
     line.appendChild(document.createTextNode((C.appName || 'Family Circle') + ' v' + (C.version || '1.0.0')));
     f.appendChild(line);
     if (C.tagline) { var tg = document.createElement('p'); tg.textContent = C.tagline; f.insertBefore(tg, line); tg.className = 'tagline'; }
+    var about = document.createElement('p'); about.className = 'foot-about';
+    var aboutBtn = document.createElement('button'); aboutBtn.type = 'button'; aboutBtn.className = 'foot-linkbtn'; aboutBtn.id = 'foot-about-btn'; aboutBtn.textContent = 'About links and pictures';
+    aboutBtn.addEventListener('click', function () {
+      var d = document.createElement('dialog'); d.className = 'foot-dialog'; d.setAttribute('aria-labelledby', 'foot-about-h');
+      var hd = document.createElement('h2'); hd.id = 'foot-about-h'; hd.textContent = 'About links and pictures'; d.appendChild(hd);
+      ['Family Circle sells nothing and takes no payments. Wishlist prices are estimates for reference.',
+       'A link on a wishlist item opens another website. Family Circle does not control that site.',
+       'When you tap "Get a picture from the link", Family Circle visits that one address to look for its picture and then makes a smaller copy for the item. It does not do this on its own, and it does not copy prices or text.',
+       'For Etsy listing links, the picture comes from Etsy and is shown without being saved here.',
+       "The term 'Etsy' is a trademark of Etsy, Inc. This application uses Etsy's API but is not endorsed or certified by Etsy."
+      ].forEach(function (t) { var p = document.createElement('p'); p.textContent = t; d.appendChild(p); });
+      var ok = document.createElement('button'); ok.type = 'button'; ok.className = 'btn'; ok.id = 'foot-about-close'; ok.textContent = 'Close'; ok.addEventListener('click', function () { d.close(); }); d.appendChild(ok);
+      d.addEventListener('close', function () { d.remove(); });
+      document.body.appendChild(d); if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+    });
+    about.appendChild(aboutBtn); f.appendChild(about);
     var pp = document.createElement('p'); pp.className = 'foot-play';
     pp.appendChild(document.createTextNode('Also by LayahMcFly: '));
     pp.appendChild(link('https://layahmcfly.github.io/PlayPop/?v=2', 'PlayPop'));
