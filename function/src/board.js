@@ -94,6 +94,8 @@ export function createBoard({ teams, listRows, createRow, updateRow, deleteRow, 
   const sameIds = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 
   /* ---------- shapes ---------- */
+  /** A private task is visible only to the person who made it and the people on it. Owners and admins are not an exception. */
+  const canSee = (d, userId) => !d.private || d.createdBy === userId || (Array.isArray(d.assigneeIds) && d.assigneeIds.includes(userId));
   const taskOut = (r) => { const d = parse(r.data); return { id: r.$id, ...d, due: r.due || '', status: r.status || 'open' }; };
   const groupOut = (r) => ({ id: r.$id, ...parse(r.data) });
   const productOut = (r) => ({ id: r.$id, ...parse(r.data) });
@@ -148,7 +150,7 @@ export function createBoard({ teams, listRows, createRow, updateRow, deleteRow, 
   async function groupIdSet(familyId) { return new Set((await all(T.groups, familyId, BOARD_LIMITS.groups)).map((r) => r.$id)); }
   async function taskRow(c, id) {
     const r = await getRowOrNull(T.tasks, idOf(id, 'taskId'));
-    if (!r || r.familyId !== c.familyId) throw missing('That task does not exist.');
+    if (!r || r.familyId !== c.familyId || !canSee(parse(r.data), c.me.userId)) throw missing('That task does not exist.');   // a private task looks exactly like a missing one
     return r;
   }
   const saveTask = (r, d, extra) => updateRow(T.tasks, r.$id, { data: JSON.stringify(d), ...extra });
@@ -168,7 +170,7 @@ export function createBoard({ teams, listRows, createRow, updateRow, deleteRow, 
       return {
         me: { userId: user.$id, name: c.me.name, manager: c.manager },
         members: c.members.map((m) => ({ userId: m.userId, name: m.name, avatarFileId: m.avatarFileId, owner: m.owner })),
-        tasks: tasks.map(taskOut), groups: groups.map(groupOut), products: products.map(productOut), requests: reqOut,
+        tasks: tasks.filter((r) => canSee(parse(r.data), user.$id)).map(taskOut), groups: groups.map(groupOut), products: products.map(productOut), requests: reqOut,
         notes: notes.rows.filter((n) => new Date(n.$createdAt).getTime() >= weekAgo).map((n) => ({ id: n.$id, read: !!n.read, at: n.$createdAt, ...parse(n.data) }))
       };
     },
@@ -180,7 +182,8 @@ export function createBoard({ teams, listRows, createRow, updateRow, deleteRow, 
       const f = cleanTask(c, t, groupIds);
       if (!t.id) {
         if ((await all(T.tasks, c.familyId, BOARD_LIMITS.tasks)).length >= BOARD_LIMITS.tasks) throw new ApiError(409, 'quota', 'This calendar is full. Delete old tasks first.');
-        const d = { ...f, steps: cleanSteps(t.steps), completedBy: '', completedByName: '', completedForId: '', completedForName: '', completedAt: '', createdBy: user.$id, createdAt: iso(), history: [] };
+        const mineOnly = f.assigneeIds.length === 1 && f.assigneeIds[0] === user.$id;
+        const d = { ...f, private: t.private === undefined ? mineOnly : !!t.private, steps: cleanSteps(t.steps), completedBy: '', completedByName: '', completedForId: '', completedForName: '', completedAt: '', createdBy: user.$id, createdAt: iso(), history: [] };
         pushHist(d, ev(c, 'created', { assigneeName: f.assigneeIds.length ? namesOf(c, f.assigneeIds) : '' }));
         const row = await createRow(T.tasks, ID.unique(), { familyId: c.familyId, due: f.due, status: 'open', data: JSON.stringify(d) }, []);
         for (const id of f.assigneeIds) await note(c, id, 'assigned', { taskId: row.$id, title: f.title, due: f.due });
@@ -198,6 +201,9 @@ export function createBoard({ teams, listRows, createRow, updateRow, deleteRow, 
       const steps = cleanSteps(t.steps, d.steps);
       if (JSON.stringify((d.steps || []).map((s) => s.text)) !== JSON.stringify(steps.map((s) => s.text))) changed.push('steps');
       const was = Array.isArray(d.assigneeIds) ? d.assigneeIds : [];
+      const wantPrivate = t.private === undefined || d.createdBy !== user.$id ? !!d.private : !!t.private;   // only the person who made it can change this
+      if (wantPrivate !== !!d.private) pushHist(d, ev(c, 'privacy', { toName: wantPrivate ? 'private' : 'shared with the family' }));
+      d.private = wantPrivate;
       if (changed.length) pushHist(d, ev(c, 'edited', { fields: changed.join(', ') }));
       if (!sameIds(was, f.assigneeIds)) {
         pushHist(d, ev(c, 'assigned', { fromName: namesOf(c, was), toName: namesOf(c, f.assigneeIds) }));
@@ -274,6 +280,7 @@ export function createBoard({ teams, listRows, createRow, updateRow, deleteRow, 
     async boardTaskDelete({ user, body }) {
       const c = await context(user, body.familyId);
       const r = await taskRow(c, body.taskId), d = parse(r.data);
+      if (d.private && d.createdBy !== user.$id) throw forbidden('Only the person who made this private task can delete it.');
       if (!c.manager && d.createdBy !== user.$id) throw forbidden('Only the person who made this task, or an owner or admin, can delete it. You can ask them with a request.');
       await deleteRow(T.tasks, r.$id);
       return { deleted: true };
@@ -346,7 +353,7 @@ export function createBoard({ teams, listRows, createRow, updateRow, deleteRow, 
       const kind = body.kind;
       let data;
       if (kind === 'newGroup') data = { kind, name: textOf(String(body.name || ''), 'Group name', { min: 1, max: 80 }), description: textOf(String(body.description || ''), 'Description', { max: 400 }), color: COLOR_RE.test(body.color || '') ? body.color : '' };
-      else if (kind === 'deleteTask') { const r = await taskRow(c, body.taskId); data = { kind, taskId: r.$id, title: parse(r.data).title }; }
+      else if (kind === 'deleteTask') { const r = await taskRow(c, body.taskId); if (parse(r.data).private) throw bad('Private tasks can only be deleted by the person who made them.'); data = { kind, taskId: r.$id, title: parse(r.data).title }; }
       else throw bad('That kind of request is not available.');
       const pending = (await all(T.requests, c.familyId, 200)).filter((r) => r.status === 'pending' && parse(r.data).byId === user.$id).length;
       if (pending >= 10) throw new ApiError(409, 'quota', 'You already have 10 requests waiting.');

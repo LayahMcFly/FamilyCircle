@@ -1975,3 +1975,6 @@ html, body { overflow-x: clip; }
 .bd-help-list dd { margin: 2px 0 0; color: var(--muted); line-height: 1.4; }
 .bd-head h1 { font-size: 1.3rem; flex: 1 1 auto; min-width: 0; }
 .bd-how { white-space: nowrap; }
+.bd-private { --g: var(--accent); }
+.bd-callout { margin: 6px 0 12px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); font-weight: 600; }
+.bd-callout[hidden] { display: none; }

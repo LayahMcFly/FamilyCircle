@@ -68,7 +68,7 @@ async function newPage(ctx, mock, who, manager, errors) {
   const card = page.locator('a[data-hub="calendar"]');
   check('1 Hub card opens inside the app, same tab, no frame', (await card.getAttribute('href')) === '#/calendar' && (await card.getAttribute('target')) === null, await card.getAttribute('href'));
   await card.click(); await page.waitForSelector('main[data-view="calendar"] .bd-grid');
-  check('14 first visit shows the How the calendar works card', (await page.locator('.bd-help h2').innerText()) === 'How the calendar works' && (await page.locator('.bd-help dt').count()) === 7, '');
+  check('14 first visit shows the How the calendar works card', (await page.locator('.bd-help h2').innerText()) === 'How the calendar works' && (await page.locator('.bd-help dt').count()) === 8 && (await page.locator('.bd-help dt', { hasText: 'Private tasks' }).count()) === 1, '');
   await page.screenshot({ path: path.join(shots, 'calendar-help.png') });
   await page.click('.bd-help button:has-text("Got it")');
   check('14 Got it hides the card', (await page.locator('.bd-help').count()) === 0, '');
@@ -154,11 +154,37 @@ async function newPage(ctx, mock, who, manager, errors) {
   check('10 no sideways scrolling at 390px', !over, '');
   await page.screenshot({ path: path.join(shots, 'calendar-month.png') });
 
+  // private tasks: on by itself when the task is only for me, with a pop-up; off switch; others on it
+  await page.click('.bd-tab:has-text("Month")'); await page.waitForSelector('.bd-day .btn');
+  await page.click('.bd-day .btn'); await page.waitForSelector('dialog.bd-dialog[open]');
+  const priv = page.locator('dialog #bd-private'), note = page.locator('dialog .bd-callout');
+  check('15 Private starts off for a new task and no note shows', !(await priv.isChecked()) && !(await note.isVisible()), '');
+  await page.locator('dialog .bd-people label', { hasText: '(me)' }).click();
+  check('15 giving a task only to yourself turns Private on by itself', await priv.isChecked(), '');
+  check('15 a pop-up message appears', /This task is private\. Only you can see it\./.test(await page.locator('.toast').last().innerText()), '');
+  check('15 the note under the toggle explains how to share it', /only you can see this task\. Turn off Private to share it with the family\./i.test(await note.innerText()), '');
+  await page.screenshot({ path: path.join(shots, 'calendar-private-form.png') });
+  await page.locator('dialog .bd-people label', { hasText: 'Bea Tester' }).click();
+  check('15 adding someone else switches it back off (not touched by hand yet)', !(await priv.isChecked()), '');
+  await page.locator('dialog .bd-people label', { hasText: 'Bea Tester' }).click();
+  check('15 back to just me, Private on again', await priv.isChecked(), '');
+  await priv.uncheck();
+  await page.locator('dialog .bd-people label', { hasText: '(me)' }).click(); await page.locator('dialog .bd-people label', { hasText: '(me)' }).click();
+  check('15 once you turn Private off yourself, ticking your own name no longer turns it on', !(await priv.isChecked()), '');
+  await priv.check(); await page.fill('dialog input[type="text"]', 'Surprise party plan');
+  await page.click('dialog button[type="submit"]'); await page.waitForSelector('.bd-day .bd-task:has-text("Surprise party plan")');
+  check('15 the task saved as private and shows a Private tag', (await page.locator('.bd-day .bd-task', { hasText: 'Surprise party plan' }).locator('.bd-private').count()) === 1, '');
+  check('15 the server was told it is private', await page.evaluate(() => window.__BOARD.tasks.find(t => t.d.title === 'Surprise party plan').d.private === true), '');
+  await page.locator('.bd-day .bd-task-main', { hasText: 'Surprise party plan' }).click(); await page.waitForSelector('dialog .bd-detail');
+  check('15 the details show Private', (await page.locator('dialog .bd-detail .bd-private').count()) === 1, '');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  check('15 no sideways scrolling with the Private note', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)), '');
+
   // a member: bell, ask to delete, no group manage
   const B = mkUser('uB', 'Bea Tester'), ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const pb = await newPage(ctx2, world(B, 'member'), 'uB', false, errors);
   await pb.goto(URL0 + '#/calendar'); await pb.waitForSelector('main[data-view="calendar"] .bd-grid');
-  await pb.evaluate(() => { const S = window.__BOARD; S.tasks.push({ id: 'tA', due: new Date().toISOString().slice(0, 10), status: 'open', d: { title: "Alex's task", createdBy: 'uA', assigneeIds: ['uB'], steps: [], history: [] } }); S.notes.push({ id: 'n1', to: 'uB', read: false, kind: 'assigned', actorName: 'Alex Tester', title: "Alex's task", due: '2026-12-01', at: '2026-12-01T10:00:00Z' }); });
+  await pb.evaluate(() => { const S = window.__BOARD; S.tasks.push({ id: 'tA', due: new Date().toLocaleDateString('en-CA'), status: 'open', d: { title: "Alex's task", createdBy: 'uA', assigneeIds: ['uB'], steps: [], history: [] } }); S.notes.push({ id: 'n1', to: 'uB', read: false, kind: 'assigned', actorName: 'Alex Tester', title: "Alex's task", due: '2026-12-01', at: '2026-12-01T10:00:00Z' }); });
   await pb.evaluate(() => { location.hash = '#/hub'; }); await pb.waitForSelector('a[data-hub="calendar"]'); await pb.click('a[data-hub="calendar"]'); await pb.waitForSelector('.bd-grid');
   check('11 member sees the bell badge with 1 new alert', (await pb.locator('.bd-badge').innerText()) === '1', await pb.locator('.bd-badge').count() + '');
   await pb.click('.bd-bell'); await pb.waitForSelector('dialog .bd-note.new');
