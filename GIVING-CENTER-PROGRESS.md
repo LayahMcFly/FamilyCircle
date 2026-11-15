@@ -43,8 +43,8 @@ Branch `giving-center-preview` (from `main` at v1.51.99.22, commit `bb6ed16`). S
 - [x] Your answers on the 12 decisions (recorded above)
 - [ ] Decide how the real version gets a picture from an item's link (you chose: keep simulated for now; settle at Step 4)
 - [x] Adult flag location proposed in the design (profiles column, managers only, never self); needs your yes
-- [x] Step 4: real backend design written (`GIVING-CENTER-BACKEND-DESIGN.md`). Waiting for your read and your yes before Step 5
-- [ ] Step 5: real backend built and tested without turning anything on. Needs approval
+- [x] Step 4: real backend design written (`GIVING-CENTER-BACKEND-DESIGN.md`). approved by you 2026-11-14 (third answer: removed members' lists hidden 30 days, then deleted)
+- [x] Step 5: real backend built and tested (23 new tests), OFF for every family. Not yet uploaded: tables and function are your actions (`GIVING-CENTER-SETUP.md`)
 - [ ] Step 6: real photo upload. Needs approval
 - [ ] Step 7: staged turn-on for real family members. Needs approval
 - [ ] Hub card still says Planned and is not clickable (change only after approval)
