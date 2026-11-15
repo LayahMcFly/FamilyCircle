@@ -7,9 +7,9 @@ Branch `giving-center-preview` (from `main` at v1.51.99.22, commit `bb6ed16`). S
 | Step | Implementation | Deployed / production effect | Your manual verification |
 |---|---|---|---|
 | 0 Inspect and plan | Done | None | Waiting for your review |
-| 1 Synthetic UI preview | Done, commit `6613f08` | None | Not yet tested by you |
-| 2 Wishlist behavior (fake backend) | Done | None | Not yet tested by you |
-| 3 Reservations and surprise privacy (fake backend) | Done | None | Not yet tested by you |
+| 1 Synthetic UI preview | Done | None | Passed (you, 2026-11-14, phone) |
+| 2 Wishlist behavior (fake backend) | Done | None | Passed (you, 2026-11-14, phone) |
+| 3 Reservations and surprise privacy (fake backend) | Done, includes adult or kid, adults-only lists, reporting | None | Passed (you, 2026-11-14, phone) |
 | 4 Real backend design and approval gate | Not started | None | n/a |
 | 5 to 7 | Not started, need your approvals | None | n/a |
 
