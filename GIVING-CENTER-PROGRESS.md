@@ -156,3 +156,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.35: link pictures decode the returned picture directly (fetch of a data: address was blocked by the page's security rules, which is why a found picture was never applied).
 - v1.51.99.36: wishlist pictures are cropped to the square instead of squeezed (object-fit: cover).
 - v1.51.99.37: pasted shop links drop advertising/tracking parts (gclid, wl*, utm_* ...) so long Walmart/Google-ad links are accepted and saved short.
+- v1.51.99.38: Phase A (requests and pledges) PREVIEW only, in the hidden test page giving-preview/index.html (sample data, nothing real). Not in the real Giving screens yet; kids' requests wait for an adult owner/admin; money is plain text only; reporting covers requests.

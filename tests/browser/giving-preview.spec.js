@@ -215,6 +215,52 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('G switching person resets the screen to the Giving Center home', /Your wishlists/.test(t), t);
     await ctx.close(); }
 
+  // R. requests and pledges (Phase A)
+  { const { ctx, page, log } = await open(browser);
+    check('R home has a Family requests link with counts', /Family requests/.test(await text(page)) && /open request/.test(await page.locator('#gv-requestslink').innerText()), await page.locator('#gv-requestslink').innerText());
+    await page.click('#gv-requestslink'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
+    let t = await text(page);
+    check('R Rae sees the couch request and the adults-only coat request, not the kid\'s waiting one', /Help moving a couch/.test(t) && /Winter coat for Riley/.test(t) && !/Can someone take me to the library/.test(t), t);
+    await page.locator('.gv-row', { hasText: 'couch' }).click(); await page.waitForSelector('#main h1:has-text("couch")'); await settle(page);
+    t = await text(page);
+    check('R the requester sees the pledge from Sam and can mark it done', /Sam Sample/.test(t) && /1 of 3 pledged/.test(t) && (await page.locator('[data-act="done"]').count()) === 1, t);
+    await page.click('[data-act="done"]'); await page.waitForSelector('.gv-pledge:has-text("Done")'); await settle(page);
+    check('R marking done shows Done and 1 done', /1 done/.test(await text(page)), '');
+    await who(page, 'Riley Sample'); await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
+    t = await text(page);
+    check('R a kid sees their own waiting request, not the adults-only coat request, and is told adults look first', /library/.test(t) && /Waiting for approval/.test(t) && !/Winter coat/.test(t) && /An adult looks at your request/.test(t), t);
+    await page.locator('.gv-row', { hasText: 'library' }).click(); await page.waitForSelector('#main h1:has-text("library")'); await settle(page);
+    check('R a kid cannot pledge and has no approve buttons', (await page.locator('#gv-pledge, #gv-rapprove').count()) === 0, '');
+    await who(page, 'Ada Admin'); await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
+    t = await text(page);
+    check('R an admin sees the kid\'s request waiting for approval', /Waiting for your approval/.test(t) && /library/.test(t), t);
+    await page.locator('.gv-row', { hasText: 'library' }).click(); await page.waitForSelector('#gv-rapprove'); await page.click('#gv-rapprove'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
+    check('R after approval the waiting section is gone', !/Waiting for your approval/.test(await text(page)), '');
+    await who(page, 'Tia Sample'); await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
+    await page.locator('.gv-row', { hasText: 'library' }).click(); await page.waitForSelector('#gv-pledge'); await page.fill('#gv-pnote', 'I can take you at 10'); await page.click('#gv-pledge');
+    await page.waitForSelector('.gv-pledge:has-text("You")'); await settle(page);
+    check('R an adult pledges and sees "You" with her note and a Withdraw button', /I can take you at 10/.test(await text(page)) && (await page.locator('[data-act="withdraw"]').count()) === 1, await text(page));
+    await page.click('[data-act="withdraw"]'); await page.waitForSelector('#gv-nopledge'); await settle(page);
+    check('R withdrawing removes the pledge', /No one has pledged yet/.test(await text(page)), '');
+    await who(page, 'Olive Example'); 
+    check('R an account in another family sees nothing of Family A', !/couch|coat|library/.test(await text(page)), await text(page));
+    check('R no page errors or outside requests in the requests flow', log.errors.length === 0 && log.external.length === 0, log.errors.concat(log.external).join()); await ctx.close(); }
+  for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
+    const { ctx, page } = await open(browser, { w, h, hash: '#/giving/requests' });
+    await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
+    await page.screenshot({ path: path.join(shots, 'giving-' + label + '-requests.png'), fullPage: true });
+    check('R ' + label + ' requests list has no sideways scroll', !(await overflow(page)), '');
+    await page.click('#gv-newrequest'); await page.waitForSelector('#gv-rtitle'); await page.screenshot({ path: path.join(shots, 'giving-' + label + '-request-form.png'), fullPage: true });
+    check('R ' + label + ' request form has no sideways scroll', !(await overflow(page)), '');
+    const plain = await page.evaluate(() => [...document.querySelectorAll('#main input, #main select, #main textarea')].filter(el => { const cs = getComputedStyle(el); return parseFloat(cs.borderTopWidth) === 0 || cs.borderTopStyle === 'none'; }).map(el => el.id));
+    check('R ' + label + ' request form controls are themed', plain.length === 0, plain.join());
+    await page.click('#gv-rsave'); await settle(page);
+    check('R ' + label + ' saving an empty title shows the plain message under the field', /Add a short title/.test(await page.locator('#gv-rtitle-err').innerText()), '');
+    await page.fill('#gv-rtitle', 'Rake the leaves'); await page.fill('#gv-rneeded', '2'); await page.fill('#gv-ramount', 'about $20'); await page.click('#gv-rsave');
+    await page.waitForSelector('#main h1:has-text("Rake the leaves")'); await settle(page);
+    check('R ' + label + ' a saved request opens with its money note as plain text', /Money: about \$20/.test(await text(page)) && /0 of 2 pledged/.test(await text(page)), await text(page));
+    await ctx.close(); }
+
   // H. layout at phone and desktop widths, plus screenshots
   for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
     const { ctx, page } = await open(browser, { w, h });
