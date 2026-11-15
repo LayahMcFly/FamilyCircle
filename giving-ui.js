@@ -207,7 +207,7 @@
     }
     function listRows(ls) {
       return h('ul', { class: 'gv-rows' }, ls.map(function (l) {
-        var meta = l.mine ? l.itemCount + ' to give' + (l.receivedCount ? ', ' + l.receivedCount + ' received' : '') : (l.availableCount === undefined ? l.itemCount + ' items' : l.availableCount + ' of ' + l.itemCount + ' still available');
+        var meta = l.mine ? l.itemCount + ' to give' + (l.receivedCount ? ', ' + l.receivedCount + ' received' : '') : (l.availableCount === undefined ? l.itemCount + (l.itemCount === 1 ? ' item' : ' items') : l.availableCount + ' of ' + l.itemCount + ' still available');
         return h('li', null, h('a', { class: 'gv-row', href: '#/giving/list/' + l.id, 'data-list': l.id },
           h('strong', { class: 'gv-row-title', text: l.name }), h('span', { class: 'muted', text: l.mine ? 'Yours' : l.ownerName }), l.audience === 'adults' ? badge('Adults only', 'is-adults') : null, h('span', { class: 'muted', text: meta })));
       }));
@@ -293,7 +293,7 @@
           money(it) ? h('p', { class: 'muted gv-price', text: money(it) }) : null,
           it.notes ? h('p', { class: 'gv-notes', text: it.notes }) : null,
           it.url ? h('p', { class: 'gv-link' }, h('a', { href: it.url, target: '_blank', rel: 'noopener noreferrer nofollow', text: 'Open link (' + C.hostOf(it.url) + ')' }), h('span', { class: 'muted', text: ' Opens another website.' })) : null,
-          fromLink ? h('p', { class: 'hint gv-linkpic', text: real ? 'Placeholder picture. Pictures from links come later; you can add your own photo when you edit the item.' : 'Picture from the link (simulated in this preview).' }) : null)));
+          fromLink ? h('p', { class: 'hint gv-linkpic', text: real ? 'Placeholder picture. Edit the item to add your own photo, or tap "Get a picture from the link".' : 'Picture from the link (simulated in this preview).' }) : null)));
       var acts = h('div', { class: 'gv-actions' });
       if (it.mine) {
         acts.appendChild(h('a', { class: 'btn secondary small', href: '#/giving/list/' + listId + '/item/' + it.id + '/edit', 'data-act': 'edit', text: 'Edit', 'aria-label': 'Edit ' + it.title }));
@@ -374,11 +374,12 @@
         var showPrev = function (src) { f.prev.textContent = ''; if (src) f.prev.appendChild(h('img', { class: 'gv-photo', src: src, alt: 'Picture to use for this item', width: 56, height: 56 })); };
         if (existing && existing.thumb) {
           showPrev(existing.thumb);
-          f.prev.appendChild(h('button', { type: 'button', class: 'btn ghost small', id: 'gv-photoremove', text: 'Remove the picture', onclick: function () { removePhoto = true; ready = null; f.file.value = ''; f.info.textContent = ''; f.sizeRow.hidden = true; showPrev(''); toast('The picture will be removed when you save.'); } }));
+          f.prev.appendChild(h('button', { type: 'button', class: 'btn ghost small', id: 'gv-photoremove', text: 'Remove the picture', onclick: function () { removePhoto = true; ready = null; chosen = null; f.file.value = ''; f.info.textContent = ''; f.sizeRow.hidden = true; showPrev(''); toast('The picture will be removed when you save.'); } }));
         }
         f.sizeRow = h('div', { class: 'gv-sizerow', hidden: true }, h('label', { for: 'gv-photosize', text: 'Picture size' }), f.size);
-        var process = function () {
-          var file = f.file.files && f.file.files[0]; if (!file) return;
+        var chosen = null;   // the picture to send: a file the person picked, or one fetched from the link
+        var process = function (given) {
+          var file = given && given.name !== undefined ? given : chosen; if (!file) return;
           var token = ++working; ready = null; f.info.textContent = 'Converting and compressing…'; setErr('gv-photofile', '');
           ready = shrinkPicture(file, f.size.value).then(function (p) {
             if (token !== working) return null;
@@ -386,12 +387,25 @@
             showPrev(p.thumb); f.sizeRow.hidden = false; return p;
           }, function (e) { if (token !== working) return null; f.info.textContent = ''; f.sizeRow.hidden = true; f.file.value = ''; ready = null; showPrev(existing && existing.thumb || ''); setErr('gv-photofile', e.message); return null; });
         };
-        f.size.addEventListener('change', process);
+        f.size.addEventListener('change', function () { process(); });
         f.file.addEventListener('change', function () {
-          var file = f.file.files && f.file.files[0]; removePhoto = false; setErr('gv-photofile', '');
+          var file = f.file.files && f.file.files[0]; removePhoto = false; setErr('gv-photofile', ''); chosen = file || null;
           if (!file) { ready = null; f.info.textContent = ''; f.sizeRow.hidden = true; return showPrev(existing && existing.thumb || ''); }
-          process();
+          process(file);
         });
+        f.linkBtn = h('button', { type: 'button', class: 'btn secondary small', id: 'gv-linkpic', text: 'Get a picture from the link', onclick: function () {
+          var url = f.url.value.trim(); setErr('gv-url', ''); setErr('gv-photofile', '');
+          if (!/^https?:\/\/\S+\.\S+/i.test(url)) return setErr('gv-url', 'Enter a web address that starts with https:// first.');
+          f.linkBtn.disabled = true; f.info.textContent = 'Looking for a picture at the link…';
+          api('linkPicture', { url: url }).then(function (r) {
+            f.linkBtn.disabled = false; if (r.stale) return;
+            if (!r.ok) { f.info.textContent = ''; return setErr('gv-photofile', r.message); }
+            return fetch(r.image).then(function (x) { return x.blob(); }).then(function (b) {
+              var file = new File([b], 'from-link', { type: b.type }); chosen = file; removePhoto = false; f.file.value = ''; process(file);
+              f.info.textContent = 'Picture found at ' + r.host + '. Converting and compressing…';
+            });
+          }, function () { f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'Could not look at the link. Try again, or add your own photo.'); });
+        } });
         f.getReady = function () { return ready; };
       }
       var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
@@ -403,7 +417,7 @@
         api('itemSave', body).then(function (r) {
           if (r.stale) return;
           if (!r.ok) { var first = null; Object.keys(r.fields || {}).forEach(function (k) { setErr(ids[k], r.fields[k]); if (!first) first = document.getElementById(ids[k]); }); msg.textContent = r.message; if (first) first.focus(); return; }
-          var file = real && f.file && f.file.files && f.file.files[0], itemId = r.item && r.item.id;
+          var file = real && chosen, itemId = r.item && r.item.id;
           var done = function (note) { toast(note || 'Item saved.'); go('#/giving/list/' + listId); };
           if (file) {
             msg.textContent = 'Sending the picture…';
@@ -416,9 +430,9 @@
       } },
         h('h1', { text: existing ? 'Edit item' : 'Add an item', 'data-focus': '' }),
         field('gv-title', 'Title', f.title), field('gv-notes', 'Notes (optional)', f.notes, '', 'Anything that helps someone pick the right one: size, color, model, where you saw it.'), field('gv-priority', 'How much do you want it?', f.priority),
-        field('gv-url', 'Link (optional)', f.url, '', 'A web address you choose. Family Circle does not visit it or look anything up.'),
+        field('gv-url', 'Link (optional)', f.url, '', real ? 'A web address you choose. Family Circle only visits it if you tap "Get a picture from the link" under Photo.' : 'A web address you choose. Family Circle does not visit it or look anything up.'),
         h('div', { class: 'gv-pair' }, field('gv-price', 'Estimated price (optional)', f.price, '', 'A guess for reference. Not a charge.'), field('gv-currency', 'Currency', f.currency)),
-        real ? h('div', { class: 'gv-field' }, h('label', { for: 'gv-photofile', text: 'Photo (optional)' }), f.file, f.prev, f.sizeRow, f.info, h('p', { class: 'hint', id: 'gv-photofile-hint', text: 'Any picture type works. It is converted to a JPEG and made smaller on your device before it is sent, so big photos are fine. Leave it empty to use the placeholder from your link.' }), h('p', { class: 'gv-fielderr', id: 'gv-photofile-err', role: 'alert' })) : null,
+        real ? h('div', { class: 'gv-field' }, h('label', { for: 'gv-photofile', text: 'Photo (optional)' }), f.file, f.linkBtn, f.prev, f.sizeRow, f.info, h('p', { class: 'hint', id: 'gv-photofile-hint', text: 'Any picture type works. It is converted to a JPEG and made smaller on your device before it is sent, so big photos are fine. Leave it empty to use the placeholder from your link.' }), h('p', { class: 'gv-fielderr', id: 'gv-photofile-err', role: 'alert' })) : null,
         f.photo ? field('gv-photo', 'Photo (optional)', f.photo, '', 'Leave this blank and the picture can come from your link. Real photo upload is not part of this preview, so this only picks a sample picture.') : null,
         msg, h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-save', text: 'Save item' }), h('a', { class: 'btn secondary', href: '#/giving/list/' + listId, text: 'Cancel' })));
       return h('div', { class: 'gv-page' }, backLink('#/giving/list/' + listId, 'Back to wishlist'), form);

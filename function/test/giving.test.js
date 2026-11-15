@@ -499,3 +499,22 @@ test('photos: deleting an item or a list, or the 30-day cleanup, deletes the fil
   await w.api.handle({ user: null, body: {}, deadline: Number.MAX_SAFE_INTEGER });
   assert.equal(Object.keys(w.world.files).length, 0);
 });
+
+/* ---------- link pictures ---------- */
+test('link pictures: a member gets the picture the link gives; bad links, strangers, an off family and too many tries are refused', async () => {
+  const calls = [];
+  EXTRA_CFG.linkPicture = async (url) => { calls.push(url); if (/nopic/.test(url)) throw Object.assign(new Error('x'), { linkPicture: true }); return { mime: 'image/png', bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]) }; };
+  try {
+    const w2 = await setup();
+    const r = await w2.ok('bob', 'givingLinkPicture', F({ url: 'https://shop.example/thing' }));
+    assert.match(r.image, /^data:image\/png;base64,/); assert.equal(r.host, 'shop.example'); assert.equal(calls[0], 'https://shop.example/thing');
+    await w2.fail('bob', 'givingLinkPicture', F({ url: 'javascript:alert(1)' }), 400);
+    await w2.fail('bob', 'givingLinkPicture', F({ url: '' }), 400);
+    await w2.fail('bob', 'givingLinkPicture', F({ url: 'https://nopic.example/x' }), 422);
+    await w2.fail('zed', 'givingLinkPicture', { familyId: 'famB', url: 'https://shop.example/thing' }, 404);   // not a member of this family
+    for (let i = 0; i < 4; i++) await w2.ok('ann', 'givingLinkPicture', F({ url: 'https://shop.example/' + i }));
+    let limited = 0; for (let i = 0; i < 8; i++) { try { await w2.ok('ann', 'givingLinkPicture', F({ url: 'https://shop.example/m' + i })); } catch (e) { limited++; } }
+    assert.ok(limited >= 1, 'the per-person cap stops a flood');
+    assert.equal(Object.keys(w2.world.files).length, 0);   // nothing is stored by the lookup itself
+  } finally { delete EXTRA_CFG.linkPicture; }
+});

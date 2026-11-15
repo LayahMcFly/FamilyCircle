@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { createApi, TABLES } from '../../../function/src/logic.js';
 import { CHAT_TABLES } from '../../../function/src/chat.js';
 import { GIVING_TABLES } from '../../../function/src/giving.js';
-const EXTRA_CFG = {};   // tests put stand-ins for the outside world here (link preview fetcher, GIF service)
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const PIC = fs.readFileSync(fileURLToPath(new URL('./pic.gif', import.meta.url)));
+// Stand-in for the shop page lookup: no internet in tests. "nopic" links have no picture, everything else gives the fixture picture.
+const EXTRA_CFG = { linkPicture: async (url) => { if (/nopic/.test(url)) throw Object.assign(new Error('none'), { linkPicture: true }); return { mime: 'image/gif', bytes: PIC }; } };
 
 /* ---------- in-memory fake of the server services (queries, unique keys, permissions) ---------- */
 function makeWorld() {
