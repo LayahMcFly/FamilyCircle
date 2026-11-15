@@ -40,7 +40,7 @@ export function blockedAddress(ip) {
   return true;
 }
 
-const fail = (why) => Object.assign(new Error(why), { linkPicture: true });
+const fail = (why, kind = 'none') => Object.assign(new Error(why), { linkPicture: true, kind });   // kind: 'none' (nothing usable on the page) or 'blocked' (the shop refused or showed a robot check)
 
 /** Checks a link and returns { url, host, ip, family }. Throws on anything not allowed. */
 export async function vet(rawUrl, lookup = dns.lookup) {
@@ -81,6 +81,7 @@ async function fetchVetted(rawUrl, opts, deps) {
     const target = await vet(cur, deps.lookup);
     const res = await deps.get(target, opts);
     if ([301, 302, 303, 307, 308].includes(res.status) && res.headers.location) { cur = new URL(res.headers.location, target.url).href; continue; }
+    if ([401, 403, 429, 503, 202].includes(res.status)) throw fail('shop refused ' + res.status, 'blocked');
     if (res.status !== 200) throw fail('page answered ' + res.status);
     return { ...res, finalUrl: target.url.href };
   }
@@ -98,6 +99,29 @@ export function sniffImage(b) {
 
 const decode = (s) => s.replace(/&amp;/g, '&').replace(/&#x2F;/gi, '/').replace(/&#47;/g, '/').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'");
 
+/** Other places shops put their main picture: schema.org Product data, and the main product image tag. */
+function fromPageMarkup(head) {
+  const ld = head.match(/<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+  for (const block of ld) {
+    try {
+      const data = JSON.parse(block.replace(/^<script[^>]*>|<\/script>$/gi, ''));
+      const stack = Array.isArray(data) ? [...data] : [data];
+      while (stack.length) {
+        const n = stack.shift(); if (!n || typeof n !== 'object') continue;
+        if (n.image) { const im = Array.isArray(n.image) ? n.image[0] : n.image; const u = typeof im === 'string' ? im : im && im.url; if (u) return u; }
+        if (Array.isArray(n['@graph'])) stack.push(...n['@graph']);
+      }
+    } catch (e) { /* not usable JSON; try the next block */ }
+  }
+  const tag = /<img\b[^>]*\bid\s*=\s*["'](?:landingImage|imgBlkFront|main-image)["'][^>]*>/i.exec(head);
+  if (tag) {
+    const hires = /data-old-hires\s*=\s*"([^"]+)"/i.exec(tag[0]); if (hires && hires[1]) return decode(hires[1]);
+    const dyn = /data-a-dynamic-image\s*=\s*"([^"]+)"/i.exec(tag[0]); if (dyn) { const m = /(https?:[^"&]+?\.(?:jpe?g|png|webp))/i.exec(decode(dyn[1]).replace(/&quot;/g, '"')); if (m) return m[1]; }
+    const src = /\bsrc\s*=\s*"([^"]+)"/i.exec(tag[0]); if (src && !/^data:/.test(src[1])) return decode(src[1]);
+  }
+  return '';
+}
+
 /** The shop's own preview picture address from a page's <head>: og:image, twitter:image, or link rel=image_src. */
 export function findPictureUrl(html, base) {
   const head = html.slice(0, 600000);
@@ -111,6 +135,7 @@ export function findPictureUrl(html, base) {
   }
   let pick = want.map((k) => found.get(k)).find(Boolean);
   if (!pick) { const l = /<link\b[^>]*rel\s*=\s*["']image_src["'][^>]*href\s*=\s*["']([^"']+)["']/i.exec(head); if (l) pick = decode(l[1]); }
+  if (!pick) pick = fromPageMarkup(head);
   if (!pick) return '';
   try { return new URL(pick, base).href; } catch (e) { return ''; }
 }
@@ -121,8 +146,9 @@ export async function fetchLinkPicture(rawUrl, deps = { lookup: dns.lookup, get 
   let bytes = page.body, mime = sniffImage(bytes);
   if (mime && bytes.length >= LINK_LIMITS.pageBytes) throw fail('picture too large');
   if (!mime) {
-    const pic = findPictureUrl(page.body.toString('utf8'), page.finalUrl);
-    if (!pic) throw fail('no picture on the page');
+    const text = page.body.toString('utf8');
+    const pic = findPictureUrl(text, page.finalUrl);
+    if (!pic) throw fail('no picture on the page', /captcha|robot check|automated access|are you a human|enter the characters/i.test(text) ? 'blocked' : 'none');
     const img = await fetchVetted(pic, { maxBytes: LINK_LIMITS.imageBytes, accept: 'image/jpeg,image/png,image/webp,image/gif,image/*;q=0.5' }, deps);
     bytes = img.body; mime = sniffImage(bytes);
   }
