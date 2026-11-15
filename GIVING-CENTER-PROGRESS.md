@@ -152,3 +152,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.31: Etsy listing links show their picture through Etsy's own API (function/src/etsy.js, action givingEtsyPicture). Never stored; shown with Etsy's required notice. Needs ETSY_API_KEY; without it nothing changes. Amazon has no usable free route (its Creators API needs an approved Associates account with 10 qualifying sales in 30 days), so Amazon pictures stay upload-only.
 - v1.51.99.32: footer link "About links and pictures" (no payments, links open other sites, pictures looked up only on request, Etsy notice).
 - v1.51.99.33: link-picture failures show a step-by-step trace (hosts, status numbers, sizes, times; never page text) under the photo field.
+- v1.51.99.34: link-picture button no longer drops its answer as 'stale' (that could leave 'Looking…' on screen forever) and shows a small log (request sent, answer after N s).
