@@ -33,6 +33,28 @@
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
+  /* Real photos: the picture is made smaller on the person's own device before anything is sent (a small one for the list, one up to 800 pixels for the full view). */
+  function fitPicture(img, max, quality, limit) {
+    var w = img.naturalWidth, h2 = img.naturalHeight, s = Math.min(1, max / Math.max(w, h2)), url = '';
+    for (var tries = 0; tries < 8; tries++) {
+      var cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h2 * s)), cv = document.createElement('canvas');
+      cv.width = cw; cv.height = ch;
+      var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cw, ch); cx.drawImage(img, 0, 0, cw, ch);
+      url = cv.toDataURL('image/jpeg', quality);
+      if ((url.length - 23) * 0.75 <= limit) return url;
+      if (quality > 0.45) quality -= 0.12; else s *= 0.8;
+    }
+    throw new Error('That picture is too large. Try a smaller one.');
+  }
+  function shrinkPicture(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () { try { resolve({ photo: fitPicture(img, 800, 0.82, 240000), thumb: fitPicture(img, 128, 0.7, 9500) }); } catch (e) { reject(e); } finally { URL.revokeObjectURL(url); } };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('That picture could not be read. Choose a JPEG, PNG or WebP picture.')); };
+      img.src = url;
+    });
+  }
+
   function mount(o) {
     var server = o.server, viewers = o.viewers, main = o.main, controls = o.controls, toasts = o.toasts, net = o.net || { mode: 'normal', wrap: function (run) { return Promise.resolve(run()); } };
     var real = !!o.real;
@@ -228,20 +250,31 @@
       document.body.appendChild(d); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); reason.focus();
     }
 
+    function photoDialog(it) {
+      var d = h('dialog', { class: 'gv-dialog', 'aria-labelledby': 'gv-p-h' });
+      var img = h('img', { class: 'gv-bigphoto', src: it.thumb, alt: 'Picture of ' + it.title }), note = h('p', { class: 'hint', id: 'gv-p-note', text: 'Loading the full picture…' });
+      d.appendChild(h('h2', { id: 'gv-p-h', text: it.title })); d.appendChild(img); d.appendChild(note);
+      d.appendChild(h('div', { class: 'gv-actions' }, h('button', { type: 'button', class: 'btn secondary', id: 'gv-p-close', text: 'Close', onclick: function () { d.close(); } })));
+      d.addEventListener('close', function () { d.remove(); });
+      document.body.appendChild(d); if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+      api('photoGet', { itemId: it.id }).then(function (r) { if (r.stale || !d.isConnected) return; if (r.ok && r.photo) { img.src = r.photo; note.textContent = ''; } else note.textContent = 'The full picture is not available right now.'; });
+    }
+
     /* ---------- one list ---------- */
     function itemCard(it, listId) {
       var li = h('li', { class: 'gv-item' + (it.received ? ' is-received' : ''), 'data-item': it.id });
-      var src = photoSrc(it.photo), fromLink = false;
+      var src = it.thumb || photoSrc(it.photo), fromLink = false;
       if (!src && it.url) { src = linkTile(it.url); fromLink = true; }
       li.appendChild(h('div', { class: 'gv-item-top' },
-        src ? h('img', { class: 'gv-photo' + (fromLink ? ' is-from-link' : ''), src: src, alt: '', width: 56, height: 56, 'data-from-link': fromLink ? 'true' : null }) : null,
+        it.thumb ? h('button', { type: 'button', class: 'gv-photo-btn', 'data-act': 'photo', 'aria-label': 'View the picture of ' + it.title, onclick: function () { photoDialog(it); } }, h('img', { class: 'gv-photo', src: src, alt: '', width: 56, height: 56 }))
+          : src ? h('img', { class: 'gv-photo' + (fromLink ? ' is-from-link' : ''), src: src, alt: '', width: 56, height: 56, 'data-from-link': fromLink ? 'true' : null }) : null,
         h('div', { class: 'gv-item-main' },
           h('strong', { class: 'gv-item-title', text: it.title }),
           h('p', { class: 'gv-badges' }, badge(C.PRIORITY_LABEL[it.priority], 'is-prio-' + it.priority), itemStatus(it)),
           money(it) ? h('p', { class: 'muted gv-price', text: money(it) }) : null,
           it.notes ? h('p', { class: 'gv-notes', text: it.notes }) : null,
           it.url ? h('p', { class: 'gv-link' }, h('a', { href: it.url, target: '_blank', rel: 'noopener noreferrer nofollow', text: 'Open link (' + C.hostOf(it.url) + ')' }), h('span', { class: 'muted', text: ' Opens another website.' })) : null,
-          fromLink ? h('p', { class: 'hint gv-linkpic', text: real ? 'Placeholder picture. Real pictures from links and photo uploads come later.' : 'Picture from the link (simulated in this preview).' }) : null)));
+          fromLink ? h('p', { class: 'hint gv-linkpic', text: real ? 'Placeholder picture. Pictures from links come later; you can add your own photo when you edit the item.' : 'Picture from the link (simulated in this preview).' }) : null)));
       var acts = h('div', { class: 'gv-actions' });
       if (it.mine) {
         acts.appendChild(h('a', { class: 'btn secondary small', href: '#/giving/list/' + listId + '/item/' + it.id + '/edit', 'data-act': 'edit', text: 'Edit', 'aria-label': 'Edit ' + it.title }));
@@ -312,6 +345,22 @@
       f.price = h('input', { type: 'text', id: 'gv-price', inputmode: 'decimal', autocomplete: 'off', value: existing && existing.priceCents ? (existing.priceCents / 100).toFixed(2) : '' });
       f.currency = h('select', { id: 'gv-currency' }, h('option', { value: '', text: 'Choose currency' }), Object.keys(C.CURRENCIES).map(function (c) { return h('option', { value: c, text: c + ' \u00b7 ' + C.CURRENCIES[c].name, selected: existing && existing.currency === c }); }));
       f.photo = real ? null : h('select', { id: 'gv-photo' }, Object.keys(PHOTO_LABEL).map(function (k) { return h('option', { value: k, text: PHOTO_LABEL[k], selected: existing && existing.photo === k }); }));
+      var removePhoto = false;
+      if (real) {
+        f.file = h('input', { type: 'file', id: 'gv-photofile', accept: 'image/jpeg,image/png,image/webp', 'aria-describedby': 'gv-photofile-hint' });
+        f.prev = h('div', { class: 'gv-photoprev', id: 'gv-photoprev' });
+        var showPrev = function (src) { f.prev.textContent = ''; if (src) f.prev.appendChild(h('img', { class: 'gv-photo', src: src, alt: 'Picture to use for this item', width: 56, height: 56 })); };
+        if (existing && existing.thumb) {
+          showPrev(existing.thumb);
+          f.prev.appendChild(h('button', { type: 'button', class: 'btn ghost small', id: 'gv-photoremove', text: 'Remove the picture', onclick: function () { removePhoto = true; f.file.value = ''; showPrev(''); toast('The picture will be removed when you save.'); } }));
+        }
+        f.file.addEventListener('change', function () {
+          var file = f.file.files && f.file.files[0]; removePhoto = false; setErr('gv-photofile', '');
+          if (!file) return showPrev(existing && existing.thumb || '');
+          if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { f.file.value = ''; return setErr('gv-photofile', 'Choose a JPEG, PNG or WebP picture.'); }
+          showPrev(URL.createObjectURL(file));
+        });
+      }
       var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
       var ids = { title: 'gv-title', notes: 'gv-notes', priority: 'gv-priority', url: 'gv-url', price: 'gv-price', currency: 'gv-currency' };
       var form = h('form', { class: 'card gv-form', novalidate: '', onsubmit: function (e) {
@@ -321,13 +370,22 @@
         api('itemSave', body).then(function (r) {
           if (r.stale) return;
           if (!r.ok) { var first = null; Object.keys(r.fields || {}).forEach(function (k) { setErr(ids[k], r.fields[k]); if (!first) first = document.getElementById(ids[k]); }); msg.textContent = r.message; if (first) first.focus(); return; }
-          toast('Item saved.'); go('#/giving/list/' + listId);
+          var file = real && f.file && f.file.files && f.file.files[0], itemId = r.item && r.item.id;
+          var done = function (note) { toast(note || 'Item saved.'); go('#/giving/list/' + listId); };
+          if (file) {
+            msg.textContent = 'Sending the picture…';
+            return shrinkPicture(file).then(function (p) { return api('photoSave', { itemId: itemId, thumb: p.thumb, photo: p.photo }); })
+              .then(function (x) { if (x.stale) return; done(x.ok ? 'Item saved.' : 'Item saved, but the picture was not added: ' + x.message); }, function (e) { done('Item saved, but the picture was not added: ' + e.message); });
+          }
+          if (real && removePhoto && existing && existing.thumb) return api('photoRemove', { itemId: itemId }).then(function (x) { if (x.stale) return; done(); });
+          done();
         });
       } },
         h('h1', { text: existing ? 'Edit item' : 'Add an item', 'data-focus': '' }),
         field('gv-title', 'Title', f.title), field('gv-notes', 'Notes (optional)', f.notes, '', 'Anything that helps someone pick the right one: size, color, model, where you saw it.'), field('gv-priority', 'How much do you want it?', f.priority),
         field('gv-url', 'Link (optional)', f.url, '', 'A web address you choose. Family Circle does not visit it or look anything up.'),
         h('div', { class: 'gv-pair' }, field('gv-price', 'Estimated price (optional)', f.price, '', 'A guess for reference. Not a charge.'), field('gv-currency', 'Currency', f.currency)),
+        real ? h('div', { class: 'gv-field' }, h('label', { for: 'gv-photofile', text: 'Photo (optional)' }), f.file, f.prev, h('p', { class: 'hint', id: 'gv-photofile-hint', text: 'A picture of the item. It is made smaller on your device before it is sent. Leave it empty to use the placeholder from your link.' }), h('p', { class: 'gv-fielderr', id: 'gv-photofile-err', role: 'alert' })) : null,
         f.photo ? field('gv-photo', 'Photo (optional)', f.photo, '', 'Leave this blank and the picture can come from your link. Real photo upload is not part of this preview, so this only picks a sample picture.') : null,
         msg, h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-save', text: 'Save item' }), h('a', { class: 'btn secondary', href: '#/giving/list/' + listId, text: 'Cancel' })));
       return h('div', { class: 'gv-page' }, backLink('#/giving/list/' + listId, 'Back to wishlist'), form);

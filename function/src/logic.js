@@ -540,7 +540,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
   const board = createBoard({ teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, textOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable: TABLES.profiles });
 
   // Family wishlists and gift reservations. Built but OFF for every family until its owner turns it on. See giving.js.
-  const giving = createGiving({ teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable: TABLES.profiles });
+  const giving = createGiving({ storage, photoBucket: cfg.givingBucketId || 'family-media', teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable: TABLES.profiles });
 
   const actions = {
     addressGet, addressSave, addressDelete, addressView,

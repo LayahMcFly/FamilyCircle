@@ -46,3 +46,10 @@
 .gv-report p { margin: 4px 0; overflow-wrap: anywhere; }
 .gv-row .gv-badge { justify-self: start; }
 .gv-off h1 { margin-top: 0; }
+.gv-photo-btn { padding: 0; border: 0; background: none; flex: none; border-radius: 10px; cursor: pointer; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.gv-photo-btn:focus-visible { outline: 3px solid var(--accent-text); outline-offset: 2px; }
+.gv-photoprev { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.gv-photoprev:empty { display: none; }
+.gv-bigphoto { display: block; max-width: 100%; max-height: 60vh; margin: 10px auto; border-radius: 10px; }
+.gv-field input[type="file"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; min-height: 44px; }
+.gv-field input[type="file"]::file-selector-button { margin-right: 12px; padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
