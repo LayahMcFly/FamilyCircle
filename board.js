@@ -171,7 +171,7 @@
 
     /* ---------- task form ---------- */
     function editTask(task, day) {
-      var t = task || { title: '', due: day || '', time: '', start: '', repeat: '', perDay: 0, assigneeIds: [], groupId: '', special: false, description: '', steps: [] };
+      var t = task || { title: '', due: day || '', time: '', start: '', repeat: '', perDay: 0, assigneeIds: [me().userId], private: true, groupId: '', special: false, description: '', steps: [] };   // a new task starts on you alone, so it starts private
       var title = h('input', { type: 'text', maxlength: 120, value: t.title, placeholder: 'For example: Take out the trash' });
       var due = h('input', { type: 'date', value: t.due || '' }), start = h('input', { type: 'date', value: t.start || '' }), time = h('input', { type: 'time', value: t.time || '' });
       var repeat = select(REPEATS, t.repeat || ''), perDay = select(PER_DAY, t.perDay || 0);
@@ -411,7 +411,7 @@
       ['Month', 'A calendar grid. Tap a day to see its tasks and add one. Dots show tasks, a star shows a special day, and a task that lasts several days shows on each of them.'],
       ['Week', 'The same tasks as seven stacked days, so you can see the whole week at once.'],
       ['Tasks', 'Your to-do list by due date. Tick the box to finish a task and the app records who did it. Tap a task to see its steps, history and edit it. A repeating task makes its next copy when you finish it.'],
-      ['Private tasks', 'A task you give only to yourself is private automatically, and a message pops up to tell you. Only you can see it: not the family, and not owners or admins. To make it public, open the task, tap Edit, and turn off Private, or tick Private in the form to hide any task. A private task with other people on it is visible to them too. Only the person who made it can change Private or delete it.'],
+      ['Private tasks', 'A new task starts on you alone, so it starts private. Only you can see it: not the family, and not owners or admins. Adding someone else to a new task turns Private off by itself. To make a private task public, open it, tap Edit, and turn off Private. You can tick Private on any task to hide it. A private task with other people on it is visible to them too. Only the person who made it can change Private or delete it.'],
       ['Shopping', 'Things your family buys again and again. Tap Running low to tell everyone how many are left, and Bought it to clear it.'],
       ['Groups', 'Labels for sorting tasks, like Chores or School. Owners and admins make and change them. Everyone else can ask for one.'],
       ['Requests', 'For things you cannot do alone: asking for a new group, or asking to delete a task someone else made. Owners and admins see the request here and choose Accept, Reject or Ignore. Accept does it, Reject leaves things as they are and tells you, and Ignore closes it quietly. You only see your own requests.'],

@@ -53,7 +53,7 @@ const geometry = page => page.evaluate(() => {
     navRight: side ? Math.round(navBox.right) : null, navTop: !side && navBox ? Math.round(navBox.top) : null, lastBottom: Math.round(Math.max.apply(null, cards.map(c => r(c).bottom))), vw: document.documentElement.clientWidth };
 });
 const rowMajor = g => g.ids.every((_, i) => g.rowOf[i] === Math.floor(i / 3) && g.colOf[i] === i % 3);
-const REAL = ['community', 'messages', 'tree', 'shop', 'recipes', 'calendar'], PLAN = ['giving', 'exchange', 'challenges', 'legacy', 'skills', 'travel', 'vault', 'assistant'], ALL = REAL.concat(PLAN);
+const REAL = ['community', 'messages', 'tree', 'shop', 'recipes', 'calendar', 'giving'], PLAN = ['exchange', 'challenges', 'legacy', 'skills', 'travel', 'vault', 'assistant'], ALL = REAL.concat(PLAN);
 let PORT;
 (async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); PORT = server.address().port; fs.mkdirSync(OUT, { recursive: true });
@@ -96,7 +96,7 @@ let PORT;
     await page.screenshot({ path: path.join(OUT, 'desktop-1280-shop-off-13-cards.png'), fullPage: true });
     check('Shop off: no page errors', errors.length === 0, errors.join('|')); await ctx.close(); }
   { const { ctx, page, errors } = await openAt(browser, 1280, 800, TWO, ['chat', 'shop']); const g = await geometry(page);
-    check('Chat and Shop off: 4 real cards then 8 Planned, 12 cards = 4 full rows', JSON.stringify(g.ids) === JSON.stringify(['community', 'tree', 'recipes', 'calendar'].concat(PLAN)) && g.rows === 4 && rowMajor(g) && g.emptyLi === 0, g.ids.join(','));
+    check('Chat and Shop off: 5 real cards then 7 Planned, 12 cards = 4 full rows', JSON.stringify(g.ids) === JSON.stringify(['community', 'tree', 'recipes', 'calendar', 'giving'].concat(PLAN)) && g.rows === 4 && rowMajor(g) && g.emptyLi === 0, g.ids.join(','));
     check('Chat and Shop off: no page errors', errors.length === 0, errors.join('|')); await ctx.close(); }
 
   // Planned cards: honest, inert, accessible
@@ -107,24 +107,24 @@ let PORT;
         out[id] = { tag: b && b.tagName, href: b && b.getAttribute('href'), type: b && b.getAttribute('type'), badge: b && (b.querySelector('.hub-badge') || {}).textContent, expanded: b && b.getAttribute('aria-expanded'),
           controls: b && b.getAttribute('aria-controls'), noteId: note && note.id, noteHidden: note && note.hidden, noteDisplay: note && getComputedStyle(note).display, anchors: li ? li.querySelectorAll('a').length : -1,
           controlsInside: li ? li.querySelectorAll('input,textarea,select,form,[type=file],[contenteditable]').length : -1, title: b && b.querySelector('.hub-title').textContent, desc: b && b.querySelector('.hub-desc').textContent }; }); return out; }, PLAN);
-    const names = { giving: 'Giving Center', exchange: 'Family Exchange', challenges: 'Challenges', legacy: 'Memories & Legacy', skills: 'Skills & Mentorship', travel: 'Travel Planner', vault: 'Document Vault', assistant: 'Family Assistant' };
-    check(`${w}px Planned: each of the 8 is a button (not a link), with no href and no route`, PLAN.every(id => st[id].tag === 'BUTTON' && st[id].type === 'button' && st[id].href === null && st[id].anchors === 0), JSON.stringify(st));
+    const names = { exchange: 'Family Exchange', challenges: 'Challenges', legacy: 'Memories & Legacy', skills: 'Skills & Mentorship', travel: 'Travel Planner', vault: 'Document Vault', assistant: 'Family Assistant' };
+    check(`${w}px Planned: each of the 7 is a button (not a link), with no href and no route`, PLAN.every(id => st[id].tag === 'BUTTON' && st[id].type === 'button' && st[id].href === null && st[id].anchors === 0), JSON.stringify(st));
     check(`${w}px Planned: names are exactly the agreed ones`, PLAN.every(id => st[id].title === names[id]), PLAN.map(id => st[id].title).join('|'));
     check(`${w}px Planned: every card carries a visible "Planned" label`, PLAN.every(id => st[id].badge === 'Planned'), '');
-    check(`${w}px Planned: notes start closed (hidden, not displayed), aria-expanded=false, aria-controls points at the note`, PLAN.every(id => st[id].expanded === 'false' && st[id].noteHidden === true && st[id].noteDisplay === 'none' && st[id].controls === st[id].noteId), JSON.stringify(st.giving));
+    check(`${w}px Planned: notes start closed (hidden, not displayed), aria-expanded=false, aria-controls points at the note`, PLAN.every(id => st[id].expanded === 'false' && st[id].noteHidden === true && st[id].noteDisplay === 'none' && st[id].controls === st[id].noteId), JSON.stringify(st.exchange));
     check(`${w}px Planned: no inputs, forms, uploads or editable fields anywhere in them`, PLAN.every(id => st[id].controlsInside === 0), '');
     // open one with the mouse
-    await page.click('[data-hub="giving"]');
-    const o1 = await page.evaluate(() => { const b = document.querySelector('[data-hub="giving"]'), n = document.getElementById(b.getAttribute('aria-controls')); const r = n.getBoundingClientRect(), c = b.getBoundingClientRect(), li = b.closest('li').getBoundingClientRect();
+    await page.click('[data-hub="exchange"]');
+    const o1 = await page.evaluate(() => { const b = document.querySelector('[data-hub="exchange"]'), n = document.getElementById(b.getAttribute('aria-controls')); const r = n.getBoundingClientRect(), c = b.getBoundingClientRect(), li = b.closest('li').getBoundingClientRect();
       return { exp: b.getAttribute('aria-expanded'), visible: !n.hidden && r.height > 0, text: n.textContent, below: r.top >= c.bottom - 1, insideCell: r.bottom <= li.bottom + 1 && r.left >= li.left - 1 && r.right <= li.right + 1, hash: location.hash, view: document.querySelector('main').dataset.view, hOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth }; });
-    check(`${w}px Planned: click shows a short "not available yet" note under the card, nothing navigates`, o1.exp === 'true' && o1.visible && /Giving Center is not available yet/.test(o1.text) && o1.below && o1.insideCell && o1.hash === '#/hub' && o1.view === 'hub' && page.url() === url0, JSON.stringify(o1));
+    check(`${w}px Planned: click shows a short "not available yet" note under the card, nothing navigates`, o1.exp === 'true' && o1.visible && /Family Exchange is not available yet/.test(o1.text) && o1.below && o1.insideCell && o1.hash === '#/hub' && o1.view === 'hub' && page.url() === url0, JSON.stringify(o1));
     check(`${w}px Planned: the note makes no promise of data, payment, upload or enrolment, and contains no figures`, !/\$|\d/.test(o1.text) && /nothing to open, create, send or pay/.test(o1.text), o1.text);
     check(`${w}px Planned: opening a note does not add sideways scroll`, !o1.hOverflow, '');
     const g1 = await geometry(page);
     check(`${w}px Planned: with a note open, no card overlaps, clips or leaves its row`, g1.overlap.length === 0 && g1.clipped.length === 0 && (w < 900 || (g1.cols === 3 && rowMajor(g1))), JSON.stringify({ o: g1.overlap, c: g1.clipped }));
     await page.screenshot({ path: path.join(OUT, `planned-note-open-${w}.png`), fullPage: true });
-    await page.click('[data-hub="giving"]');
-    check(`${w}px Planned: second click closes the note again`, await page.evaluate(() => { const b = document.querySelector('[data-hub="giving"]'); return b.getAttribute('aria-expanded') === 'false' && document.getElementById(b.getAttribute('aria-controls')).hidden; }), '');
+    await page.click('[data-hub="exchange"]');
+    check(`${w}px Planned: second click closes the note again`, await page.evaluate(() => { const b = document.querySelector('[data-hub="exchange"]'); return b.getAttribute('aria-expanded') === 'false' && document.getElementById(b.getAttribute('aria-controls')).hidden; }), '');
     // keyboard: Space and Enter on a card
     await page.focus('[data-hub="vault"]'); await page.keyboard.press('Enter');
     const k1 = await page.evaluate(() => document.querySelector('[data-hub="vault"]').getAttribute('aria-expanded')); await page.keyboard.press('Space');
@@ -155,7 +155,7 @@ let PORT;
 
   // the card links and permission rules are untouched: same cards as before for the same configuration
   { const { ctx, page } = await openAt(browser, 1280, 800, TWO); const hrefs = await page.evaluate(() => [...document.querySelectorAll('a.hub-card')].map(a => a.getAttribute('data-hub') + '=' + a.getAttribute('href')));
-    check('links as expected (Recipes and Calendar are in-app; the others unchanged; Planned cards add no links)', hrefs.join('|') === 'community=#/home|messages=#/chat|tree=#/tree|shop=#/shop|recipes=#/recipes' + '|calendar=#/calendar', hrefs.join('|')); await ctx.close(); }
+    check('links as expected (Recipes, Calendar and Giving are in-app; the others unchanged; Planned cards add no links)', hrefs.join('|') === 'community=#/home|messages=#/chat|tree=#/tree|shop=#/shop|recipes=#/recipes' + '|calendar=#/calendar|giving=#/giving', hrefs.join('|')); await ctx.close(); }
 
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

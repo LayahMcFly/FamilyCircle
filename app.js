@@ -2509,7 +2509,7 @@
     var pr = S.profiles.get(o.authorId) || null, nm = pr ? pr.displayName : 'Family member';
     box.appendChild(h('div', { class: 'orig-head' }, avatarEl(pr), h('div', { class: 'who' },
       h('a', { class: 'member-link', href: '#/profile/' + o.authorId, text: nm }),
-      h('div', { class: 'small muted' }, 'Originally posted ', h('time', { datetime: o.$createdAt, text: longDate(o.$createdAt) }), (Date.now() - new Date(o.$createdAt).getTime() < 7 * 86400000) ? ' · ' + timeAgo(o.$createdAt) : ''))));
+      h('div', { class: 'small muted' }, 'Originally posted ', h('time', { datetime: o.$createdAt, title: longDate(o.$createdAt), text: new Date(o.$createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) }), (Date.now() - new Date(o.$createdAt).getTime() < 7 * 86400000) ? ' · ' + timeAgo(o.$createdAt) : ''))));
     if (o.body) { var obp = h('p', { class: 'post-body' }); obp.appendChild(richText(o.body)); box.appendChild(obp); }
     if (o.mediaFileId) {
       if (o.kind === 'photo') box.appendChild(imageBlock(o));
