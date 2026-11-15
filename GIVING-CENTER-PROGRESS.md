@@ -148,3 +148,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - Many shops block automated visits (the lookup then says no picture was found and offers the photo upload). It reads the shop's own share picture (og:image); it never copies prices or text.
 - Needs the new function upload. Rollback: upload the previous function tarball; the button then shows a plain error and uploads still work.
 - v1.51.99.29: link pictures now say when a shop refuses or shows a robot check (then: save the picture and upload it), and also read schema.org Product data and the main product image tag. Family Circle does not pretend to be another service's crawler (such as Discord's) to get past a shop's bot rules.
+- v1.51.99.30: link pictures never wait forever (10 s overall limit on the function, 20 s on the screen); a shop that does not answer gets its own plain message. Etsy and Amazon block automated visits, so for them the photo picker is the way.
