@@ -23,6 +23,7 @@
 })(typeof self !== 'undefined' ? self : this, function (C) {
   'use strict';
   var L = C.LIMITS;
+  var RQ_KINDS = C.REQUEST_KINDS;
   var PHOTOS = ['', 'mug', 'book', 'plant', 'lamp'];
   var MANAGER_ROLES = ['owner', 'admin', 'treeAdmin'];
   function fail(error, message) { return { ok: false, error: error, message: message }; }
@@ -32,6 +33,7 @@
   function create(options) {
     options = options || {};
     var families = {}, members = [], lists = {}, items = {}, notices = {}, reports = {};
+    var requests = {}, pledges = {};   // Phase A: family requests and the pledges made on them
     var reservations = {};   // itemId -> row. One key per item = "unique index on itemId": a second insert for the same item is refused.
     var seq = 0;
     var nid = function (p) { return p + (++seq); };
@@ -69,6 +71,38 @@
       if (r && r.buyerId === m.userId) { v.reservedByMe = true; v.changedSinceReserved = r.version !== it.version; }
       return v;
     }
+
+    /* ---------- Requests and pledges (Phase A) ---------- */
+    var RQ = C.REQ;
+    /** A request is reachable if it exists, its owner is still a member, and the viewer may see it:
+     *  approved ones follow the audience rule; one waiting for approval is seen only by its owner and by adult owners/admins. */
+    function requestFor(m, id) {
+      var r = requests[id];
+      if (!r || r.familyId !== m.familyId || r.archived) return null;
+      if (!membership(r.ownerId, m.familyId)) return null;
+      if (r.ownerId === m.userId) return r;
+      if (r.approval !== 'approved') return canModerate(m) ? r : null;
+      if (r.audience === 'adults' && !m.adult) return null;
+      return r;
+    }
+    function pledgesOf(rid) { return Object.keys(pledges).map(function (k) { return pledges[k]; }).filter(function (p) { return p.requestId === rid; }).sort(function (a, b) { return a.n - b.n; }); }
+    function requestView(m, r, full) {
+      var ps = pledgesOf(r.id), active = ps.filter(function (p) { return p.status !== 'withdrawn'; });
+      var v = { id: r.id, title: r.title, details: r.details, kind: r.kind, kindLabel: RQ_KINDS[r.kind], needed: r.needed, amount: r.amount, neededBy: r.neededBy, audience: r.audience,
+        ownerName: nameOf(r.familyId, r.ownerId), mine: r.ownerId === m.userId, status: r.status, approval: r.approval,
+        pledgedCount: active.length, doneCount: active.filter(function (p) { return p.status === 'done'; }).length };
+      v.stillNeeded = Math.max(0, r.needed - active.length);
+      if (full) {
+        v.pledges = active.map(function (p) { return { id: p.id, userId: p.userId, name: nameOf(r.familyId, p.userId), note: p.note, status: p.status, mine: p.userId === m.userId }; });
+        var mineP = active.filter(function (p) { return p.userId === m.userId; })[0]; if (mineP) v.myPledgeId = mineP.id;
+      }
+      return v;
+    }
+    function removeRequest(r, reason) {
+      pledgesOf(r.id).forEach(function (p) { if (p.status !== 'withdrawn' && reason) notify(p.userId, reason.replace('{request}', r.title)); delete pledges[p.id]; });
+      Object.keys(reports).forEach(function (k) { if (reports[k].kind === 'request' && reports[k].targetId === r.id) delete reports[k]; });
+      delete requests[r.id];
+    }
     function itemsOf(listId) { return Object.keys(items).map(function (k) { return items[k]; }).filter(function (i) { return i.listId === listId; }).sort(function (a, b) { return a.n - b.n; }); }
     function listSummary(m, l) {
       var its = itemsOf(l.id);
@@ -96,7 +130,8 @@
         var open = canModerate(m) ? Object.keys(reports).filter(function (k) { return reports[k].familyId === m.familyId; }).length : 0;
         var out = { ok: true, lists: ls, reservations: mine, notices: (notices[m.userId] || []).slice(), canCreateList: ls.filter(function (x) { return x.mine; }).length < L.lists,
           me: { adult: !!m.adult }, canManageAges: isManager(m), canModerate: canModerate(m) };
-        if (canModerate(m)) out.openReports = open;   // everyone else gets no report field at all
+        out.requests = { open: Object.keys(requests).filter(function (k) { var q = requests[k]; return q.status === 'open' && q.approval === 'approved' && requestFor(m, q.id); }).length };
+        if (canModerate(m)) { out.openReports = open; out.requests.waiting = Object.keys(requests).filter(function (k) { var q = requests[k]; return q.approval === 'pending' && q.ownerId !== m.userId && requestFor(m, q.id); }).length; }   // everyone else gets no report field at all
         return out;
       },
       noticeDismiss: function (m, b) { notices[m.userId] = (notices[m.userId] || []).filter(function (n) { return n.id !== b.noticeId; }); return { ok: true }; },
@@ -184,6 +219,96 @@
         t.adult = adult; return { ok: true };
       },
 
+
+      /* ----- Requests and pledges (Phase A) ----- */
+      requestsHome: function (m) {
+        var all = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (r) { return requestFor(m, r.id); }).sort(function (a, b) { return b.n - a.n; });
+        var pending = canModerate(m) ? all.filter(function (r) { return r.approval === 'pending' && r.ownerId !== m.userId; }) : [];
+        var visible = all.filter(function (r) { return r.approval === 'approved' || r.ownerId === m.userId; });
+        var openCount = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (r) { return r.familyId === m.familyId && r.ownerId === m.userId && r.status === 'open' && !r.archived; }).length;
+        return { ok: true, me: { adult: !!m.adult }, canModerate: canModerate(m), canCreate: openCount < RQ.open,
+          open: visible.filter(function (r) { return r.status === 'open'; }).map(function (r) { return requestView(m, r, false); }),
+          closed: visible.filter(function (r) { return r.status === 'closed'; }).slice(0, 20).map(function (r) { return requestView(m, r, false); }),
+          waiting: pending.map(function (r) { return requestView(m, r, false); }) };
+      },
+      requestGet: function (m, b) {
+        var r = requestFor(m, b.requestId); if (!r) return NA();
+        return { ok: true, request: requestView(m, r, true), me: { adult: !!m.adult }, canModerate: canModerate(m) };
+      },
+      requestSave: function (m, b) {
+        var v = C.validateRequest(b); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted fields.', fields: v.errors };
+        if (v.value.audience === 'adults' && !m.adult) return fail('adults_only', 'Only adults can make a request adults only.');
+        if (b.requestId) {
+          var r = requestFor(m, b.requestId); if (!r || r.ownerId !== m.userId) return NA();
+          Object.assign(r, v.value);
+          if (!m.adult) { r.approval = 'pending'; }   // a kid's edit goes back for an adult to look at again
+          return { ok: true, request: requestView(m, r, true) };
+        }
+        var openCount = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (x) { return x.familyId === m.familyId && x.ownerId === m.userId && x.status === 'open' && !x.archived; }).length;
+        if (openCount >= RQ.open) return fail('limit', 'You can have up to ' + RQ.open + ' open requests. Close one to add another.');
+        var nr = Object.assign({ id: nid('q'), n: seq, familyId: m.familyId, ownerId: m.userId, status: 'open', archived: false, approval: m.adult ? 'approved' : 'pending' }, v.value);
+        requests[nr.id] = nr;
+        return { ok: true, request: requestView(m, nr, true), waitingForApproval: nr.approval === 'pending' };
+      },
+      requestApprove: function (m, b) {
+        if (!canModerate(m)) return NA();
+        var r = requests[b.requestId]; if (!r || r.familyId !== m.familyId || r.archived || r.approval !== 'pending') return NA();
+        if (r.ownerId === m.userId) return fail('self', 'Ask another owner or admin to approve your own request.');
+        r.approval = 'approved'; notify(r.ownerId, 'Your request "' + r.title + '" was approved and the family can see it.'); return { ok: true };
+      },
+      requestReject: function (m, b) {
+        if (!canModerate(m)) return NA();
+        var r = requests[b.requestId]; if (!r || r.familyId !== m.familyId || r.archived || r.approval !== 'pending') return NA();
+        notify(r.ownerId, 'Your request "' + r.title + '" was not posted. An owner or admin can tell you why.'); removeRequest(r); return { ok: true };
+      },
+      requestClose: function (m, b) {
+        var r = requestFor(m, b.requestId); if (!r || r.ownerId !== m.userId) return NA();
+        r.status = b.reopen ? 'open' : 'closed';
+        if (b.reopen) { var open2 = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (x) { return x.familyId === m.familyId && x.ownerId === m.userId && x.status === 'open' && !x.archived; }).length; if (open2 > RQ.open) { r.status = 'closed'; return fail('limit', 'You can have up to ' + RQ.open + ' open requests. Close one to reopen this.'); } }
+        return { ok: true, request: requestView(m, r, true) };
+      },
+      requestDelete: function (m, b) {
+        var r = requestFor(m, b.requestId); if (!r || r.ownerId !== m.userId) return NA();
+        removeRequest(r, 'A request you pledged to ("{request}") was removed.'); return { ok: true };
+      },
+      pledgeSave: function (m, b) {
+        var r = requestFor(m, b.requestId); if (!r || r.approval !== 'approved') return NA();
+        if (!m.adult) return fail('adults_only', 'Pledging is for adults.');
+        if (r.ownerId === m.userId) return fail('own_request', 'You cannot pledge to your own request.');
+        if (r.status !== 'open') return fail('closed', 'This request is closed.');
+        var v = C.validatePledge(b); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted field.', fields: v.errors };
+        var mine = pledgesOf(r.id).filter(function (p) { return p.userId === m.userId && p.status !== 'withdrawn'; })[0];
+        if (mine) { if (mine.status === 'done') return fail('done', 'Your pledge is already marked done.'); mine.note = v.value.note; return { ok: true, request: requestView(m, r, true) }; }
+        if (pledgesOf(r.id).filter(function (p) { return p.status !== 'withdrawn'; }).length >= RQ.pledges) return fail('limit', 'This request already has ' + RQ.pledges + ' pledges.');
+        var np = { id: nid('g'), n: seq, requestId: r.id, familyId: m.familyId, userId: m.userId, note: v.value.note, status: 'pledged' }; pledges[np.id] = np;
+        notify(r.ownerId, nameOf(m.familyId, m.userId) + ' pledged to help with "' + r.title + '".');
+        return { ok: true, request: requestView(m, r, true) };
+      },
+      pledgeWithdraw: function (m, b) {
+        var p = pledges[b.pledgeId], r = p && requestFor(m, p.requestId); if (!p || !r || p.userId !== m.userId || p.status === 'withdrawn') return NA();
+        if (p.status === 'done') return fail('done', 'A pledge marked done cannot be withdrawn. Ask the person who made the request.');
+        p.status = 'withdrawn'; notify(r.ownerId, nameOf(m.familyId, m.userId) + ' withdrew a pledge on "' + r.title + '".');
+        return { ok: true, request: requestView(m, r, true) };
+      },
+      pledgeDone: function (m, b) {
+        var p = pledges[b.pledgeId], r = p && requestFor(m, p.requestId); if (!p || !r || r.ownerId !== m.userId || p.status === 'withdrawn') return NA();
+        p.status = b.done === false ? 'pledged' : 'done';
+        if (p.status === 'done') notify(p.userId, 'Thank you. "' + r.title + '" marked your help as done.');
+        return { ok: true, request: requestView(m, r, true) };
+      },
+      requestReport: function (m, b) {
+        var r = requestFor(m, b.targetId); if (!r || r.approval !== 'approved') return NA();
+        if (r.ownerId === m.userId) return fail('own_content', 'You cannot report your own request.');
+        var v = C.validateReport(b); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted field.', fields: v.errors };
+        var dupe = Object.keys(reports).filter(function (k) { var x = reports[k]; return x.reporterId === m.userId && x.kind === 'request' && x.targetId === r.id; })[0];
+        if (!dupe) {
+          var mineN = Object.keys(reports).filter(function (k) { return reports[k].reporterId === m.userId; }).length;
+          if (mineN >= 20) return fail('limit', 'You have sent a lot of reports. An admin will review them first.');
+          var rp = { id: nid('p'), familyId: m.familyId, kind: 'request', targetId: r.id, listId: null, reporterId: m.userId, reason: v.value.reason, note: v.value.note }; reports[rp.id] = rp;
+        }
+        return { ok: true, message: 'Thanks. An owner or admin will take a look. The person who wrote it is not told who reported it.' };
+      },
+
       /* ----- reporting ----- */
       report: function (m, b) {
         var kind = b.kind === 'list' ? 'list' : 'item', it = null, l = null;
@@ -204,6 +329,7 @@
       reports: function (m) {
         if (!canModerate(m)) return NA();
         var out = Object.keys(reports).map(function (k) { return reports[k]; }).filter(function (r) { return r.familyId === m.familyId; }).map(function (r) {
+          if (r.kind === 'request') { var q = requests[r.targetId]; return { id: r.id, kind: 'request', reasonLabel: C.REPORT_REASONS[r.reason], note: r.note, reporterName: nameOf(m.familyId, r.reporterId), ownerName: q ? nameOf(m.familyId, q.ownerId) : '', listName: 'Family requests', title: q ? q.title : '', notes: q ? q.details : '', url: '' }; }
           var l = lists[r.listId], it = r.kind === 'item' ? items[r.targetId] : null;
           return { id: r.id, kind: r.kind, reasonLabel: C.REPORT_REASONS[r.reason], note: r.note, reporterName: nameOf(m.familyId, r.reporterId), ownerName: nameOf(m.familyId, l.ownerId), listName: l.name,
             title: it ? it.title : l.name, notes: it ? it.notes : '', url: it ? it.url : '' };   // content only: never anything about reservations
@@ -213,6 +339,11 @@
       reportResolve: function (m, b) {
         if (!canModerate(m)) return NA();
         var r = reports[b.reportId]; if (!r || r.familyId !== m.familyId) return NA();
+        if (r.kind === 'request') {
+          var q = requests[r.targetId];
+          if (b.action === 'remove' && q) { notify(q.ownerId, 'Your request was removed by a family admin.'); removeRequest(q, 'A request you pledged to ("{request}") was removed.'); } else { delete reports[r.id]; }
+          return { ok: true };
+        }
         if (b.action === 'remove') {
           var l = lists[r.listId];
           if (r.kind === 'item' && items[r.targetId]) { removeItem(items[r.targetId], 'An item you reserved ({item}) is no longer on the wishlist.'); notify(l.ownerId, 'An item on your wishlist was removed by a family admin.'); }
@@ -232,6 +363,8 @@
       removeMember: function (familyId, userId) {
         members.forEach(function (m) { if (m.familyId === familyId && m.userId === userId) m.active = false; });
         Object.keys(reservations).forEach(function (k) { var r = reservations[k]; if (r.familyId === familyId && r.buyerId === userId) delete reservations[k]; });
+        Object.keys(requests).forEach(function (k) { var q = requests[k]; if (q.familyId === familyId && q.ownerId === userId) q.archived = true; });
+        Object.keys(pledges).forEach(function (k) { var g = pledges[k]; if (g.familyId === familyId && g.userId === userId && g.status !== 'done') g.status = 'withdrawn'; });
         Object.keys(lists).forEach(function (k) {
           var l = lists[k]; if (l.familyId !== familyId || l.ownerId !== userId) return;
           l.archived = true;
@@ -243,8 +376,11 @@
       addList: function (familyId, ownerId, name, audience) { var l = { id: nid('l'), n: seq, familyId: familyId, ownerId: ownerId, name: name, audience: audience || 'everyone', archived: false }; lists[l.id] = l; return l; },
       addItem: function (listId, fields) { var l = lists[listId]; var it = Object.assign({ id: nid('i'), n: seq, listId: listId, familyId: l.familyId, notes: '', priority: 'medium', url: '', priceCents: 0, currency: '', photo: '', received: false, version: 1 }, fields); items[it.id] = it; return it; },
       reserveFor: function (userId, itemId) { var it = items[itemId]; return call(userId, 'reserve', { familyId: it.familyId, itemId: itemId }); },
+      addRequest: function (familyId, ownerId, fields) { var m = membership(ownerId, familyId); var r = Object.assign({ id: nid('q'), n: seq, familyId: familyId, ownerId: ownerId, details: '', kind: 'thing', needed: 1, amount: '', neededBy: '', audience: 'everyone', status: 'open', archived: false, approval: m && m.adult ? 'approved' : 'pending' }, fields); requests[r.id] = r; return r; },
+      clearNotices: function (userId) { notices[userId] = []; },
+      pledgeFor: function (userId, requestId, note) { var r = requests[requestId]; return call(userId, 'pledgeSave', { familyId: r.familyId, requestId: requestId, note: note || '' }); },
       /** For tests only: everything the server holds. */
-      dump: function () { return JSON.stringify({ lists: lists, items: items, reservations: reservations, notices: notices, reports: reports }); }
+      dump: function () { return JSON.stringify({ lists: lists, items: items, reservations: reservations, notices: notices, reports: reports, requests: requests, pledges: pledges }); }
     };
 
     function call(userId, action, body) {
@@ -294,6 +430,10 @@
     a.addItem(l3.id, { title: 'Bubble gun', notes: 'The kind that makes big bubbles. Batteries not needed.', priority: 'high', url: 'https://toys.example.com/bubble-gun', priceCents: 1599, currency: 'USD' });
     var l4 = a.addList('famA', 'u-tia', 'Riley’s birthday gifts', 'adults');   // adults only, so the surprise is safe
     a.addItem(l4.id, { title: 'Bike helmet (the green one)', notes: 'Size small. Hide it until the party.', priority: 'high', priceCents: 3200, currency: 'USD' });
+    var rq1 = a.addRequest('famA', 'u-rae', { title: 'Help moving a couch on Saturday', details: 'Second floor, no elevator. Pizza after.', kind: 'time', needed: 3, neededBy: '2026-12-05' });
+    a.addRequest('famA', 'u-sam', { title: 'Winter coat for Riley, size 8', details: 'Any colour. Used is fine.', kind: 'thing', needed: 1, amount: 'about $40', audience: 'adults' });
+    a.addRequest('famA', 'u-riley', { title: 'Can someone take me to the library?', details: 'Saturday morning if possible.', kind: 'task', needed: 1 });   // a kid: waits for an adult to approve
+    a.pledgeFor('u-sam', rq1.id, 'I can come after 10.'); a.clearNotices('u-rae');   // sample data starts with no notices
     a.reserveFor('u-sam', mug.id);   // Sam already reserved Rae's mug
     a.reserveFor('u-tia', tape.id);   // Tia reserved Sam's tape measure, so Rae sees one item as "Reserved" without a name
   }

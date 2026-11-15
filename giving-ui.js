@@ -92,6 +92,12 @@
     function route() {
       var p = (location.hash || '').replace(/^#\/?/, '').split('/');
       if (p[0] !== 'giving') return { name: 'home' };
+      if (p[1] === 'requests') {
+        if (p[2] === 'new') return { name: 'requestNew' };
+        if (p[2] && p[3] === 'edit') return { name: 'requestEdit', id: p[2] };
+        if (p[2]) return { name: 'request', id: p[2] };
+        return { name: 'requests' };
+      }
       if (p[1] === 'list' && p[2] === 'new') return { name: 'listNew' };
       if (p[1] === 'list' && p[2]) {
         if (p[3] === 'edit') return { name: 'listEdit', id: p[2] };
@@ -188,6 +194,8 @@
         page.appendChild(h('div', { class: 'gv-notice', role: 'status' }, h('span', { text: n.text }),
           h('button', { type: 'button', class: 'btn ghost small', 'data-notice': n.id, text: 'Dismiss', onclick: function () { api('noticeDismiss', { noticeId: n.id }).then(function (x) { if (x.stale) return; refresh(); }); } })));
       });
+      if (!real) page.appendChild(h('a', { class: 'gv-row gv-requestslink', id: 'gv-requestslink', href: '#/giving/requests' },
+        h('strong', { text: 'Family requests' }), h('span', { class: 'muted', text: r.requests ? (r.requests.open + (r.requests.open === 1 ? ' open request' : ' open requests') + (r.requests.waiting ? ', ' + r.requests.waiting + ' waiting for approval' : '')) : 'Ask for help and pledge to help' })));
       var mine = r.lists.filter(function (l) { return l.mine; }), others = r.lists.filter(function (l) { return !l.mine; });
       page.appendChild(h('h2', { class: 'gv-sub', text: 'Your wishlists' }));
       if (!mine.length) page.appendChild(h('p', { class: 'muted', text: 'You have no wishlists yet.' }));
@@ -236,14 +244,14 @@
         if (r.stale || !r.ok) return;
         r.reports.forEach(function (x) {
           ul.appendChild(h('li', { class: 'gv-report', 'data-report': x.id },
-            h('strong', { text: (x.kind === 'list' ? 'Wishlist: ' : 'Item: ') + x.title }),
-            h('p', { class: 'muted', text: 'On ' + x.ownerName + '’s list “' + x.listName + '”. Reported by ' + x.reporterName + ': ' + x.reasonLabel + '.' }),
+            h('strong', { text: (x.kind === 'list' ? 'Wishlist: ' : x.kind === 'request' ? 'Request: ' : 'Item: ') + x.title }),
+            h('p', { class: 'muted', text: (x.kind === 'request' ? 'Asked by ' + x.ownerName + '. Reported by ' : 'On ' + x.ownerName + '’s list “' + x.listName + '”. Reported by ') + '' + x.reporterName + ': ' + x.reasonLabel + '.' }),
             x.note ? h('p', { class: 'gv-notes', text: 'Their note: ' + x.note }) : null,
             x.notes ? h('p', { class: 'gv-notes', text: 'Notes on the item: ' + x.notes }) : null,
             x.url ? h('p', { class: 'muted', text: 'Link: ' + C.hostOf(x.url) }) : null,
             h('div', { class: 'gv-actions' },
               h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'dismiss', text: 'Dismiss report', onclick: function () { api('reportResolve', { reportId: x.id, action: 'dismiss' }).then(function (y) { if (y.stale) return; toast('Report dismissed.'); refresh(); }); } }),
-              h('button', { type: 'button', class: 'btn danger small', 'data-act': 'remove', text: x.kind === 'list' ? 'Remove wishlist' : 'Remove item', onclick: function () {
+              h('button', { type: 'button', class: 'btn danger small', 'data-act': 'remove', text: x.kind === 'list' ? 'Remove wishlist' : x.kind === 'request' ? 'Remove request' : 'Remove item', onclick: function () {
                 confirmDialog('Remove this?', '“' + x.title + '” will be removed and the owner is told an admin removed it. They are not told who reported it.', 'Remove', function () { api('reportResolve', { reportId: x.id, action: 'remove' }).then(function (y) { if (y.stale) return; toast('Removed.'); refresh(); }); }); } }))));
         });
       });
@@ -257,7 +265,7 @@
       var send = h('button', { type: 'submit', class: 'btn', id: 'gv-r-send', text: 'Send report' });
       var form = h('form', { novalidate: '', onsubmit: function (e) {
         e.preventDefault(); msg.textContent = ''; setErr('gv-r-reason', ''); send.disabled = true;
-        api('report', { kind: kind, targetId: targetId, reason: reason.value, note: note.value }).then(function (r) {
+        api(kind === 'request' ? 'requestReport' : 'report', { kind: kind, targetId: targetId, reason: reason.value, note: note.value }).then(function (r) {
           send.disabled = false; if (r.stale) { d.close(); return; }
           if (!r.ok) { if (r.fields && r.fields.reason) setErr('gv-r-reason', r.fields.reason); msg.textContent = r.fields ? '' : r.message; return; }
           d.close(); toast(r.message);
@@ -497,6 +505,16 @@
         st.data = r; var page = renderHome(r); fin(page);
         if (real) api('status').then(function (s) { if (s.stale || mine !== token || !s.ok || !s.canTurnOn || !page.isConnected) return; page.appendChild(ownerSwitchPanel()); });
       });
+      if (rt.name === 'requests' || rt.name === 'requestNew') return api('requestsHome').then(function (r) {
+        if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r));
+        if (rt.name === 'requestNew') return fin(r.canCreate ? renderRequestForm(null, r.me.adult) : requestLimitMsg());
+        fin(renderRequests(r));
+      });
+      if (rt.name === 'request' || rt.name === 'requestEdit') return api('requestGet', { requestId: rt.id }).then(function (r) {
+        if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r));
+        if (rt.name === 'requestEdit') return fin(r.request.mine ? renderRequestForm(r.request, r.me.adult) : blocked({ error: 'not_available' }));
+        fin(renderRequest(r));
+      });
       if (rt.name === 'listNew') return api('home').then(function (r) { if (r.stale) return; if (!r.ok) return fin(blocked(r)); fin(r.canCreateList ? renderListForm(null, r.me.adult) : limitMsg()); });
       if (rt.name === 'listEdit' || rt.name === 'itemNew' || rt.name === 'itemEdit' || rt.name === 'list') {
         return api('listGet', { listId: rt.id }).then(function (r) {
@@ -510,10 +528,110 @@
         });
       }
     }
+
+    /* ---------- requests and pledges (Phase A) ---------- */
+    function requestRows(rs) {
+      return h('ul', { class: 'gv-rows' }, rs.map(function (q) {
+        var meta = q.kindLabel + ' · ' + (q.status === 'closed' ? 'Closed' : q.stillNeeded ? q.stillNeeded + ' still needed' : 'Everyone needed has pledged') + (q.neededBy ? ' · by ' + q.neededBy : '');
+        return h('li', null, h('a', { class: 'gv-row', href: '#/giving/requests/' + q.id, 'data-request': q.id },
+          h('strong', { text: q.title }), h('span', { class: 'muted', text: (q.mine ? 'Yours' : q.ownerName) + ' · ' + meta }),
+          q.approval === 'pending' ? badge('Waiting for approval', 'is-warn') : null, q.audience === 'adults' ? badge('Adults only', 'is-adults') : null));
+      }));
+    }
+    function renderRequests(r) {
+      var page = h('div', { class: 'gv-page' }, backLink('#/giving', 'Back to Giving Center'));
+      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Family requests', 'data-focus': '' }), r.canCreate ? h('a', { class: 'btn small', href: '#/giving/requests/new', id: 'gv-newrequest', text: 'New request' }) : null));
+      page.appendChild(h('p', { class: 'muted', text: 'Ask for something specific and let family members pledge to help. Nothing is paid or bought through Family Circle. If money is involved, people sort it out themselves and you confirm.' }));
+      if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidreq', text: 'You can ask for help. An adult looks at your request before the family sees it. Pledging to help is for adults.' }));
+      if (r.canModerate && r.waiting.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Waiting for your approval' })); page.appendChild(requestRows(r.waiting)); }
+      page.appendChild(h('h2', { class: 'gv-sub', text: 'Open requests' }));
+      if (!r.open.length) page.appendChild(h('p', { class: 'muted', id: 'gv-noreq', text: 'No open requests right now.' })); else page.appendChild(requestRows(r.open));
+      if (r.closed.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Closed' })); page.appendChild(requestRows(r.closed)); }
+      return page;
+    }
+    function requestLimitMsg() { return h('section', { class: 'card' }, h('h1', { text: 'New request', 'data-focus': '' }), h('p', { text: 'You have ' + C.REQ.open + ' open requests, which is the limit. Close one to add another.' }), h('a', { class: 'btn secondary', href: '#/giving/requests', text: 'Back to requests' })); }
+    function renderRequestForm(existing, adult) {
+      var f = {};
+      f.title = h('input', { type: 'text', id: 'gv-rtitle', autocomplete: 'off', value: existing ? existing.title : '' });
+      f.kind = h('select', { id: 'gv-rkind' }, Object.keys(C.REQUEST_KINDS).map(function (k) { return h('option', { value: k, text: C.REQUEST_KINDS[k], selected: (existing ? existing.kind : 'thing') === k }); }));
+      f.details = h('textarea', { id: 'gv-rdetails', rows: 4, placeholder: 'For example: where, when, what size, what would help most' }); f.details.value = existing ? existing.details : '';
+      f.needed = h('input', { type: 'number', id: 'gv-rneeded', min: 1, max: C.REQ.needed, inputmode: 'numeric', value: existing ? existing.needed : 1 });
+      f.by = h('input', { type: 'date', id: 'gv-rby', value: existing ? existing.neededBy : '' });
+      f.amount = h('input', { type: 'text', id: 'gv-ramount', autocomplete: 'off', placeholder: 'For example: about $40 (optional)', value: existing ? existing.amount : '' });
+      f.audience = adult ? h('select', { id: 'gv-raudience' }, Object.keys(C.AUDIENCES).map(function (k) { return h('option', { value: k, text: C.AUDIENCES[k], selected: (existing ? existing.audience : 'everyone') === k }); })) : null;
+      var ids = { title: 'gv-rtitle', kind: 'gv-rkind', details: 'gv-rdetails', needed: 'gv-rneeded', neededBy: 'gv-rby', amount: 'gv-ramount' };
+      var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
+      var form = h('form', { class: 'card gv-form', novalidate: '', onsubmit: function (e) {
+        e.preventDefault(); msg.textContent = ''; Object.keys(ids).forEach(function (k) { setErr(ids[k], ''); });
+        api('requestSave', { requestId: existing && existing.id, title: f.title.value, kind: f.kind.value, details: f.details.value, needed: f.needed.value, neededBy: f.by.value, amount: f.amount.value, audience: f.audience ? f.audience.value : 'everyone' }).then(function (r) {
+          if (r.stale) return;
+          if (!r.ok) { var first = null; Object.keys(r.fields || {}).forEach(function (k) { setErr(ids[k], r.fields[k]); if (!first) first = document.getElementById(ids[k]); }); msg.textContent = r.message; if (first) first.focus(); return; }
+          toast(r.waitingForApproval || (r.request && r.request.approval === 'pending') ? 'Saved. An adult will look at it before the family sees it.' : 'Request saved.'); go('#/giving/requests/' + r.request.id);
+        });
+      } }, h('h1', { text: existing ? 'Edit request' : 'New request', 'data-focus': '' }),
+        field('gv-rtitle', 'What do you need?', f.title, '', 'A short title, up to ' + C.REQ.title + ' characters.'),
+        field('gv-rkind', 'It is', f.kind), field('gv-rdetails', 'Details (optional)', f.details),
+        field('gv-rneeded', 'How many helpers or items', f.needed), field('gv-rby', 'Needed by (optional)', f.by),
+        field('gv-ramount', 'Money, if any (optional)', f.amount, '', 'Plain text for reference only. Family Circle never collects or sends money.'),
+        f.audience ? field('gv-raudience', 'Who can see it', f.audience, '', 'Adults only keeps it from kids, for example a gift for a child.') : h('p', { class: 'hint', text: 'An adult will look at your request before the family sees it.' }), msg,
+        h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-rsave', text: 'Save request' }), h('a', { class: 'btn secondary', href: existing ? '#/giving/requests/' + existing.id : '#/giving/requests', text: 'Cancel' })));
+      return h('div', { class: 'gv-page' }, backLink(existing ? '#/giving/requests/' + existing.id : '#/giving/requests', 'Back'), form);
+    }
+    function renderRequest(r) {
+      var q = r.request, page = h('div', { class: 'gv-page' }, backLink('#/giving/requests', 'Back to requests'));
+      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: q.title, 'data-focus': '' })));
+      page.appendChild(h('p', { class: 'gv-badges' }, badge(q.kindLabel, ''), q.status === 'closed' ? badge('Closed', 'is-done') : null, q.approval === 'pending' ? badge('Waiting for approval', 'is-warn') : null, q.audience === 'adults' ? badge('Adults only', 'is-adults') : null));
+      page.appendChild(h('p', { class: 'muted', text: (q.mine ? 'Your request' : 'Asked by ' + q.ownerName) + (q.neededBy ? ' · needed by ' + q.neededBy : '') }));
+      if (q.details) page.appendChild(h('p', { class: 'gv-notes', text: q.details }));
+      if (q.amount) page.appendChild(h('p', { class: 'muted', id: 'gv-ramounttext', text: 'Money: ' + q.amount + ' (for reference; handled outside Family Circle)' }));
+      page.appendChild(h('p', { id: 'gv-rcount', text: q.pledgedCount + ' of ' + q.needed + ' pledged' + (q.doneCount ? ', ' + q.doneCount + ' done' : '') + (q.stillNeeded ? ' · ' + q.stillNeeded + ' still needed' : '') }));
+      if (q.approval === 'pending') {
+        if (r.canModerate && !q.mine) {
+          page.appendChild(h('div', { class: 'gv-actions' },
+            h('button', { type: 'button', class: 'btn', id: 'gv-rapprove', text: 'Approve', onclick: function () { api('requestApprove', { requestId: q.id }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); toast('Approved.'); go('#/giving/requests'); }); } }),
+            h('button', { type: 'button', class: 'btn danger', id: 'gv-rreject', text: 'Do not post', onclick: function () { confirmDialog('Do not post this request?', 'It will be removed and the person is told it was not posted.', 'Do not post', function () { api('requestReject', { requestId: q.id }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); toast('Removed.'); go('#/giving/requests'); }); }); } })));
+        } else if (q.mine) page.appendChild(h('p', { class: 'hint', id: 'gv-rwait', text: 'An adult will look at this before the family sees it. You can still edit it.' }));
+      }
+      page.appendChild(h('div', { class: 'gv-errslot' }));
+      page.appendChild(h('h2', { class: 'gv-sub', text: 'Pledges' }));
+      if (!q.pledges.length) page.appendChild(h('p', { class: 'muted', id: 'gv-nopledge', text: 'No one has pledged yet.' }));
+      else page.appendChild(h('ul', { class: 'gv-rows', id: 'gv-pledges' }, q.pledges.map(function (p) {
+        return h('li', { class: 'gv-pledge', 'data-pledge': p.id }, h('strong', { text: p.mine ? 'You' : p.name }), p.status === 'done' ? badge('Done', 'is-done') : null,
+          p.note ? h('span', { class: 'muted', text: p.note }) : null,
+          q.mine ? h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'done', text: p.status === 'done' ? 'Mark as not done' : 'Mark as done', 'aria-label': (p.status === 'done' ? 'Mark as not done: ' : 'Mark as done: ') + p.name,
+            onclick: function () { api('pledgeDone', { pledgeId: p.id, done: p.status !== 'done' }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); render(); }); } }) : null,
+          p.mine && p.status !== 'done' ? h('button', { type: 'button', class: 'btn ghost small', 'data-act': 'withdraw', text: 'Withdraw', 'aria-label': 'Withdraw your pledge',
+            onclick: function () { api('pledgeWithdraw', { pledgeId: p.id }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); toast('Pledge withdrawn.'); render(); }); } }) : null);
+      })));
+      if (!q.mine && q.approval === 'approved' && q.status === 'open') {
+        if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidpledge', text: 'Pledging to help is for adults.' }));
+        else {
+          var note = h('textarea', { id: 'gv-pnote', rows: 2, placeholder: 'For example: I can come after 10, or I will bring the van' });
+          var mineP = q.pledges.filter(function (p) { return p.mine; })[0]; if (mineP) note.value = mineP.note;
+          var pm = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
+          page.appendChild(h('form', { class: 'card gv-form', id: 'gv-pledgeform', novalidate: '', onsubmit: function (e) {
+            e.preventDefault(); pm.textContent = ''; setErr('gv-pnote', '');
+            api('pledgeSave', { requestId: q.id, note: note.value }).then(function (x) { if (x.stale) return; if (!x.ok) { if (x.fields && x.fields.note) setErr('gv-pnote', x.fields.note); pm.textContent = x.message; return; } toast(mineP ? 'Pledge updated.' : 'Thank you for pledging.'); render(); });
+          } }, h('h2', { class: 'gv-sub', text: mineP ? 'Your pledge' : 'Pledge to help' }), field('gv-pnote', 'A short note (optional)', note), pm,
+            h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-pledge', text: mineP ? 'Update pledge' : 'I will help' }))));
+        }
+      }
+      var acts = h('div', { class: 'gv-actions' });
+      if (q.mine) {
+        acts.appendChild(h('a', { class: 'btn secondary small', href: '#/giving/requests/' + q.id + '/edit', 'data-act': 'edit', text: 'Edit' }));
+        if (q.approval === 'approved') acts.appendChild(h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'close', text: q.status === 'open' ? 'Close request' : 'Reopen request',
+          onclick: function () { api('requestClose', { requestId: q.id, reopen: q.status !== 'open' }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); toast(q.status === 'open' ? 'Closed.' : 'Reopened.'); render(); }); } }));
+        acts.appendChild(h('button', { type: 'button', class: 'btn danger small', 'data-act': 'delete', text: 'Delete', 'aria-label': 'Delete ' + q.title,
+          onclick: function () { confirmDialog('Delete this request?', '“' + q.title + '” will be removed and anyone who pledged is told.', 'Delete request', function () { api('requestDelete', { requestId: q.id }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); toast('Request deleted.'); go('#/giving/requests'); }); }); } }));
+      } else if (q.approval === 'approved') acts.appendChild(h('button', { type: 'button', class: 'btn ghost small', 'data-act': 'report', text: 'Report', 'aria-label': 'Report: ' + q.title, onclick: function () { reportDialog('request', q.id, q.title); } }));
+      if (acts.childNodes.length) page.appendChild(acts);
+      return page;
+    }
     function limitMsg() { return h('section', { class: 'card' }, h('h1', { text: 'New wishlist', 'data-focus': '' }), h('p', { text: 'You have reached the limit of ' + C.LIMITS.lists + ' wishlists. Delete one to add another.' }), h('a', { class: 'btn secondary', href: '#/giving', text: 'Back' })); }
     function errorWithRetry(r) { return h('section', { class: 'card' }, h('h1', { text: 'Giving Center', 'data-focus': '' }), errorBox(r), h('button', { type: 'button', class: 'btn', id: 'gv-retry', text: 'Try again', onclick: function () { render(); } })); }
     function refresh() {
       var y = window.scrollY; var rt = route(), mineToken = ++token;
+      if (/^request/.test(rt.name)) return render();
       var redo = rt.name === 'home' ? api('home') : api('listGet', { listId: rt.id });
       return redo.then(function (r) {
         if (r.stale || mineToken !== token) return;

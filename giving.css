@@ -79,3 +79,6 @@
 
 .gv-debug { word-break: break-word; font-size: .78rem; margin: 6px 0 0; }
 .gv-debug:empty { display: none; }
+
+/* number and date fields match the text fields in Giving forms (the app-wide rule leaves them white on a white card) */
+.gv-form input[type="number"], .gv-form input[type="date"] { background: var(--surface-2); border-color: transparent; border-radius: 14px; }
