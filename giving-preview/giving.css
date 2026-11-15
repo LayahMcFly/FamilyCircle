@@ -50,3 +50,5 @@
 .gv-dialog h2 { margin-top: 0; }
 .gv-blocked h1 { margin-top: 0; }
 .pv input:focus-visible, .pv select:focus-visible, .pv textarea:focus-visible, .pv button:focus-visible, .pv a:focus-visible { outline: 3px solid var(--accent-text) !important; outline-offset: 2px; }
+.gv-photo.is-from-link { opacity: .9; }
+.gv-linkpic { margin: 2px 0; }

@@ -225,6 +225,8 @@
     a.addItem(l2.id, { title: 'Cordless drill', notes: 'Not too heavy.', priority: 'high', url: 'https://tools.example.com/drill', priceCents: 8900, currency: 'USD' });
     var tape = a.addItem(l2.id, { title: 'Tape measure', priority: 'low', priceCents: 1200, currency: 'CAD' });
     a.reserveFor('u-sam', mug.id);   // Sam already reserved Rae's mug
+    var l3 = a.addList('famA', 'u-tia', 'Kid wishes');
+    a.addItem(l3.id, { title: 'Bubble gun', notes: 'The kind that makes big bubbles. Batteries not needed.', priority: 'high', url: 'https://toys.example.com/bubble-gun', priceCents: 1599, currency: 'USD' });   // a link and no photo
     a.reserveFor('u-tia', tape.id);   // Tia reserved Sam's tape measure, so Rae sees one item as "Reserved" without a name
   }
 

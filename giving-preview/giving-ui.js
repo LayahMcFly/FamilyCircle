@@ -6,7 +6,7 @@
 (function (root) {
   'use strict';
   var C = root.GivingCore;
-  var PHOTO_LABEL = { '': 'No photo', mug: 'Sample photo: mug', book: 'Sample photo: book', plant: 'Sample photo: plant', lamp: 'Sample photo: lamp' };
+  var PHOTO_LABEL = { '': 'No photo (use the link\u2019s picture)', mug: 'Sample photo: mug', book: 'Sample photo: book', plant: 'Sample photo: plant', lamp: 'Sample photo: lamp' };
   var PHOTO_COLOR = { mug: '#5b8def', book: '#d9825b', plant: '#5bb584', lamp: '#d9b45b' };
 
   function h(tag, attrs) {
@@ -21,6 +21,12 @@
   }
   function add(el, c) { if (c === null || c === undefined || c === false) return; if (Array.isArray(c)) c.forEach(function (x) { add(el, x); }); else el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); }
   function badge(text, cls) { return h('span', { class: 'gv-badge' + (cls ? ' ' + cls : ''), text: text }); }
+  /* PREVIEW ONLY: stands in for the picture the live version would take from the item's link. Nothing is fetched. */
+  function linkTile(url) {
+    var host = C.hostOf(url) || '?', letter = host.charAt(0).toUpperCase().replace(/[^A-Z0-9]/, '?');
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" rx="14" fill="#8a94a6"/><text x="48" y="62" font-size="44" font-family="sans-serif" font-weight="700" text-anchor="middle" fill="#fff">' + letter + '</text></svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
+  }
   function photoSrc(kind) {
     if (!PHOTO_COLOR[kind]) return '';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" rx="14" fill="' + PHOTO_COLOR[kind] + '"/><circle cx="48" cy="44" r="20" fill="#fff" fill-opacity=".85"/><rect x="26" y="70" width="44" height="8" rx="4" fill="#fff" fill-opacity=".85"/></svg>';
@@ -143,15 +149,17 @@
     /* ---------- one list ---------- */
     function itemCard(it, listId) {
       var li = h('li', { class: 'gv-item' + (it.received ? ' is-received' : ''), 'data-item': it.id });
-      var src = photoSrc(it.photo);
+      var src = photoSrc(it.photo), fromLink = false;
+      if (!src && it.url) { src = linkTile(it.url); fromLink = true; }
       li.appendChild(h('div', { class: 'gv-item-top' },
-        src ? h('img', { class: 'gv-photo', src: src, alt: '', width: 56, height: 56 }) : null,
+        src ? h('img', { class: 'gv-photo' + (fromLink ? ' is-from-link' : ''), src: src, alt: '', width: 56, height: 56, 'data-from-link': fromLink ? 'true' : null }) : null,
         h('div', { class: 'gv-item-main' },
           h('strong', { class: 'gv-item-title', text: it.title }),
           h('p', { class: 'gv-badges' }, badge(C.PRIORITY_LABEL[it.priority], 'is-prio-' + it.priority), itemStatus(it)),
           money(it) ? h('p', { class: 'muted gv-price', text: money(it) }) : null,
           it.notes ? h('p', { class: 'gv-notes', text: it.notes }) : null,
-          it.url ? h('p', { class: 'gv-link' }, h('a', { href: it.url, target: '_blank', rel: 'noopener noreferrer nofollow', text: 'Open link (' + C.hostOf(it.url) + ')' }), h('span', { class: 'muted', text: ' Opens another website.' })) : null)));
+          it.url ? h('p', { class: 'gv-link' }, h('a', { href: it.url, target: '_blank', rel: 'noopener noreferrer nofollow', text: 'Open link (' + C.hostOf(it.url) + ')' }), h('span', { class: 'muted', text: ' Opens another website.' })) : null,
+          fromLink ? h('p', { class: 'hint gv-linkpic', text: 'Picture from the link (simulated in this preview).' }) : null)));
       var acts = h('div', { class: 'gv-actions' });
       if (it.mine) {
         acts.appendChild(h('a', { class: 'btn secondary small', href: '#/giving/list/' + listId + '/item/' + it.id + '/edit', 'data-act': 'edit', text: 'Edit', 'aria-label': 'Edit ' + it.title }));
@@ -209,7 +217,7 @@
     function renderItemForm(listId, existing) {
       var f = {};
       f.title = h('input', { type: 'text', id: 'gv-title', autocomplete: 'off', value: existing ? existing.title : '' });
-      f.notes = h('textarea', { id: 'gv-notes', rows: 3 }); f.notes.value = existing ? existing.notes : '';
+      f.notes = h('textarea', { id: 'gv-notes', rows: 3, placeholder: 'For example: size medium, blue if they have it, the one that makes big bubbles' }); f.notes.value = existing ? existing.notes : '';
       f.priority = h('select', { id: 'gv-priority' }, C.PRIORITIES.map(function (p) { return h('option', { value: p, text: C.PRIORITY_LABEL[p], selected: (existing ? existing.priority : 'medium') === p }); }));
       f.url = h('input', { type: 'text', id: 'gv-url', inputmode: 'url', autocomplete: 'off', value: existing ? existing.url : '' });
       f.price = h('input', { type: 'text', id: 'gv-price', inputmode: 'decimal', autocomplete: 'off', value: existing && existing.priceCents ? (existing.priceCents / 100).toFixed(2) : '' });
@@ -227,10 +235,10 @@
         });
       } },
         h('h1', { text: existing ? 'Edit item' : 'Add an item', 'data-focus': '' }),
-        field('gv-title', 'Title', f.title), field('gv-notes', 'Notes (size, color, anything helpful)', f.notes), field('gv-priority', 'How much do you want it?', f.priority),
+        field('gv-title', 'Title', f.title), field('gv-notes', 'Notes (optional)', f.notes, '', 'Anything that helps someone pick the right one: size, color, model, where you saw it.'), field('gv-priority', 'How much do you want it?', f.priority),
         field('gv-url', 'Link (optional)', f.url, '', 'A web address you choose. Family Circle does not visit it or look anything up.'),
         h('div', { class: 'gv-pair' }, field('gv-price', 'Estimated price (optional)', f.price, '', 'A guess for reference. Not a charge.'), field('gv-currency', 'Currency', f.currency)),
-        field('gv-photo', 'Photo (preview only)', f.photo, '', 'Real photo upload is not part of this preview, so this picks a sample picture.'),
+        field('gv-photo', 'Photo (optional)', f.photo, '', 'Leave this blank and the picture can come from your link. Real photo upload is not part of this preview, so this only picks a sample picture.'),
         msg, h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-save', text: 'Save item' }), h('a', { class: 'btn secondary', href: '#/giving/list/' + listId, text: 'Cancel' })));
       return h('div', { class: 'gv-page' }, backLink('#/giving/list/' + listId, 'Back to wishlist'), form);
     }

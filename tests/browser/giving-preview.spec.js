@@ -89,6 +89,21 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     // owner cannot reach a buyer path by URL
     check('B no page errors', log.errors.length === 0, log.errors.join()); await ctx.close(); }
 
+  // B2. photo optional, link supplies the picture, notes example
+  { const { ctx, page } = await open(browser); await page.click('.gv-row:has-text("Birthday ideas")'); await page.waitForSelector('#gv-additem'); await page.click('#gv-additem'); await page.waitForSelector('#gv-title');
+    check('B2 notes box shows an example', /For example: size medium/.test(await page.getAttribute('#gv-notes', 'placeholder')), '');
+    check('B2 photo is labeled optional and says the link can supply it', /Photo \(optional\)/.test(await page.locator('label[for=gv-photo]').innerText()) && /come from your link/.test(await page.locator('#gv-photo-hint').innerText()), '');
+    await page.fill('#gv-title', 'Bubble machine'); await page.fill('#gv-url', 'https://toys.example.com/bubbles'); await page.click('#gv-save'); await page.waitForSelector('#gv-items'); await settle(page);
+    const it = item(page, 'Bubble machine');
+    check('B2 no photo chosen: the link provides a picture and says so', await it.locator('img[data-from-link=true]').count() === 1 && /Picture from the link \(simulated/.test(await it.innerText()), await it.innerText());
+    await page.click('#gv-additem'); await page.waitForSelector('#gv-title'); await page.fill('#gv-title', 'Plain thing'); await page.click('#gv-save'); await page.waitForSelector('#gv-items'); await settle(page);
+    check('B2 no photo and no link: no picture box at all', await item(page, 'Plain thing').locator('img').count() === 0, '');
+    await page.locator('.gv-item', { hasText: 'fern for the window' }).locator('img:not([data-from-link])').first().waitFor();
+    check('B2 a chosen sample photo still wins over the link', await item(page, 'Blue ceramic mug').locator('img[data-from-link]').count() === 0, '');
+    await who(page, 'Tia Sample'); await page.click('.gv-row:has-text("Kid wishes")'); await page.waitForSelector('#gv-items'); await settle(page);
+    check('B2 Tia\'s Bubble gun (link, no photo) shows the link picture', await item(page, 'Bubble gun').locator('img[data-from-link=true]').count() === 1, '');
+    await ctx.close(); }
+
   // C. givers: Sam and Tia
   { const { ctx, page } = await open(browser);
     await who(page, 'Sam Sample'); let t = await text(page);
