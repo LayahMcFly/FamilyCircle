@@ -289,6 +289,11 @@
       });
     }
 
+    function dataUrlToFile(url, name) {
+      var m = /^data:([a-z]+\/[a-z0-9.+-]+);base64,([A-Za-z0-9+\/=]+)$/i.exec(url || ''); if (!m) return null;
+      try { var bin = atob(m[2]), n = bin.length, arr = new Uint8Array(n); for (var i = 0; i < n; i++) arr[i] = bin.charCodeAt(i); return new File([arr], name, { type: m[1] }); } catch (e) { return null; }
+    }
+
     function photoDialog(it) {
       var d = h('dialog', { class: 'gv-dialog', 'aria-labelledby': 'gv-p-h' });
       var img = h('img', { class: 'gv-bigphoto', src: it.thumb || etsyPics[it.id] || '', alt: 'Picture of ' + it.title }), note = h('p', { class: 'hint', id: 'gv-p-note', text: 'Loading the full picture…' });
@@ -438,11 +443,12 @@
               if (parts[1]) dbg('What happened, step by step: ' + parts[1]);
               return setErr('gv-photofile', parts[0]);
             }
-            return fetch(r.image).then(function (x) { return x.blob(); }).then(function (b) {
-              var file = new File([b], 'from-link', { type: b.type }); chosen = file; removePhoto = false; f.file.value = ''; process(file);
-              f.info.textContent = 'Picture found at ' + r.host + '. Converting and compressing…';
-            });
-          }).catch(function (e) { clearTimeout(slow); if (timedOut || !f.info.isConnected) return; f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'Something went wrong while getting the picture. Try again, or add your own photo.'); });
+            // Not fetch(data:...): the page's security rules (connect-src) do not allow fetching data: addresses. Decode the picture directly instead.
+            var file = dataUrlToFile(r.image, 'from-link');
+            if (!file) { f.info.textContent = ''; return setErr('gv-photofile', 'The picture came back in a form this browser could not read. Add your own photo instead.'); }
+            chosen = file; removePhoto = false; f.file.value = ''; process(file);
+            f.info.textContent = 'Picture found at ' + r.host + '. Converting and compressing…';
+          }).catch(function (e) { clearTimeout(slow); if (timedOut || !f.info.isConnected) return; f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'Something went wrong while getting the picture. Try again, or add your own photo.'); dbg('Error: ' + String((e && e.message) || e).slice(0, 120)); });
         } });
         f.getReady = function () { return ready; };
       }
