@@ -1978,3 +1978,9 @@ html, body { overflow-x: clip; }
 .bd-private { --g: var(--accent); }
 .bd-callout { margin: 6px 0 12px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); font-weight: 600; }
 .bd-callout[hidden] { display: none; }
+/* Repost box: avatar beside the name, date under it, no stretched avatar */
+.orig-box .orig-head { align-items: center; gap: 10px; }
+.orig-box .orig-head .avatar { flex: 0 0 40px; width: 40px; height: 40px; min-width: 40px; font-size: .9rem; }
+.orig-box .orig-head .who { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; text-align: left; }
+.orig-box .orig-head .who .small { font-size: .78rem; line-height: 1.3; }
+.orig-box .orig-head .who a { font-weight: 700; }

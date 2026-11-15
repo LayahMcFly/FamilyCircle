@@ -45,9 +45,8 @@
       return h('li', { class: 'hub-li-planned' }, btn, note);
     }
 
-    // Roadmap destinations in blueprint order, after the six that exist. Keep in step with PROJECT_PROGRESS.md.
+    // Roadmap destinations in blueprint order, after the seven that exist. Keep in step with PROJECT_PROGRESS.md.
     var PLANNED = [
-      { id: 'giving', name: 'Giving Center', icon: 'heart', desc: 'Wishlists, requests, group giving, emergency assistance and gift exchanges.' },
       { id: 'exchange', name: 'Family Exchange', icon: 'cart', desc: 'Family listings, giveaways, services and deals. Separate from the Shop.' },
       { id: 'challenges', name: 'Challenges', icon: 'trophy', desc: 'Family goals, activities, competitions and achievements.' },
       { id: 'legacy', name: 'Memories & Legacy', icon: 'album', desc: 'Albums, family stories, recordings, milestones and time capsules.' },
@@ -74,6 +73,7 @@
       if (X.shopEnabled()) cards.push({ id: 'shop', title: 'Shop', desc: 'Turn family photos into gifts.', icon: 'bag', href: '#/shop' });
       cards.push({ id: 'recipes', title: 'Recipes', desc: 'The family recipe book, kept on this device.', icon: 'book', href: '#/recipes' });
       cards.push({ id: 'calendar', title: 'Calendar & Chores', desc: 'Tasks, chores, special days and the shopping list.', icon: 'calendar', href: '#/calendar' });
+      cards.push({ id: 'giving', title: 'Giving Center', desc: 'Wishlists, with gift reservations the list owner never sees.', icon: 'heart', href: '#/giving' });   // opens for everyone; a family that has not turned it on sees a short "not turned on" screen
 
       main.appendChild(h('nav', { 'aria-label': 'Family Hub' }, h('ul', { class: 'hub-grid' }, cards.map(card).concat(PLANNED.map(plannedCard)))));
     };

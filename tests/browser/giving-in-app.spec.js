@@ -20,7 +20,7 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
 
 
 /* A tiny in-page stand-in for the giving actions. The real rules are tested in function/test/giving.test.js and giving-real.spec.js;
- * this file only proves the app wiring: the route, the Back to Hub link, the Planned card staying put, and the off/on flow. */
+ * this file only proves the app wiring: the route, the Back to Hub link, the Hub card link, and the off/on flow. */
 function installBackend() {
   const M = window.__MOCK, S = { on: false, calls: [] };
   M.api = {
@@ -49,8 +49,9 @@ async function newPage(ctx, mock, errors) {
   const page = await newPage(ctx, world(A, 'owner'), errors);
   await page.goto(URL0 + '#/hub'); await page.waitForSelector('[data-hub="giving"]');
   const card = page.locator('[data-hub="giving"]');
-  check('1 The Hub card for Giving Center is still a "Planned" button, not a link', (await card.evaluate(e => e.tagName)) === 'BUTTON' && /Planned/.test(await card.textContent()), await card.textContent());
-  await page.evaluate(() => { location.hash = '#/giving'; }); await page.waitForSelector('main[data-view="giving"] .gv-off');
+  check('1 The Hub card for Giving Center is a real link to #/giving with no "Planned" label', (await card.evaluate(e => e.tagName)) === 'A' && (await card.getAttribute('href')) === '#/giving' && !/Planned/.test(await card.textContent()), await card.textContent());
+  await card.click(); await page.waitForSelector('main[data-view="giving"] .gv-off');
+  check('1 Tapping the card opens Giving Center', (await page.evaluate(() => location.hash)) === '#/giving', '');
   check('2 Opening #/giving shows the off screen with a Back to Hub link', /not turned on/.test(await page.locator('main').innerText()) && (await page.locator('main .hub-back a[href="#/hub"]').count()) === 1, await page.locator('main').innerText());
   check('2 The tab title says Giving Center', /^Giving Center/.test(await page.title()), await page.title());
   await page.locator('#gv-turnon').click(); await page.locator('#gv-d-ok').click(); await page.waitForSelector('main h2:has-text("Your wishlists")');
@@ -58,7 +59,7 @@ async function newPage(ctx, mock, errors) {
   await page.evaluate(() => { location.hash = '#/giving/list/new'; }); await page.waitForSelector('#gv-name');
   check('4 A deep link inside Giving Center (new wishlist form) opens', (await page.locator('main h1').innerText()) === 'New wishlist', await page.locator('main h1').innerText());
   await page.evaluate(() => { location.hash = '#/hub'; }); await page.waitForSelector('[data-hub="giving"]');
-  check('5 Back on the Hub the card is still "Planned"', (await page.locator('[data-hub="giving"]').evaluate(e => e.tagName)) === 'BUTTON', '');
+  check('5 Back on the Hub the card is still a link', (await page.locator('[data-hub="giving"]').evaluate(e => e.tagName)) === 'A', '');
   check('6 No page errors or CSP violations in the app', errors.filter(e => !/status of 4\d\d/.test(e)).length === 0, errors.join(' | '));
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
