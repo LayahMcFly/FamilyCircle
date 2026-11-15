@@ -59,3 +59,11 @@ Two very different things are mixed under this name, so I split them.
 4. Emergency requests: 48-hour auto-close and up to 8 chosen helpers (recommended), or different numbers?
 5. Gift exchange draw: organiser can see the pairings (simplest), or nobody can (recommended)?
 6. Processed contributions (D2): confirm it stays out of scope.
+
+## Your answers (2026-11-15)
+1. Order: Requests and pledges, then Emergency, then Exchanges, then Contributions (D1). Approved.
+2. Kids' requests: held for an adult to approve first. Approved.
+3. Money mentioned as plain text, reference only: allowed. Approved.
+4. Emergency numbers (48-hour auto-close, up to 8 chosen helpers): not answered, so the recommended numbers stand until you change them.
+5. Gift exchange draw: nobody in the app sees who drew whom, the organiser included. Approved.
+6. Processed contributions (D2): not answered, so it stays out of scope until you say otherwise.
