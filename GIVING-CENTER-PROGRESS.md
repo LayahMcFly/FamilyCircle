@@ -42,8 +42,8 @@ Branch `giving-center-preview` (from `main` at v1.51.99.22, commit `bb6ed16`). S
 - [ ] You have not yet tested the preview (checklist F in the handoff)
 - [x] Your answers on the 12 decisions (recorded above)
 - [ ] Decide how the real version gets a picture from an item's link (you chose: keep simulated for now; settle at Step 4)
-- [ ] Settle where a member's adult flag is stored in the real app (needs a design and your approval at Step 4)
-- [ ] Step 4: real backend design (tables, function actions, permissions) with risks and rollback. Needs your approval before any build
+- [x] Adult flag location proposed in the design (profiles column, managers only, never self); needs your yes
+- [x] Step 4: real backend design written (`GIVING-CENTER-BACKEND-DESIGN.md`). Waiting for your read and your yes before Step 5
 - [ ] Step 5: real backend built and tested without turning anything on. Needs approval
 - [ ] Step 6: real photo upload. Needs approval
 - [ ] Step 7: staged turn-on for real family members. Needs approval
