@@ -53,3 +53,22 @@
 .gv-bigphoto { display: block; max-width: 100%; max-height: 60vh; margin: 10px auto; border-radius: 10px; }
 .gv-field input[type="file"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; min-height: 44px; }
 .gv-field input[type="file"]::file-selector-button { margin-right: 12px; padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+
+/* Layout polish: side padding, equal button sizes, tidy rows */
+.gv-page { padding: 0 14px 28px; display: grid; gap: 14px; align-content: start; }
+.gv-page > * { margin-top: 0; margin-bottom: 0; }
+.gv-page .gv-back { margin: 0; }
+.gv-head { margin: 0; align-items: flex-start; }
+.gv-head h1 { font-size: 1.6rem; line-height: 1.2; }
+.gv-page .btn { box-sizing: border-box; height: 44px; min-height: 44px; padding: 0 18px; font-size: .95rem; line-height: 1; white-space: nowrap; flex: 0 0 auto; align-self: center; }
+.gv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0; }
+.gv-item { display: grid; gap: 12px; padding: 16px; }
+.gv-item .gv-actions { padding-top: 12px; border-top: 1px solid var(--border); }
+.gv-item-top { gap: 14px; }
+.gv-rows, .gv-items { gap: 12px; }
+.gv-sub { margin: 10px 0 0; }
+.gv-page > p { line-height: 1.45; }
+.gv-field input[type="file"], .gv-field input, .gv-field select, .gv-field textarea { box-sizing: border-box; max-width: 100%; }
+.gv-page .btn, .gv-page button.btn, .gv-page a.btn { margin: 0 !important; transform: none; }
+.gv-page .btn.small { height: 40px; min-height: 40px; padding: 0 14px; font-size: .9rem; }
+.gv-page .gv-actions .btn { align-self: center; }
