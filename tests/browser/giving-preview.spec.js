@@ -320,6 +320,22 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('E ' + label + ' emergency form has no sideways scroll', !(await overflow(page)), '');
     await ctx.close(); }
 
+  // G. circular icon buttons and the glow
+  { const { ctx, page } = await open(browser); await settle(page);
+    const b = await page.locator('#gv-urgentbtn .gv-circle-dot').boundingBox();
+    check('G the urgent button is a small circle with an icon', Math.abs(b.width - b.height) < 1 && b.width >= 44 && b.width <= 64 && (await page.locator('#gv-urgentbtn svg').count()) === 1, JSON.stringify(b));
+    check('G it has a text label and an accessible name', /Urgent help/.test(await page.locator('#gv-urgentbtn').innerText()) && (await page.locator('#gv-urgentbtn').getAttribute('aria-label')) === 'Urgent help', '');
+    check('G it does not glow when nobody needs help', !(await page.locator('#gv-urgentbtn').getAttribute('class')).includes('is-pulsing') && (await page.locator('#gv-urgentbanner').count()) === 0, '');
+    await page.goto(PREVIEW() + '#/giving/emergency/new'); await page.waitForSelector('#gv-etitle'); await page.fill('#gv-etitle', 'Need help now'); await page.locator('#gv-ehelpers .gv-check', { hasText: 'Sam Sample' }).click(); await page.click('#gv-esave'); await page.waitForSelector('#main h1:has-text("Need help now")');
+    await who(page, 'Sam Sample'); await settle(page);
+    check('G when someone needs help the button and the banner glow', (await page.locator('#gv-urgentbtn').getAttribute('class')).includes('is-pulsing') && (await page.locator('#gv-urgentbanner').count()) === 1, '');
+    const anim = await page.evaluate(() => [getComputedStyle(document.querySelector('#gv-urgentbtn .gv-circle-dot')).animationName, getComputedStyle(document.querySelector('#gv-urgentbanner')).animationName]);
+    check('G the glow is an animation that loops', anim[0] === 'gv-glow' && anim[1] === 'gv-glow', anim.join());
+    await ctx.close(); }
+  { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' }); const page = await ctx.newPage(); await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('.gv-page');
+    await page.evaluate(() => { document.querySelector('#gv-urgentbtn').classList.add('is-pulsing'); });
+    check('G with reduced motion the glow does not animate', (await page.evaluate(() => getComputedStyle(document.querySelector('#gv-urgentbtn .gv-circle-dot')).animationName)) === 'none', ''); await ctx.close(); }
+
   // H. layout at phone and desktop widths, plus screenshots
   for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
     const { ctx, page } = await open(browser, { w, h });

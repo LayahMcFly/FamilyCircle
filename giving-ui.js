@@ -20,6 +20,23 @@
     return el;
   }
   function add(el, c) { if (c === null || c === undefined || c === false) return; if (Array.isArray(c)) c.forEach(function (x) { add(el, x); }); else el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); }
+  var ICONS = {
+    alert: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/>',
+    hands: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>'
+  };
+  /** A small circular button with an icon; the visible label sits under it and the whole thing is one link or button. */
+  function iconSvg(name) {
+    var ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false'); svg.setAttribute('class', 'gv-ico');
+    var g = document.createElementNS(ns, 'g'); g.setAttribute('fill', 'none'); g.setAttribute('stroke', 'currentColor'); g.setAttribute('stroke-width', '2'); g.setAttribute('stroke-linecap', 'round'); g.setAttribute('stroke-linejoin', 'round');
+    var tpl = document.createElementNS(ns, 'svg'); tpl.innerHTML = ICONS[name] || '';
+    while (tpl.firstChild) g.appendChild(tpl.firstChild);
+    svg.appendChild(g); return svg;
+  }
+  function circleBtn(o) {
+    return h('a', { class: 'gv-circle' + (o.cls ? ' ' + o.cls : ''), id: o.id, href: o.href, 'aria-label': o.label }, h('span', { class: 'gv-circle-dot' }, iconSvg(o.icon)), h('span', { class: 'gv-circle-label', text: o.label }));
+  }
   function badge(text, cls) { return h('span', { class: 'gv-badge' + (cls ? ' ' + cls : ''), text: text }); }
   /* PREVIEW ONLY: stands in for the picture the live version would take from the item's link. Nothing is fetched. */
   function linkTile(url) {
@@ -189,6 +206,7 @@
       page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Giving Center', 'data-focus': '' }),
         r.canCreateList ? h('a', { class: 'btn small', href: '#/giving/list/new', id: 'gv-newlist', text: 'New wishlist' }) : null));
       page.appendChild(h('p', { class: 'muted', text: 'Wishlists for the people in your family. Prices are estimates for reference only. Nothing here is bought or paid through Family Circle.' }));
+      page.appendChild(h('div', { class: 'gv-quick' }, circleBtn({ id: 'gv-urgentbtn', href: '#/giving/emergency/new', icon: 'alert', label: 'Urgent help', cls: 'is-urgent' + (r.requests && r.requests.urgent ? ' is-pulsing' : '') })));
       if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidnote', text: 'You can make your own wishlist and see the family’s lists. Gift reservations are for adults.' }));
       if (r.canModerate) page.appendChild(reportsPanel(r.openReports));
       (r.notices || []).forEach(function (n) {
@@ -559,7 +577,7 @@
       page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Family requests', 'data-focus': '' }), r.canCreate ? h('a', { class: 'btn small', href: '#/giving/requests/new', id: 'gv-newrequest', text: 'New request' }) : null));
       page.appendChild(h('p', { class: 'muted', text: 'Ask for something specific and let family members pledge to help. Nothing is paid or bought through Family Circle. If money is involved, people sort it out themselves and you confirm.' }));
       if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidreq', text: 'You can ask for help. An adult looks at your request before the family sees it. Pledging to help is for adults.' }));
-      page.appendChild(h('a', { class: 'btn danger small', id: 'gv-urgentnew', href: '#/giving/emergency/new', text: 'Ask for urgent help' }));
+      page.appendChild(h('div', { class: 'gv-quick' }, circleBtn({ id: 'gv-urgentnew', href: '#/giving/emergency/new', icon: 'alert', label: 'Urgent help', cls: 'is-urgent' + ((r.urgent || []).length ? ' is-pulsing' : '') })));
       if ((r.urgent || []).length) { page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-urgent-h', text: 'Urgent' })); page.appendChild(requestRows(r.urgent)); }
       if (r.canModerate && r.waiting.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Waiting for your approval' })); page.appendChild(requestRows(r.waiting)); }
       page.appendChild(h('h2', { class: 'gv-sub', text: 'Open requests' }));

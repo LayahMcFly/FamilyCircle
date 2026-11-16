@@ -94,3 +94,18 @@
 .gv-urgentbanner { border-color: color-mix(in srgb, #d92d20 55%, transparent) !important; }
 .badge.is-urgent, .gv-badge.is-urgent { background: #d92d20; color: #fff; }
 .gv-checklabel { display: block; font-weight: 600; }
+
+/* small circular icon buttons */
+.gv-quick { display: flex; gap: 16px; margin: 4px 0 12px; }
+.gv-circle { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; text-decoration: none; color: var(--text); min-width: 64px; }
+.gv-circle-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border); box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+.gv-circle-dot .gv-ico { width: 26px; height: 26px; }
+.gv-circle-label { font-size: .8rem; font-weight: 600; }
+.gv-circle:focus-visible { outline: 3px solid var(--accent-text); outline-offset: 4px; border-radius: 14px; }
+.gv-circle.is-urgent .gv-circle-dot { background: #d92d20; border-color: #d92d20; color: #fff; }
+.gv-circle:active .gv-circle-dot { transform: scale(.94); }
+/* someone needs help: the button and the banner glow and dim, slowly. With reduced motion they simply stay lit. */
+@keyframes gv-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(217,45,32,.0), 0 0 6px 1px rgba(217,45,32,.35); opacity: 1; } 50% { box-shadow: 0 0 0 8px rgba(217,45,32,.18), 0 0 22px 6px rgba(217,45,32,.65); opacity: .72; } }
+.gv-circle.is-pulsing .gv-circle-dot, .gv-urgentbanner { animation: gv-glow 1.8s ease-in-out infinite; }
+.gv-urgentbanner { background: color-mix(in srgb, #d92d20 10%, var(--bg)); }
+@media (prefers-reduced-motion: reduce) { .gv-circle.is-pulsing .gv-circle-dot, .gv-urgentbanner { animation: none; box-shadow: 0 0 0 4px rgba(217,45,32,.35), 0 0 18px 4px rgba(217,45,32,.5); } }
