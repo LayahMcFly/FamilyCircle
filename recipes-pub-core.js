@@ -21,6 +21,22 @@
   var str = function (v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, max); };
   var list = function (v, maxItems, maxLen) { return (Array.isArray(v) ? v : []).map(function (x) { return str(x, maxLen); }).filter(Boolean).slice(0, maxItems); };
 
+  /** Width and height read from the JPEG's own header (so the size is checked, not taken on trust). null when it is not a readable JPEG data URL. */
+  function jpegDims(url) {
+    if (typeof url !== 'string' || !/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(url) || url.length > LIMITS.imageChars) return null;
+    var b64 = url.slice(23), bytes;
+    try { var bin = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary'); bytes = bin; } catch (e) { return null; }
+    if (bytes.charCodeAt(0) !== 0xFF || bytes.charCodeAt(1) !== 0xD8) return null;
+    var i = 2;
+    while (i + 9 < bytes.length) {
+      if (bytes.charCodeAt(i) !== 0xFF) return null;
+      var m = bytes.charCodeAt(i + 1), len = (bytes.charCodeAt(i + 2) << 8) | bytes.charCodeAt(i + 3);
+      if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) return { h: (bytes.charCodeAt(i + 5) << 8) | bytes.charCodeAt(i + 6), w: (bytes.charCodeAt(i + 7) << 8) | bytes.charCodeAt(i + 8) };
+      i += 2 + len;
+    }
+    return null;
+  }
+  function squareJpeg(url) { var d = jpegDims(url); return !!(d && d.w > 0 && d.w === d.h); }
   /** What a snapshot may contain. Never copies ids, ownership, favourites, source links or anything private. */
   function snapshotOf(r) {
     r = r || {};
@@ -31,7 +47,7 @@
       parts: (Array.isArray(r.parts) ? r.parts : []).slice(0, LIMITS.parts).map(function (p) { return p && typeof p === 'object' ? { name: str(p.name, LIMITS.title), ingredients: list(p.ingredients, LIMITS.ingredients, LIMITS.line), steps: list(p.steps, LIMITS.steps, LIMITS.step) } : null; }).filter(function (p) { return p && p.name; }),
       image: ''
     };
-    if (typeof r.image === 'string' && /^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(r.image) && r.image.length <= LIMITS.imageChars && r.imageW && r.imageW === r.imageH) { snap.image = r.image; snap.imageW = r.imageW; snap.imageH = r.imageH; }
+    if (squareJpeg(r.image)) snap.image = r.image;
     return snap;
   }
   /** { ok:true, snapshot } or { ok:false, fields:{...}, message } */
@@ -40,7 +56,7 @@
     if (!s.name) fields.name = 'Give the recipe a name.';
     if (!s.ingredients.length) fields.ingredients = 'Add at least one ingredient.';
     if (!s.steps.length) fields.steps = 'Add at least one step.';
-    if (draft && draft.image && !s.image) fields.image = 'The photo must be a square JPEG under about 120 KB. Choose it again so it is cropped square.';
+    if (draft && draft.image && !s.image) fields.image = 'The photo must be a square JPEG under about 120 KB.';
     var keys = Object.keys(fields);
     return keys.length ? { ok: false, fields: fields, message: fields[keys[0]] } : { ok: true, snapshot: s };
   }
@@ -63,5 +79,5 @@
   function canAuthor(member, row) {
     return !!(member && member.active && row && row.familyId === member.familyId && row.authorId === member.userId && row.authorMembershipId === member.membershipId);
   }
-  return { LIMITS: LIMITS, HIDDEN_DAYS: HIDDEN_DAYS, TEXT: TEXT, snapshotOf: snapshotOf, validate: validate, hashOf: hashOf, stateOf: stateOf, canRead: canRead, canAuthor: canAuthor };
+  return { LIMITS: LIMITS, HIDDEN_DAYS: HIDDEN_DAYS, TEXT: TEXT, snapshotOf: snapshotOf, validate: validate, hashOf: hashOf, jpegDims: jpegDims, squareJpeg: squareJpeg, stateOf: stateOf, canRead: canRead, canAuthor: canAuthor };
 });

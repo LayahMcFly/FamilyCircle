@@ -1,0 +1,17 @@
+/* Recipes publishing preview: the page shell only (PREVIEW CODE). The Recipes screen itself uses the app's own styles. */
+[hidden] { display: none !important; }
+.pv { --nav-h: 0px; }
+.pv-banner { position: sticky; top: 0; z-index: 40; background: #fff3c4; color: #3d2f00; border-bottom: 2px solid #c79a00; padding: 10px 16px; font-size: .95rem; line-height: 1.35; }
+:root[data-theme="dark"] .pv-banner { background: #3b2f06; color: #ffe9a3; border-color: #a67c00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pv-banner { background: #3b2f06; color: #ffe9a3; border-color: #a67c00; } }
+.pv-banner strong { display: block; }
+.pv-wrap { max-width: 900px; margin: 0 auto; padding: 14px 16px 48px; }
+.pv-controls { margin-bottom: 14px; }
+.pv-row { display: grid; gap: 4px 14px; grid-template-columns: 1fr; align-items: end; }
+.pv-reset { padding-top: 10px; }
+.pv-controls label { margin-top: 0; }
+.pv-sim { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.pv-sim .hint { flex: 1 1 100%; margin: 0; }
+.pv-main { min-width: 0; }
+@media (min-width: 760px) { .pv-row { grid-template-columns: 1fr 1fr auto; } }
+.pv input:focus-visible, .pv select:focus-visible, .pv textarea:focus-visible, .pv button:focus-visible, .pv a:focus-visible { outline: 3px solid var(--accent-text) !important; outline-offset: 2px; }

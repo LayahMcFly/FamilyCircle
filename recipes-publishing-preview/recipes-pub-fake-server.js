@@ -12,17 +12,19 @@
   var fail = function (error, message, extra) { return Object.assign({ ok: false, error: error, message: message }, extra || {}); };
   var NA = function () { return fail('not_available', 'That is not available.'); };
 
+  var SQUARE_PIC = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCABAAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCaiiivGPaCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP/9k=', WIDE_PIC = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCABAAGADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCaiiivGPaCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//2Q==';
   var VIEWERS = [
     { userId: 'u-rae', name: 'Rae Sample' }, { userId: 'u-sam', name: 'Sam Sample' }, { userId: 'u-tia', name: 'Tia Sample' }, { userId: 'u-una', name: 'Una Sample' }
   ];
   /* The recipes each person has on THEIR OWN device (private drafts). The real app keeps these in the browser, so they are not on the server. */
   function sampleDrafts() {
-    var r = function (slug, name, o) { return Object.assign({ slug: slug, name: name, description: '', yield: '4 servings', total: '30 minutes', ingredients: ['2 cups flour', '1 cup water', '1 teaspoon salt'], steps: ['Mix everything.', 'Cook until done.'], categories: [], tags: [], notes: '', parts: [], image: '', imageW: 0, imageH: 0 }, o || {}); };
+    var r = function (slug, name, o) { return Object.assign({ slug: slug, id: 'book-' + slug, name: name, description: '', yield: '4 servings', prep: '', cook: '', total: '30 minutes', ingredients: ['2 cups flour', '1 cup water', '1 teaspoon salt'], steps: ['Mix everything.', 'Cook until done.'], categories: [], tags: [], notes: '', source: '', parts: [], image: '', fav: false, updated: 1 }, o || {}); };
     return {
-      'u-rae': [r('grans-sourdough', "Gran's Sourdough", { description: 'Slow, chewy, worth the wait.', total: '1 day', categories: ['Bread'], ingredients: ['500 g bread flour', '350 g water', '100 g active starter', '10 g salt'], steps: ['Mix and rest 30 minutes.', 'Fold every 30 minutes, four times.', 'Shape, proof overnight in the fridge.', 'Bake at 450°F in a covered pot, 20 minutes lidded, 20 minutes open.'] }),
+      'u-rae': [r('grans-sourdough', "Gran's Sourdough", { description: 'Slow, chewy, worth the wait.', total: '1 day', image: SQUARE_PIC, categories: ['Bread'], ingredients: ['500 g bread flour', '350 g water', '100 g active starter', '10 g salt'], steps: ['Mix and rest 30 minutes.', 'Fold every 30 minutes, four times.', 'Shape, proof overnight in the fridge.', 'Bake at 450°F in a covered pot, 20 minutes lidded, 20 minutes open.'] }),
         r('sunday-pancakes', 'Sunday Pancakes', { categories: ['Breakfast'], ingredients: ['2 cups flour', '2 eggs', '1 3/4 cups milk'], steps: ['Whisk.', 'Cook on a hot griddle.'] }),
         r('secret-spice-rub', 'Secret Spice Rub', { notes: 'Only for me.', ingredients: ['1 tablespoon paprika', '1 teaspoon cumin'], steps: ['Mix.'] })],
-      'u-sam': [r('sams-chili', "Sam's Chili", { categories: ['Soups'], ingredients: ['1 pound ground beef', '2 cans beans', '1 can tomatoes'], steps: ['Brown the beef.', 'Add the rest and simmer 1 hour.'] })],
+      'u-sam': [r('sams-chili', "Sam's Chili", { categories: ['Soups'], ingredients: ['1 pound ground beef', '2 cans beans', '1 can tomatoes'], steps: ['Brown the beef.', 'Add the rest and simmer 1 hour.'] }),
+        r('wide-photo-toast', 'Wide Photo Toast', { image: WIDE_PIC, ingredients: ['2 slices bread'], steps: ['Toast it.'] })],
       'u-tia': [r('lemon-bars', 'Lemon Bars', { categories: ['Dessert'], ingredients: ['1 cup butter', '2 cups flour', '4 eggs', '1 cup lemon juice'], steps: ['Bake the crust.', 'Pour the filling and bake 20 minutes.'] }),
         r('tias-tea-notes', "Tia's Tea Notes", { ingredients: ['1 tea bag'], steps: ['Steep.'] })],
       'u-una': [r('beta-chili', 'Beta Family Chili', { categories: ['Soups'], ingredients: ['2 cans beans', '1 onion'], steps: ['Simmer 40 minutes.'] })]
@@ -37,7 +39,7 @@
     var mem = function (userId, familyId) { return members.filter(function (m) { return m.userId === userId && m.familyId === familyId && m.active; })[0] || null; };
     var nameOf = function (userId) { var v = VIEWERS.filter(function (x) { return x.userId === userId; })[0]; return v ? v.name : 'Family member'; };
     var gate = function (userId, familyId) { var m = families[familyId] && mem(userId, familyId); return m ? { m: m } : { err: NA() }; };
-    var summary = function (row, m) { var s = row.snapshot; return { id: row.id, name: s.name, description: s.description, yield: s.yield, total: s.total, categories: s.categories, hasImage: !!s.image, authorName: nameOf(row.authorId), mine: row.authorId === m.userId, version: row.version, publishedDay: row.publishedDay }; };
+    var summary = function (row, m) { var s = row.snapshot; return { id: row.id, name: s.name, description: s.description, yield: s.yield, total: s.total, categories: s.categories, hasImage: !!s.image, image: s.image, authorName: nameOf(row.authorId), mine: row.authorId === m.userId, version: row.version, publishedDay: row.publishedDay }; };
 
     function addMember(userId, familyId, role) { var m = { membershipId: nid('mb-'), userId: userId, familyId: familyId, role: role, active: true }; members.push(m); return m; }
     function seed() {
@@ -51,7 +53,7 @@
     }
     function publish(m, draft) {
       var v = C.validate(draft); if (!v.ok) return fail('invalid', v.message, { fields: v.fields });
-      var slug = String((draft && draft.slug) || '').slice(0, 80); if (!slug) return fail('invalid', 'That recipe has no id.');
+      var slug = String((draft && (draft.id || draft.slug)) || '').slice(0, 80); if (!slug) return fail('invalid', 'That recipe has no id.');
       var mine = Object.keys(rows).map(function (k) { return rows[k]; }).filter(function (r) { return r.familyId === m.familyId && r.authorId === m.userId; });
       if (mine.some(function (r) { return r.sourceSlug === slug; })) return fail('exists', 'This recipe is already published. Use "Update published version".');
       if (mine.length >= C.LIMITS.publishedPerAuthor) return fail('limit', 'You have reached the limit of published recipes.');
@@ -118,5 +120,5 @@
     if (options.seed !== false) seed(); else { families.fHappy = { id: 'fHappy', name: 'Happy Family' }; families.fBeta = { id: 'fBeta', name: 'Beta Family' }; }
     return { call: function (userId, action, body) { if (!Object.prototype.hasOwnProperty.call(actions, action)) return fail('bad_action', 'Unknown action.'); try { return actions[action](userId, body || {}); } catch (e) { return fail('server', 'Something went wrong.'); } }, admin: admin, addMember: addMember, publish: function (userId, familyId, draft) { return publish(mem(userId, familyId), draft); } };
   }
-  return { create: create, VIEWERS: VIEWERS, sampleDrafts: sampleDrafts };
+  return { create: create, VIEWERS: VIEWERS, sampleDrafts: sampleDrafts, SQUARE_PIC: SQUARE_PIC, WIDE_PIC: WIDE_PIC };
 });

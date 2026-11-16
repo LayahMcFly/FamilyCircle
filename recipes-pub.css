@@ -1,0 +1,10 @@
+/* Recipes family publishing: the few extra styles on top of the existing Recipes look (classes only; colours come from the app's own tokens). */
+.rc-pubrow { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 12px 12px; }
+.rc-pubpanel .rc-pubrow { margin: 0 0 8px; }
+.rc-pub { display: inline-block; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); font-size: .82rem; font-weight: 600; line-height: 1.3; }
+.rc-pub.is-published { border-color: var(--accent); }
+.rc-pub.is-changed { border-color: #c79a00; }
+.rc-pubpanel { margin: 14px 0; }
+.rc-pubpanel h2 { margin-top: 0; font-size: 1.1rem; }
+.rc-sections { margin-bottom: 6px; }
+@media print { .rc-pubpanel, .rc-sections { display: none !important; } }

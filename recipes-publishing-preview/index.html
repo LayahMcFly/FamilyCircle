@@ -8,25 +8,28 @@
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="light dark">
   <!-- This page can make NO network request: connect-src 'none'. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'">
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../styles.css">
   <link rel="stylesheet" href="../fonts.css">
   <link rel="stylesheet" href="../themes.css">
-  <link rel="stylesheet" href="recipes-pub.css?v=1">
+  <link rel="stylesheet" href="../recipes-pub.css?v=1">
+  <link rel="stylesheet" href="preview.css?v=1">
   <script src="../theme.js"></script>
 </head>
 <body class="pv">
   <a class="skip-link" href="#main">Skip to content</a>
-  <div class="pv-banner" id="pv-banner" role="note"><strong>Preview — sample data, not connected to your family.</strong> <span>Invented people and recipes. Nothing here is saved, sent or stored, and it clears when you reload.</span></div>
+  <div class="pv-banner" id="pv-banner" role="note"><strong>Preview — sample data, not connected to your family.</strong> <span>This is the real Recipes screen with the sharing parts added. Invented people and recipes. Nothing here is saved, sent or stored, and it clears when you reload.</span></div>
   <div class="pv-wrap">
     <section class="card pv-controls" id="pv-controls" aria-label="Preview controls"></section>
-    <main id="main" class="pv-main" data-view="recipes-publishing-preview"></main>
+    <main id="main" class="pv-main" data-view="recipes"></main>
   </div>
   <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
   <noscript><p class="noscript">This preview needs JavaScript.</p></noscript>
-  <script src="../recipes-pub-core.js?v=1"></script>
-  <script src="recipes-pub-fake-server.js?v=1"></script>
-  <script src="recipes-pub-ui.js?v=1"></script>
+  <script src="../recipes-pub-core.js?v=2"></script>
+  <script src="recipes-pub-fake-server.js?v=2"></script>
+  <script src="../recipes-pub-ui.js?v=1"></script>
+  <script src="../recipes.js?v=2.3.0"></script>
+  <script src="preview.js?v=1"></script>
 </body>
 </html>

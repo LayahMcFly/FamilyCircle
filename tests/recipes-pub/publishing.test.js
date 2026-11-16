@@ -16,12 +16,14 @@ test('a snapshot never carries ids, favourites, sources or private fields', () =
   const s = C.snapshotOf({ name: 'A', ingredients: ['x'], steps: ['y'], id: 'book-1', fav: true, source: 'http://x', slug: 's' });
   assert.deepEqual(Object.keys(s).filter(k => ['id', 'fav', 'source', 'slug'].includes(k)), []);
 });
-test('validation: name, an ingredient and a step are required; the photo must be a square JPEG', () => {
+const SQ = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCABAAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCaiiivGPaCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP/9k=', WIDE = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCABAAGADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCaiiivGPaCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//2Q==';
+test('validation: name, an ingredient and a step are required; the photo must be a real square JPEG', () => {
   assert.equal(C.validate({ name: '', ingredients: [], steps: [] }).ok, false);
-  assert.equal(C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: 'data:image/jpeg;base64,AAAA', imageW: 800, imageH: 600 }).fields.image.length > 0, true);
-  const ok = C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: 'data:image/jpeg;base64,AAAA', imageW: 800, imageH: 800 });
-  assert.equal(ok.ok, true); assert.equal(ok.snapshot.image, 'data:image/jpeg;base64,AAAA');
-  assert.equal(C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: 'data:text/html;base64,AAAA', imageW: 5, imageH: 5 }).ok, false);
+  assert.deepEqual(C.jpegDims(SQ), { w: 64, h: 64 }); assert.deepEqual(C.jpegDims(WIDE), { w: 96, h: 64 });
+  assert.equal(C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: WIDE }).fields.image.length > 0, true);
+  const ok = C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: SQ }); assert.equal(ok.ok, true); assert.equal(ok.snapshot.image, SQ);
+  assert.equal(C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: 'data:text/html;base64,AAAA' }).ok, false);
+  assert.equal(C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: 'data:image/jpeg;base64,AAAA' }).ok, false);   // not a readable JPEG
 });
 test('the library shows only this family\'s published recipes, never drafts or another family', () => {
   const s = F.create();

@@ -25,7 +25,8 @@
 
   function install(X) {
     var h = X.h, icon = X.icon, toast = X.toast;
-    var VERSION = 'v2.2.0';
+    var P = X.publish || null;   // optional family-publishing layer (recipes-pub-ui.js). Absent = the book works exactly as before.
+    var VERSION = 'v2.3.0';
     var PAGE = 24;
 
     /* ---------- storage: this device, this member ---------- */
@@ -394,7 +395,8 @@
       return h('li', null, h('a', { class: 'card rc-card', href: '#/recipes/recipe/' + encodeURIComponent(r.slug) },
         photoEl(r.image, ''),
         h('h3', null, r.name, r.fav ? h('span', { class: 'rc-fav', 'aria-label': 'hearted' }, heartIcon()) : null),
-        h('p', { class: 'small muted', text: (isMeal(r) ? 'Meal · ' : '') + metaLine(r) })));
+        h('p', { class: 'small muted', text: (isMeal(r) ? 'Meal · ' : '') + metaLine(r) }),
+        P ? P.badge(r) : null));
     }
     function filtered() {
       var a = R.demo.slice();
@@ -409,7 +411,8 @@
     /* ---------- list ---------- */
     function viewList(main) {
       main.appendChild(h('h1', { text: 'Recipes' }));
-      main.appendChild(h('p', { class: 'muted', text: 'Our recipes, meals, cook mode and timers. Kept on this device, for your account only.' }));
+      if (P) { main.appendChild(P.tabs()); if (P.section() !== 'mine') { P.body(main); return; } }
+      main.appendChild(h('p', { class: 'muted', text: 'Our recipes, meals, cook mode and timers. Kept on this device, for your account only.' + (P ? ' Everything is private to you until you publish it to your family.' : '') }));
       var q = h('input', { id: 'rc-q', type: 'search', autocomplete: 'off', enterkeyhint: 'search', placeholder: 'Search by name or ingredient', 'aria-label': 'Search recipes', value: R.query });
       var grid = h('ul', { class: 'rc-grid', id: 'rc-grid' }), more = h('div', { id: 'rc-more' });
       var chipsBox = h('div', { class: 'rc-chips', role: 'group', 'aria-label': 'Categories' });
@@ -449,30 +452,32 @@
 
     /* ---------- one recipe ---------- */
     function partCard(p) { return h('li', null, h('a', { class: 'rc-pcard', href: '#/recipes/recipe/' + encodeURIComponent(p.slug) }, photoEl(p.image, ''), h('span', { text: p.name }))); }
-    function viewRecipe(main, slug) {
-      var r = find(slug);
+    function viewRecipe(main, slug, shared) {
+      var r = shared ? cleanRecipe(Object.assign({}, shared, { slug: 'shared-' + shared.id, id: 'shared-' + shared.id, parts: [] }), 0) : find(slug);
       if (!r) { main.appendChild(backLink()); main.appendChild(h('div', { class: 'alert error', role: 'alert', text: 'I could not find that recipe. It may have been removed.' })); return; }
       R.cur = r; scaleInit(r);
       var facts = [['Prep', r.prep], ['Cook', r.cook], ['Total', r.total], ['Makes', r.yield]].filter(function (f) { return f[1]; });
       var heartB = h('button', { type: 'button', class: 'btn secondary', 'aria-pressed': String(!!r.fav) }, heartIcon(), h('span', { text: r.fav ? 'Hearted' : 'Heart it' }));
       heartB.addEventListener('click', function () { r.fav = !r.fav; r.updated = Date.now(); persist(); heartB.setAttribute('aria-pressed', String(r.fav)); heartB.lastChild.textContent = r.fav ? 'Hearted' : 'Heart it'; });
       var art = h('article', { class: 'rc-recipe' });
-      main.appendChild(h('div', { class: 'rc-noprint' }, backLink()));
+      main.appendChild(h('div', { class: 'rc-noprint' }, shared ? P.libraryLink() : backLink()));
       var cats = (isMeal(r) ? ['Meal'] : []).concat(r.categories);
       art.appendChild(h('header', null,
         cats.length ? h('p', { class: 'small muted', text: cats.join(' · ') }) : null,
         h('h1', { text: r.name }),
+        shared ? h('p', { class: 'small muted', id: 'rc-byline', text: 'By ' + shared.authorName + ' · ' + P.publishedLabel() }) : null,
         r.description ? h('p', { class: 'rc-desc', text: r.description }) : null,
         facts.length ? h('dl', { class: 'rc-facts' }, facts.map(function (f) { return h('div', null, h('dt', { text: f[0] }), h('dd', f[0] === 'Makes' ? { id: 'rc-fact-yield' } : null, f[1])); })) : null,
         h('div', { class: 'row rc-noprint rc-actions' },
           h('button', { type: 'button', class: 'btn', onclick: cookOpen }, 'Cook mode'),
           h('button', { type: 'button', class: 'btn secondary', onclick: openTimerDialog }, 'Timer'),
-          h('a', { class: 'btn secondary', href: '#/recipes/edit/' + encodeURIComponent(r.slug) }, icon('pencil'), ' Edit'),
-          heartB,
+          shared ? null : h('a', { class: 'btn secondary', href: '#/recipes/edit/' + encodeURIComponent(r.slug) }, icon('pencil'), ' Edit'),
+          shared ? null : heartB,
           h('button', { type: 'button', class: 'btn secondary', onclick: printIt }, 'Print'),
-          h('button', { type: 'button', class: 'btn ghost', onclick: function () { remove(r); } }, 'Remove'))));
+          shared ? null : h('button', { type: 'button', class: 'btn ghost', onclick: function () { remove(r); } }, 'Remove'))));
+      if (P && !shared) art.appendChild(P.panel(r));
       if (r.image) art.appendChild(h('figure', { class: 'rc-hero' }, photoEl(r.image, r.name)));
-      var ps = partsOf(r), ui = usedIn(r);
+      var ps = shared ? [] : partsOf(r), ui = shared ? [] : usedIn(r);
       if (ps.length) art.appendChild(h('section', { class: 'rc-parts' }, h('h2', { text: 'Made from' }), h('ul', null, ps.map(partCard))));
       if (ui.length) art.appendChild(h('section', { class: 'rc-parts' }, h('h2', { text: 'Part of' }), h('ul', null, ui.map(partCard))));
       var scaler = R.base > 0 ? h('div', { class: 'rc-scaler rc-noprint' },
@@ -507,7 +512,14 @@
       window.addEventListener('afterprint', done); window.print();
     }
     window.__rcPreparePrint = preparePrint;
+    if (P && P.attach) P.attach({ find: find });
     async function remove(r) {
+      if (P && P.isPublished(r)) {
+        var c = await P.removeChoice(r);   // 'cancel' | 'draft' | 'both'
+        if (c === 'cancel') return;
+        R.demo = R.demo.filter(function (x) { return x.slug !== r.slug; }); R.deleted[r.slug] = Date.now(); persist();
+        toast('Recipe removed.'); location.hash = '#/recipes'; return;
+      }
       var ok = await X.confirmDialog('Remove “' + r.name + '”?', 'It leaves your book on this device. This cannot be undone, but a backup file you saved earlier still has it.', 'Remove it');
       if (!ok) return;
       R.demo = R.demo.filter(function (x) { return x.slug !== r.slug; }); R.deleted[r.slug] = Date.now(); persist();
@@ -628,6 +640,10 @@
       cookClose(); cookbookOff(); boot(String(uid));
       var arg = b ? decodeURIComponent(b) : '';
       if (a === 'recipe' && arg) return viewRecipe(main, arg);
+      if (a === 'shared' && arg && P) {
+        main.appendChild(h('p', { class: 'muted', text: 'Opening the recipe…' }));
+        return P.get(arg).then(function (rec) { if (!main.isConnected) return; main.replaceChildren(); if (rec) viewRecipe(main, null, rec); else { main.appendChild(P.libraryLink()); main.appendChild(h('div', { class: 'alert error', role: 'alert', text: 'That recipe is no longer available.' })); } });
+      }
       if (a === 'cookbook') return viewCookbook(main, String(uid), token);
       if (a === 'new') return viewEditor(main, null);
       if (a === 'edit' && arg) return viewEditor(main, arg);
