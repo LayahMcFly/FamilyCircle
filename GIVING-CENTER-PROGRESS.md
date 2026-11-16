@@ -171,3 +171,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.51: Group gifts real backend (givingGifts + givingGiftParts, 10 actions). Needs new function build + GIVING-GIFTS-CONSOLE-COMMANDS.md.
 - v1.51.99.52: a customized profile page background now runs down to the footer's top line (no gap, square bottom corners).
 - v1.51.99.53: every text box that does not declare itself as a login box is marked autocomplete off (and password-manager ignore hints), so browsers stop treating all inputs like password fields.
+- v1.51.99.54: on the Add item form, an Etsy listing link no longer runs the page-fetch picture button (Etsy blocks it with a 403); the button hides for Etsy links and the picture comes from Etsy's API after the item is saved.

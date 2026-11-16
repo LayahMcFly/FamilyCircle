@@ -510,6 +510,7 @@
         f.linkBtn = h('button', { type: 'button', class: 'btn secondary small', id: 'gv-linkpic', text: 'Get a picture from the link', onclick: function () {
           var url = f.url.value.trim(); setErr('gv-url', ''); setErr('gv-photofile', '');
           if (!/^https?:\/\/\S+\.\S+/i.test(url)) return setErr('gv-url', 'Enter a web address that starts with https:// first.');
+          if (ETSY_LINK.test(url)) { f.info.textContent = ''; f.debug.textContent = ''; return setErr('gv-photofile', 'This is an Etsy listing, so there is nothing to fetch here. Save the item and its picture appears on the list straight from Etsy (Etsy blocks this button).'); }
           f.linkBtn.disabled = true; f.debug.textContent = ''; f.info.textContent = 'Looking for a picture at the link…';
           var t0 = Date.now(), dbg = function (m) { if (f.debug.isConnected) f.debug.textContent += (f.debug.textContent ? ' ' : '') + m; };
           dbg('Request sent.');
@@ -531,6 +532,9 @@
             f.info.textContent = 'Picture found at ' + r.host + '. Converting and compressing…';
           }).catch(function (e) { clearTimeout(slow); if (timedOut || !f.info.isConnected) return; f.linkBtn.disabled = false; f.info.textContent = ''; setErr('gv-photofile', 'Something went wrong while getting the picture. Try again, or add your own photo.'); dbg('Error: ' + String((e && e.message) || e).slice(0, 120)); });
         } });
+        var ETSY_LINK = /^https?:\/\/(www\.)?etsy\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?listing\/\d{5,14}(?:[\/?#]|$)/i;
+        var syncLinkBtn = function () { f.linkBtn.hidden = ETSY_LINK.test((f.url.value || '').trim()); };
+        f.url.addEventListener('input', syncLinkBtn); syncLinkBtn();
         f.getReady = function () { return ready; };
       }
       var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
