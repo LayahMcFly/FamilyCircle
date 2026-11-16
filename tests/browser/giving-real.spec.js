@@ -197,6 +197,16 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await as('bob', '#/giving/requests'); 
   check('5h real: another adult sees it from the Family requests list', /Rake the leaves/.test(await text()), await text());
 
+  // 5i emergency requests work against the real server code
+  await as('ann', '#/giving/emergency/new'); await page.waitForSelector('#gv-etitle');
+  check('5i real: the form shows the 911 notice', /call 911/.test(await page.locator('#gv-911').innerText()), '');
+  await page.fill('#gv-etitle', 'Need a ride home'); await page.locator('#gv-ehelpers .gv-check', { hasText: 'bob' }).click(); await page.click('#gv-esave');
+  await page.waitForSelector('#main h1:has-text("Need a ride home")'); await settle();
+  check('5i real: the sender sees the time left and who was asked', /Closes automatically in about 48 hours/.test(await text()) && /You asked: bob/.test(await text()), await text());
+  check('5i real: stored as a request with no client permissions, chosen audience', rowsOf('givingRequests').some(r => r.audience === 'chosen' && r.$permissions.length === 0), '');
+  await as('bob'); check('5i real: the chosen adult sees the urgent banner', (await page.locator('#gv-urgentbanner').count()) === 1, await text());
+  await as('owner', '#/giving/requests'); check('5i real: an owner who was not chosen sees nothing of it', !/Need a ride home/.test(await text()), await text());
+
   await as('owner'); await page.locator('#gv-turnoff').click(); await dlgOk(); await page.waitForSelector('.gv-off'); await settle();
   check('10 Owner turns it off and sees the turn-on button again', await page.locator('#gv-turnon').isVisible(), await text());
   await as('ann'); check('10 Everyone else is told it is not turned on', /not turned on/.test(await text()), await text());

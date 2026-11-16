@@ -114,5 +114,20 @@
     if (note.length > REQ.note) errors.note = 'Notes can be up to ' + REQ.note + ' characters.';
     return { ok: !Object.keys(errors).length, errors: errors, value: { note: note } };
   }
+  /* ---------- Emergency requests (Phase B). Numbers are the recommended defaults. ---------- */
+  var EMERGENCY = { helpers: 8, hours: 48, title: 120, details: 500 };
+  var EMERGENCY_911 = 'For a life-threatening emergency, call 911 (or your local emergency number) first. Family Circle is not an emergency service and nobody is watching it in real time.';
+  var EMERGENCY_PRIVACY = 'Do not put medical details, account numbers or passwords here. Helpers are only told that you need help.';
+  function validateEmergency(b) {
+    var errors = {}; b = b || {};
+    var title = trim(b.title), details = trim(b.details);
+    if (!title) errors.title = 'Say what you need, for example "Car broke down, need a ride".';
+    else if (title.length > EMERGENCY.title) errors.title = 'Keep it under ' + EMERGENCY.title + ' characters.';
+    if (details.length > EMERGENCY.details) errors.details = 'Details can be up to ' + EMERGENCY.details + ' characters.';
+    var hs = Array.isArray(b.helpers) ? b.helpers.filter(function (x, i, a) { return typeof x === 'string' && x && a.indexOf(x) === i; }) : [];
+    if (!hs.length) errors.helpers = 'Choose at least one adult to ask.';
+    else if (hs.length > EMERGENCY.helpers) errors.helpers = 'You can ask up to ' + EMERGENCY.helpers + ' adults.';
+    return { ok: !Object.keys(errors).length, errors: errors, value: { title: title, details: details, helpers: hs } };
+  }
 
-export { REQ, REQUEST_KINDS, validateRequest, validatePledge, REPORT_REASONS, AUDIENCES, validateReport, LIMITS, PRIORITIES, PRIORITY_LABEL, CURRENCIES, cleanUrl, hostOf, parseAmount, fmtMoney, totalsByCurrency, validateList, validateItem, trim };
+export { EMERGENCY, EMERGENCY_911, EMERGENCY_PRIVACY, validateEmergency, REQ, REQUEST_KINDS, validateRequest, validatePledge, REPORT_REASONS, AUDIENCES, validateReport, LIMITS, PRIORITIES, PRIORITY_LABEL, CURRENCIES, cleanUrl, hostOf, parseAmount, fmtMoney, totalsByCurrency, validateList, validateItem, trim };

@@ -91,3 +91,7 @@ The real screens exist (open `#/giving` in the app). They are not linked from th
 ## Requests and pledges (v1.51.99.40)
 
 Create the two tables and five indexes above (all permissions empty, like the other giving tables), then upload the new function build. Until both are done, the **Family requests** row on the Giving home will show an error for families that have Giving turned on. Nothing changes for families that have it off.
+
+## Emergency requests (v1.51.99.42)
+
+No new tables or columns. Emergencies are stored as rows in `givingRequests` (audience `chosen`, the chosen adults and the closing time kept inside `data`). Upload the new function build and you are done.

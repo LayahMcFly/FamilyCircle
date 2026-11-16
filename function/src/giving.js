@@ -29,7 +29,7 @@ export const GIVING_TABLES = {
   state: 'givingState'                // row id = familyId; enabled (bool), enabledBy, enabledAt
 };
 export const GIVING_LIMITS = { ...R.LIMITS, hideDays: 30, reportsPerPerson: 20, noticesShown: 20, perMinute: 60, thumbBytes: 10000, photoBytes: 250000, linkPicturesPer10Min: 10 };
-const DAY = 864e5;
+const DAY = 864e5, HOUR = 36e5;
 const MANAGER_NOTE = 'Ask another owner or tree admin to change your own setting.';
 
 export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable }) {
@@ -137,14 +137,20 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
   function requestOk(c, r) {
     if (!r || r.familyId !== c.familyId || r.hiddenAt || !c.names.has(r.ownerId)) return false;
     if (r.ownerId === c.me.userId) return true;
+    if (r.audience === 'chosen') return c.me.adult && (parse(r.data).helpers || []).includes(c.me.userId);   // an emergency: only the owner and the adults they chose (not admins)
     if (r.approval !== 'approved') return c.moderator;
     if (r.audience === 'adults' && !c.me.adult) return false;
     return true;
   }
+  /** An emergency closes itself once its 48 hours are up (checked whenever it is read). */
+  async function settle(r) {
+    if (r && r.audience === 'chosen' && r.status !== 'closed' && now() >= (parse(r.data).expiresAt || 0)) { await updateRow(T.requests, r.$id, { status: 'closed' }); r.status = 'closed'; }
+    return r;
+  }
   async function requestRow(c, id) {
     const r = await getRowOrNull(T.requests, idOf(id, 'requestId'));
     if (!requestOk(c, r)) throw NA();
-    return r;
+    return settle(r);
   }
   function requestView(c, r, pledgeRows, full) {
     const d = parse(r.data), live = pledgeRows.filter((p) => c.names.has(p.userId));
@@ -152,6 +158,11 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       audience: r.audience === 'adults' ? 'adults' : 'everyone', ownerName: nameOf(c, r.ownerId), mine: r.ownerId === c.me.userId, status: r.status === 'closed' ? 'closed' : 'open', approval: r.approval === 'approved' ? 'approved' : 'pending',
       pledgedCount: live.length, doneCount: live.filter((p) => p.status === 'done').length };
     v.stillNeeded = Math.max(0, v.needed - live.length);
+    if (r.audience === 'chosen') {
+      v.audience = 'chosen'; v.urgent = true;
+      v.hoursLeft = v.status === 'open' ? Math.max(0, Math.ceil(((d.expiresAt || 0) - now()) / HOUR)) : 0;
+      if (v.mine) v.helperNames = (d.helpers || []).map((id) => nameOf(c, id));
+    }
     if (full) {
       v.pledges = live.sort((a, b) => String(a.$createdAt).localeCompare(String(b.$createdAt))).map((p) => ({ id: p.$id, userId: p.userId, name: nameOf(c, p.userId), note: parse(p.data).note || '', status: p.status === 'done' ? 'done' : 'pledged', mine: p.userId === c.me.userId }));
       const mine = live.find((p) => p.userId === c.me.userId); if (mine) v.myPledgeId = mine.$id;
@@ -165,12 +176,13 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
     await dropReports('request', r.$id);
     await deleteRow(T.requests, r.$id);
   }
-  const openCountOf = async (c, userId) => (await all(T.requests, [Query.equal('familyId', [c.familyId]), Query.equal('ownerId', [userId])], RQ.open + 20)).filter((x) => !x.hiddenAt && x.status !== 'closed').length;
+  const openCountOf = async (c, userId) => (await all(T.requests, [Query.equal('familyId', [c.familyId]), Query.equal('ownerId', [userId])], RQ.open + 20)).filter((x) => !x.hiddenAt && x.status !== 'closed' && x.audience !== 'chosen').length;
   /** A request whose owner left is hidden at once and deleted after 30 days (like wishlists); pledges made by people who left are removed (done ones too, there is nobody left to thank). */
   async function tidyRequests(c, rows) {
     for (const r of rows) {
       if (!r.hiddenAt && !c.names.has(r.ownerId)) { await updateRow(T.requests, r.$id, { hiddenAt: iso() }); r.hiddenAt = iso(); }
       else if (r.hiddenAt && Date.parse(r.hiddenAt) < now() - L.hideDays * DAY) await removeRequest({ ...c, notify: false }, r, '');
+      else if (r.audience === 'chosen' && (parse(r.data).expiresAt || 0) < now() - L.hideDays * DAY) await removeRequest({ ...c, notify: false }, r, '');
     }
     for (const p of await inFamily(T.pledges, c.familyId)) if (!c.names.has(p.userId)) await deleteRow(T.pledges, p.$id);
   }
@@ -281,7 +293,7 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
         return l ? { itemId: it.$id, title: parse(it.data).title || '', listId: l.$id, ownerName: nameOf(c, l.ownerId), changedSinceReserved: (r.version || 1) !== (it.version || 1) } : null;
       }).filter(Boolean);
       const out = { lists: summaries, reservations: mine, notices: notes.rows.map((n) => ({ id: n.$id, text: parse(n.data).text || '' })), canCreateList: summaries.filter((x) => x.mine).length < L.lists, me: { adult: c.me.adult }, canManageAges: c.manager, canModerate: c.moderator };
-      { const rq = (await inFamily(T.requests, c.familyId, [], 600)).filter((q) => requestOk(c, q)); out.requests = { open: rq.filter((q) => q.approval === 'approved' && q.status !== 'closed').length }; if (c.moderator) out.requests.waiting = rq.filter((q) => q.approval !== 'approved' && q.ownerId !== user.$id).length; }
+      { const rq = (await inFamily(T.requests, c.familyId, [], 600)).filter((q) => requestOk(c, q)); out.requests = { open: rq.filter((q) => q.approval === 'approved' && q.status !== 'closed' && q.audience !== 'chosen').length, urgent: rq.filter((q) => q.audience === 'chosen' && q.status !== 'closed' && q.ownerId !== user.$id && now() < (parse(q.data).expiresAt || 0)).length }; if (c.moderator) out.requests.waiting = rq.filter((q) => q.audience !== 'chosen' && q.approval !== 'approved' && q.ownerId !== user.$id).length; }
       if (c.moderator) out.openReports = (await inFamily(T.reports, c.familyId)).length;   // everyone else gets no report field at all
       return out;
     },
@@ -492,19 +504,45 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
 
 
     /* ----- Requests and pledges (Phase A) ----- */
+
+    /* ----- Emergency requests (Phase B): a request seen only by the owner and up to 8 chosen adults, closing itself after 48 hours ----- */
+    async givingEmergencyHelpers({ user, body }) {
+      const c = await context(user, body.familyId);
+      return { helpers: c.members.filter((m) => m.adult && m.userId !== user.$id).map((m) => ({ userId: m.userId, name: m.name })), max: R.EMERGENCY.helpers };
+    },
+    async givingEmergencySave({ user, body }) {
+      const c = await context(user, body.familyId);
+      const v = R.validateEmergency(body); if (!v.ok) throw invalid(v.errors);
+      if (v.value.helpers.some((id) => { const m = c.byId.get(id); return !m || !m.adult || id === user.$id; })) throw new ApiError(400, 'invalid', 'You can only ask other adults in your family.');
+      const mine = (await all(T.requests, [Query.equal('familyId', [c.familyId]), Query.equal('ownerId', [user.$id])], RQ.open + 20)).filter((x) => x.audience === 'chosen' && !x.hiddenAt && x.status !== 'closed' && now() < (parse(x.data).expiresAt || 0));
+      if (mine.length) throw new ApiError(400, 'limit', 'You already have an emergency request open. Close it before sending another.');
+      const data = JSON.stringify({ title: v.value.title, details: v.value.details, kind: 'time', needed: v.value.helpers.length, amount: '', neededBy: '', helpers: v.value.helpers, expiresAt: now() + R.EMERGENCY.hours * HOUR });
+      const row = await createRow(T.requests, ID.unique(), { familyId: c.familyId, ownerId: user.$id, status: 'open', approval: 'approved', audience: 'chosen', data }, []);
+      for (const id of v.value.helpers) await notify(c, id, nameOf(c, user.$id) + ' needs help. Tap to open.');
+      return { request: requestView(c, row, [], true) };
+    },
+    async givingEmergencyKeepOpen({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await requestRow(c, body.requestId);
+      if (r.audience !== 'chosen' || r.ownerId !== user.$id) throw NA();
+      const saved = await updateRow(T.requests, r.$id, { status: 'open', data: JSON.stringify({ ...parse(r.data), expiresAt: now() + R.EMERGENCY.hours * HOUR }) });
+      return { request: requestView(c, saved, await pledgesFor(r.$id), true) };
+    },
     async givingRequestsHome({ user, body }) {
       const c = await context(user, body.familyId);
       const rows = await inFamily(T.requests, c.familyId, [], 600);
+      for (const r of rows) await settle(r);
       await tidyRequests(c, rows);
       const pledges = await inFamily(T.pledges, c.familyId);
       const byReq = new Map(); for (const p of pledges) { if (!byReq.has(p.requestId)) byReq.set(p.requestId, []); byReq.get(p.requestId).push(p); }
-      const reach = rows.filter((r) => requestOk(c, r)).sort((a, b) => String(b.$createdAt).localeCompare(String(a.$createdAt)));
+      const reach = rows.filter((r) => requestOk(c, r) && !(r.audience === 'chosen' && now() > (parse(r.data).expiresAt || 0) + 30 * DAY)).sort((a, b) => String(b.$createdAt).localeCompare(String(a.$createdAt)));
       const view = (r) => requestView(c, r, byReq.get(r.$id) || [], false);
-      const shown = reach.filter((r) => r.approval === 'approved' || r.ownerId === c.me.userId);
-      const mineOpen = rows.filter((r) => r.ownerId === user.$id && !r.hiddenAt && r.status !== 'closed').length;
+      const urgent = reach.filter((r) => r.audience === 'chosen' && r.status !== 'closed');
+      const shown = reach.filter((r) => (r.approval === 'approved' || r.ownerId === c.me.userId) && !(r.audience === 'chosen' && r.status !== 'closed'));
+      const mineOpen = rows.filter((r) => r.ownerId === user.$id && !r.hiddenAt && r.status !== 'closed' && r.audience !== 'chosen').length;
       return { me: { adult: c.me.adult }, canModerate: c.moderator, canCreate: mineOpen < RQ.open,
-        open: shown.filter((r) => r.status !== 'closed').map(view), closed: shown.filter((r) => r.status === 'closed').slice(0, 20).map(view),
-        waiting: c.moderator ? reach.filter((r) => r.approval !== 'approved' && r.ownerId !== user.$id).map(view) : [] };
+        urgent: urgent.map(view), open: shown.filter((r) => r.status !== 'closed').map(view), closed: shown.filter((r) => r.status === 'closed').slice(0, 20).map(view),
+        waiting: c.moderator ? reach.filter((r) => r.audience !== 'chosen' && r.approval !== 'approved' && r.ownerId !== user.$id).map(view) : [] };
     },
     async givingRequestGet({ user, body }) {
       const c = await context(user, body.familyId);
@@ -519,7 +557,7 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       const view = async (r) => requestView(c, r, await pledgesFor(r.$id), true);
       if (body.requestId) {
         const r = await requestRow(c, body.requestId);
-        if (r.ownerId !== user.$id) throw NA();
+        if (r.ownerId !== user.$id || r.audience === 'chosen') throw NA();
         const patch = { audience, data }; if (!c.me.adult) patch.approval = 'pending';   // a kid's edit goes back for an adult to look at again
         return { request: await view(await updateRow(T.requests, r.$id, patch)) };
       }
@@ -551,6 +589,7 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       const c = await context(user, body.familyId);
       const r = await requestRow(c, body.requestId);
       if (r.ownerId !== user.$id) throw NA();
+      if (body.reopen && r.audience === 'chosen') throw new ApiError(400, 'invalid', 'Use Keep open for an emergency request.');
       if (body.reopen && r.status === 'closed' && (await openCountOf(c, user.$id)) >= RQ.open) throw new ApiError(400, 'limit', 'You can have up to ' + RQ.open + ' open requests. Close one to reopen this.');
       const saved = await updateRow(T.requests, r.$id, { status: body.reopen ? 'open' : 'closed' });
       return { request: requestView(c, saved, await pledgesFor(r.$id), true) };

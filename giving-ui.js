@@ -559,7 +559,7 @@
       page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Family requests', 'data-focus': '' }), r.canCreate ? h('a', { class: 'btn small', href: '#/giving/requests/new', id: 'gv-newrequest', text: 'New request' }) : null));
       page.appendChild(h('p', { class: 'muted', text: 'Ask for something specific and let family members pledge to help. Nothing is paid or bought through Family Circle. If money is involved, people sort it out themselves and you confirm.' }));
       if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidreq', text: 'You can ask for help. An adult looks at your request before the family sees it. Pledging to help is for adults.' }));
-      if (!real) page.appendChild(h('a', { class: 'btn danger small', id: 'gv-urgentnew', href: '#/giving/emergency/new', text: 'Ask for urgent help' }));
+      page.appendChild(h('a', { class: 'btn danger small', id: 'gv-urgentnew', href: '#/giving/emergency/new', text: 'Ask for urgent help' }));
       if ((r.urgent || []).length) { page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-urgent-h', text: 'Urgent' })); page.appendChild(requestRows(r.urgent)); }
       if (r.canModerate && r.waiting.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Waiting for your approval' })); page.appendChild(requestRows(r.waiting)); }
       page.appendChild(h('h2', { class: 'gv-sub', text: 'Open requests' }));

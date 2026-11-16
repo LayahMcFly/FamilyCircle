@@ -80,7 +80,7 @@ function makeWorld() {
   const api = createApi({ users, teams, db, storage: world.storage, cfg: { databaseId: 'family', bucketId: 'b', maxOwnedFamilies: 3, maxVideoMB: 15, familyStorageMB: 500, ...EXTRA_CFG }, now: () => world.clock + seq * 1000 + 500 });
   const U = (id) => ({ $id: id, emailVerification: true, status: true, labels: [] });
   const call = async (uid, action, body = {}) => { const r = await api.handle({ user: U(uid), body: { action, ...body }, deadline: Number.MAX_SAFE_INTEGER }); return r; };
-  const ok = async (uid, action, body) => { const r = await call(uid, action, body); assert.equal(r.status, 200, `${action}: ${JSON.stringify(r.json)}`); return r.json; };
+  const ok = async (uid, action, body) => { const r = await call(uid, action, body); assert.equal(r.status, 200, `${action}: ${JSON.stringify(r.json)} ${r.cause && r.cause.stack}`); return r.json; };
   const fail = async (uid, action, body, status, code) => { const r = await call(uid, action, body); assert.equal(r.status, status, `${action} should fail ${status}: ${JSON.stringify(r.json)}`); if (code) assert.equal(r.json.error, code); return r.json; };
   const addFamily = async (fid, ownerId, memberIds) => {
     world.teams[fid] = { name: 'Fam ' + fid, members: [{ userId: ownerId, roles: ['owner'], confirm: true }, ...memberIds.map((u) => ({ userId: u, roles: ['member'], confirm: true }))] };
@@ -636,4 +636,69 @@ test('requests: reports reach adult admins only, and a removed member\'s request
   w.removeMember('famA', 'ann');
   assert.deepEqual((await w.ok('bob', 'givingRequestsHome', F())).open, []);
   assert.ok(rows(w, 'givingRequests')[0].hiddenAt);
+});
+
+/* ---------- emergency requests (Phase B) ---------- */
+const EMG = (extra = {}) => F({ title: 'Car broke down, need a ride', helpers: ['ann', 'bob'], ...extra });
+
+test('emergency: rules match the preview', async () => {
+  const P = createRequire(import.meta.url)('../../giving-core.js');
+  const M = await import('../src/giving-rules.js');
+  for (const b of [{ title: 'x', helpers: ['a'] }, { title: '', helpers: ['a'] }, { title: 'x', helpers: [] }, { title: 'x', helpers: ['1', '2', '3', '4', '5', '6', '7', '8', '9'] }, { title: 'x', details: 'y'.repeat(501), helpers: ['a', 'a'] }]) assert.deepEqual(M.validateEmergency(b), P.validateEmergency(b));
+  assert.deepEqual(M.EMERGENCY, P.EMERGENCY);
+});
+
+test('emergency: only the owner and the chosen adults reach it; admins, kids, others and other families do not', async () => {
+  const w = await setup();
+  await w.ok('owner', 'givingMemberSetAdult', F({ userId: 'tia', adult: true }));
+  const q = (await w.ok('kid', 'givingEmergencySave', EMG({ helpers: ['ann', 'bob'] }))).request;   // a kid may ask adults at once
+  assert.equal(q.urgent, true); assert.equal(q.hoursLeft, 48); assert.deepEqual(q.helperNames, ['ann', 'bob']);
+  assert.equal(rows(w, 'givingRequests')[0].approval, 'approved');
+  assert.deepEqual(rows(w, 'givingRequests')[0].$permissions, []);
+  for (const u of ['owner', 'tia']) { await w.fail(u, 'givingRequestGet', F({ requestId: q.id }), 404); assert.equal((await w.ok(u, 'givingRequestsHome', F())).urgent.length, 0); }
+  await w.fail('zed', 'givingRequestGet', { familyId: 'famB', requestId: q.id }, 404);
+  const seen = await w.ok('ann', 'givingRequestGet', F({ requestId: q.id }));
+  assert.equal(seen.request.helperNames, undefined);                    // helpers do not learn who else was asked
+  assert.equal((await w.ok('ann', 'givingRequestsHome', F())).urgent.length, 1);
+  assert.equal((await w.ok('kid', 'givingRequestsHome', F())).open.length, 0);   // never mixed into ordinary lists
+});
+
+test('emergency: only other adults can be chosen; notice is short; the helper answers; the owner sees who', async () => {
+  const w = await setup();
+  await w.fail('ann', 'givingEmergencySave', EMG({ helpers: ['kid'] }), 400, 'invalid');
+  await w.fail('ann', 'givingEmergencySave', EMG({ helpers: ['ann'] }), 400, 'invalid');
+  await w.fail('ann', 'givingEmergencySave', EMG({ helpers: ['zed'] }), 400, 'invalid');
+  await w.fail('ann', 'givingEmergencySave', EMG({ helpers: [] }), 400, 'invalid');
+  const h = await w.ok('ann', 'givingEmergencyHelpers', F());
+  assert.deepEqual(h.helpers.map((x) => x.userId).sort(), ['bob', 'owner']); assert.equal(h.max, 8);
+  const q = (await w.ok('ann', 'givingEmergencySave', EMG({ title: 'Need a ride', details: 'Front gate', helpers: ['bob'] }))).request;
+  assert.deepEqual((await w.ok('bob', 'givingHome', F())).notices.map((n) => n.text), ['ann needs help. Tap to open.']);
+  assert.equal((await w.ok('bob', 'givingHome', F())).requests.urgent, 1);
+  await w.ok('bob', 'givingPledgeSave', F({ requestId: q.id, note: 'On my way' }));
+  const v = (await w.ok('ann', 'givingRequestGet', F({ requestId: q.id }))).request;
+  assert.equal(v.pledges[0].note, 'On my way');
+  await w.fail('owner', 'givingPledgeSave', F({ requestId: q.id }), 404);
+});
+
+test('emergency: closes after 48 hours, keep open restarts, one at a time, no edits, 30-day cleanup', async () => {
+  const w = await setup();
+  const q = (await w.ok('ann', 'givingEmergencySave', EMG({ helpers: ['owner', 'bob'] }))).request;
+  await w.fail('ann', 'givingEmergencySave', EMG({ helpers: ['owner', 'bob'] }), 400, 'limit');
+  await w.fail('ann', 'givingRequestSave', F({ requestId: q.id, title: 'Changed' }), 404);
+  w.world.bump(47 * 36e5);
+  assert.equal((await w.ok('bob', 'givingRequestGet', F({ requestId: q.id }))).request.status, 'open');
+  await w.ok('ann', 'givingEmergencyKeepOpen', F({ requestId: q.id }));
+  w.world.bump(47 * 36e5);
+  assert.equal((await w.ok('ann', 'givingRequestGet', F({ requestId: q.id }))).request.status, 'open');
+  w.world.bump(2 * 36e5);
+  assert.equal((await w.ok('bob', 'givingRequestGet', F({ requestId: q.id }))).request.status, 'closed');
+  await w.fail('bob', 'givingPledgeSave', F({ requestId: q.id }), 409, 'closed');
+  assert.equal((await w.ok('bob', 'givingRequestsHome', F())).urgent.length, 0);
+  assert.equal((await w.ok('bob', 'givingRequestsHome', F())).closed.length, 1);
+  await w.fail('ann', 'givingRequestClose', F({ requestId: q.id, reopen: true }), 400, 'invalid');
+  await w.fail('bob', 'givingEmergencyKeepOpen', F({ requestId: q.id }), 404);
+  await w.ok('ann', 'givingEmergencyKeepOpen', F({ requestId: q.id }));
+  w.world.bump(49 * 36e5 + 31 * DAY);                                   // closed, then 30 more days
+  await w.ok('bob', 'givingRequestsHome', F());
+  assert.equal(rows(w, 'givingRequests').length, 0);
 });
