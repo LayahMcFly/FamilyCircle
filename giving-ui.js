@@ -116,7 +116,7 @@
     function route() {
       var p = (location.hash || '').replace(/^#\/?/, '').split('/');
       if (p[0] !== 'giving') return { name: 'home' };
-      if (p[1] === 'emergency' && p[2] === 'new') return { name: 'emergencyNew' };
+      if (p[1] === 'emergency') return p[2] === 'new' ? { name: 'emergencyNew' } : { name: 'emergencies' };
       if (['mine', 'family', 'reserved', 'people'].indexOf(p[1]) >= 0) return { name: 'section', which: p[1] };
       if (p[1] === 'requests') {
         if (p[2] === 'new') return { name: 'requestNew' };
@@ -222,14 +222,14 @@
         circleBtn({ id: 'gv-requestslink', href: '#/giving/requests', icon: 'hands', label: 'Requests', count: openReq + waitReq, aria: 'Family requests, ' + openReq + (openReq === 1 ? ' open request' : ' open requests') + (waitReq ? ', ' + waitReq + ' waiting for approval' : '') }),
         r.canCreateList ? circleBtn({ id: 'gv-newlist', href: '#/giving/list/new', icon: 'plus', label: 'New list', aria: 'New wishlist' }) : null,
         r.canManageAges ? circleBtn({ id: 'gv-peoplebtn', href: '#/giving/people', icon: 'badge', label: 'Adults', aria: 'Who is an adult' }) : null,
-        circleBtn({ id: 'gv-urgentbtn', href: '#/giving/emergency/new', icon: 'alert', label: 'Urgent', aria: 'Urgent help', cls: 'is-urgent' + (r.requests && r.requests.urgent ? ' is-pulsing' : '') })));
+        circleBtn({ id: 'gv-urgentbtn', href: '#/giving/emergency', icon: 'alert', label: 'Urgent', aria: 'Urgent help', cls: 'is-urgent' + (r.requests && r.requests.urgent ? ' is-pulsing' : '') })));
       if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidnote', text: 'You can make your own wishlist and see the family’s lists. Gift reservations are for adults.' }));
       if (r.canModerate) page.appendChild(reportsPanel(r.openReports));
       (r.notices || []).forEach(function (n) {
         page.appendChild(h('div', { class: 'gv-notice', role: 'status' }, h('span', { text: n.text }),
           h('button', { type: 'button', class: 'btn ghost small', 'data-notice': n.id, text: 'Dismiss', onclick: function () { api('noticeDismiss', { noticeId: n.id }).then(function (x) { if (x.stale) return; refresh(); }); } })));
       });
-      if (r.requests && r.requests.urgent) page.appendChild(h('a', { class: 'gv-row gv-urgentbanner', id: 'gv-urgentbanner', href: '#/giving/requests' }, h('strong', { text: r.requests.urgent === 1 ? 'Someone needs urgent help' : r.requests.urgent + ' people need urgent help' }), h('span', { class: 'muted', text: 'Tap to open' })));
+      if (r.requests && r.requests.urgent) page.appendChild(h('a', { class: 'gv-row gv-urgentbanner', id: 'gv-urgentbanner', href: '#/giving/emergency' }, h('strong', { text: r.requests.urgent === 1 ? 'Someone needs urgent help' : r.requests.urgent + ' people need urgent help' }), h('span', { class: 'muted', text: 'Tap to open' })));
       return page;
     }
     /** One screen per icon: Mine, Family, Reserved, Adults. */
@@ -567,10 +567,10 @@
         if (real) api('status').then(function (s) { if (s.stale || mine !== token || !s.ok || !s.canTurnOn || !page.isConnected) return; page.appendChild(ownerSwitchPanel()); });
       });
       if (rt.name === 'emergencyNew') return api('emergencyHelpers').then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); fin(renderEmergencyForm(r)); });
-      if (rt.name === 'requests' || rt.name === 'requestNew') return api('requestsHome').then(function (r) {
+      if (rt.name === 'requests' || rt.name === 'requestNew' || rt.name === 'emergencies') return api('requestsHome').then(function (r) {
         if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r));
         if (rt.name === 'requestNew') return fin(r.canCreate ? renderRequestForm(null, r.me.adult) : requestLimitMsg());
-        fin(renderRequests(r));
+        fin(rt.name === 'emergencies' ? renderEmergencies(r) : renderRequests(r));
       });
       if (rt.name === 'request' || rt.name === 'requestEdit') return api('requestGet', { requestId: rt.id }).then(function (r) {
         if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r));
@@ -605,12 +605,25 @@
       page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Family requests', 'data-focus': '' })));
       page.appendChild(h('p', { class: 'muted', text: 'Ask for something specific and let family members pledge to help. Nothing is paid or bought through Family Circle. If money is involved, people sort it out themselves and you confirm.' }));
       if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidreq', text: 'You can ask for help. An adult looks at your request before the family sees it. Pledging to help is for adults.' }));
-      page.appendChild(h('nav', { class: 'gv-quick', 'aria-label': 'Requests' }, r.canCreate ? circleBtn({ id: 'gv-newrequest', href: '#/giving/requests/new', icon: 'plus', label: 'New request' }) : null, circleBtn({ id: 'gv-urgentnew', href: '#/giving/emergency/new', icon: 'alert', label: 'Urgent', aria: 'Urgent help', cls: 'is-urgent' + ((r.urgent || []).length ? ' is-pulsing' : '') })));
-      if ((r.urgent || []).length) { page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-urgent-h', text: 'Urgent' })); page.appendChild(requestRows(r.urgent)); }
+      if (r.canCreate) page.appendChild(h('nav', { class: 'gv-quick', 'aria-label': 'Requests' }, circleBtn({ id: 'gv-newrequest', href: '#/giving/requests/new', icon: 'plus', label: 'New request' })));
+      if ((r.urgent || []).length) page.appendChild(h('a', { class: 'gv-row gv-urgentlink', id: 'gv-tourgent', href: '#/giving/emergency' }, h('strong', { text: 'Urgent help is on its own screen' }), h('span', { class: 'muted', text: 'Tap to open' })));
       if (r.canModerate && r.waiting.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Waiting for your approval' })); page.appendChild(requestRows(r.waiting)); }
       page.appendChild(h('h2', { class: 'gv-sub', text: 'Open requests' }));
       if (!r.open.length) page.appendChild(h('p', { class: 'muted', id: 'gv-noreq', text: 'No open requests right now.' })); else page.appendChild(requestRows(r.open));
-      if (r.closed.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Closed' })); page.appendChild(requestRows(r.closed)); }
+      var closedReq = r.closed.filter(function (q) { return !q.urgent; });
+      if (closedReq.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Closed' })); page.appendChild(requestRows(closedReq)); }
+      return page;
+    }
+    /** Urgent help lives here: send one, and see the ones that were sent to you. */
+    function renderEmergencies(r) {
+      var page = h('div', { class: 'gv-page' }, backLink('#/giving', 'Back to Giving Center'));
+      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { id: 'gv-emerg-h', text: 'Urgent help', 'data-focus': '' })));
+      page.appendChild(h('p', { class: 'muted', text: 'For a real need right now, like a ride or a place to stay. Only the adults you choose see it, and it closes by itself after ' + C.EMERGENCY.hours + ' hours.' }));
+      page.appendChild(h('nav', { class: 'gv-quick', 'aria-label': 'Urgent help' }, circleBtn({ id: 'gv-urgentnew', href: '#/giving/emergency/new', icon: 'alert', label: 'Ask for help', aria: 'Ask for urgent help', cls: 'is-urgent' })));
+      var live = (r.urgent || []), done = r.closed.filter(function (q) { return q.urgent; });
+      page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-urgent-h', text: 'Needs help now' }));
+      if (!live.length) page.appendChild(h('p', { class: 'muted', id: 'gv-nourgent', text: 'No one needs urgent help right now.' })); else page.appendChild(requestRows(live));
+      if (done.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Closed' })); page.appendChild(requestRows(done)); }
       return page;
     }
     function requestLimitMsg() { return h('section', { class: 'card' }, h('h1', { text: 'New request', 'data-focus': '' }), h('p', { text: 'You have ' + C.REQ.open + ' open requests, which is the limit. Close one to add another.' }), h('a', { class: 'btn secondary', href: '#/giving/requests', text: 'Back to requests' })); }
@@ -670,8 +683,8 @@
         h('div', { class: 'gv-field' }, locBtn, clearLoc, locNote),
         h('div', { class: 'gv-field' }, h('span', { class: 'gv-checklabel', id: 'gv-ehelpers-l', text: 'Who should we ask? (up to ' + r.max + ' adults)' }), group, h('p', { class: 'gv-fielderr', id: 'gv-ehelpers-err', role: 'alert', text: '' })),
         h('p', { class: 'hint gv-who', id: 'gv-ewhosees', text: 'Only the adults you tick can see this request, including any place or location. Other family members and admins cannot. Each one gets a notice that says you need help. It closes by itself after ' + C.EMERGENCY.hours + ' hours unless you keep it open.' }), msg,
-        h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn danger', id: 'gv-esave', text: 'Send request' }), h('a', { class: 'btn secondary', href: '#/giving/requests', text: 'Cancel' })));
-      return h('div', { class: 'gv-page' }, backLink('#/giving/requests', 'Back'), form);
+        h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn danger', id: 'gv-esave', text: 'Send request' }), h('a', { class: 'btn secondary', href: '#/giving/emergency', text: 'Cancel' })));
+      return h('div', { class: 'gv-page' }, backLink('#/giving/emergency', 'Back'), form);
     }
     function renderRequestForm(existing, adult) {
       var f = {};
@@ -703,7 +716,7 @@
       return h('div', { class: 'gv-page' }, backLink(existing ? '#/giving/requests/' + existing.id : '#/giving/requests', 'Back'), form);
     }
     function renderRequest(r) {
-      var q = r.request, page = h('div', { class: 'gv-page' }, backLink('#/giving/requests', 'Back to requests'));
+      var q = r.request, page = h('div', { class: 'gv-page' }, q.urgent ? backLink('#/giving/emergency', 'Back to urgent help') : backLink('#/giving/requests', 'Back to requests'));
       page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: q.title, 'data-focus': '' })));
       page.appendChild(h('p', { class: 'gv-badges' }, badge(q.kindLabel, ''), q.status === 'closed' ? badge('Closed', 'is-done') : null, q.approval === 'pending' ? badge('Waiting for approval', 'is-warn') : null, q.audience === 'adults' ? badge('Adults only', 'is-adults') : null));
       page.appendChild(h('p', { class: 'muted', text: (q.mine ? 'Your request' : 'Asked by ' + q.ownerName) + (q.neededBy ? ' · needed by ' + q.neededBy : '') }));
@@ -768,7 +781,7 @@
     function errorWithRetry(r) { return h('section', { class: 'card' }, h('h1', { text: 'Giving Center', 'data-focus': '' }), errorBox(r), h('button', { type: 'button', class: 'btn', id: 'gv-retry', text: 'Try again', onclick: function () { render(); } })); }
     function refresh() {
       var y = window.scrollY; var rt = route(), mineToken = ++token;
-      if (/^(request|emergency|section)/.test(rt.name)) return render();
+      if (/^(request|emergenc|section)/.test(rt.name)) return render();
       var redo = rt.name === 'home' ? api('home') : api('listGet', { listId: rt.id });
       return redo.then(function (r) {
         if (r.stale || mineToken !== token) return;

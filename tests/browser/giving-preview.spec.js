@@ -304,10 +304,10 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     await page.fill('#gv-pnote', 'On my way'); await page.click('#gv-pledge'); await page.waitForSelector('.gv-pledge:has-text("You")'); await settle(page);
     await who(page, 'Ada Admin'); await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
     check('E an admin who was not chosen sees nothing of it', !/Car broke down/.test(await text(page)) && (await page.locator('#gv-urgent-h').count()) === 0, await text(page));
-    await who(page, 'Rae Sample'); await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'Car broke down' }).click(); await page.waitForSelector('#main h1:has-text("Car broke down")'); await settle(page);
+    await who(page, 'Rae Sample'); await page.goto(PREVIEW() + '#/giving/emergency'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'Car broke down' }).click(); await page.waitForSelector('#main h1:has-text("Car broke down")'); await settle(page);
     check('E the sender sees Sam answered with his note', /Sam Sample/.test(await text(page)) && /On my way/.test(await text(page)) && /1 person says they can help/.test(await text(page)), await text(page));
-    await page.click('#pv-advance'); await settle(page); await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
-    check('E after 49 pretend hours it has closed itself and left the Urgent list', (await page.locator('#gv-urgent-h').count()) === 0, '');
+    await page.click('#pv-advance'); await settle(page); await page.goto(PREVIEW() + '#/giving/emergency'); await page.waitForSelector('#gv-urgent-h'); await settle(page);
+    check('E after 49 pretend hours it has closed itself and left Needs help now', (await page.locator('#gv-nourgent').count()) === 1, '');
     await page.locator('.gv-row', { hasText: 'Car broke down' }).click(); await page.waitForSelector('#main h1:has-text("Car broke down")'); await settle(page);
     check('E the closed one says so and can be kept open', /has closed/.test(await text(page)) && (await page.locator('[data-act="keep"]').count()) === 1, await text(page));
     await page.click('[data-act="keep"]'); await settle(page);
@@ -357,7 +357,7 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     await page.locator('#gv-ehelpers .gv-check', { hasText: 'Sam Sample' }).click(); await page.click('#gv-esave'); await page.waitForSelector('#main h1:has-text("I need a ride")'); await settle(page);
     check('X the sender sees the place with an Open in maps link', /Walmart on Ashley St/.test(await text(page)) && (await page.locator('#gv-ewhere .gv-maplink').count()) === 1, '');
     await page.selectOption('#pv-who', { label: 'Sam Sample' }); await settle(page);
-    await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'I need a ride' }).click(); await page.waitForSelector('#gv-pledge'); await settle(page);
+    await page.goto(PREVIEW() + '#/giving/emergency'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'I need a ride' }).click(); await page.waitForSelector('#gv-pledge'); await settle(page);
     const href = await page.locator('#gv-ewhere .gv-maplink').getAttribute('href'), loc = await page.locator('#gv-eloc-shared .gv-maplink').getAttribute('href');
     check('X the helper gets safe maps links for the place and the shared spot', href === 'https://www.google.com/maps/search/?api=1&query=Walmart%20on%20Ashley%20St' && /query=30\.8327%2C-83\.2785/.test(loc) && (await page.locator('.gv-maplink').first().getAttribute('rel')) === 'noopener noreferrer', href + ' ' + loc);
     check('X the helper sees pickup and drop-off', /Pick up at: 12 Oak St/.test(await text(page)) && /Take to: Home/.test(await text(page)), '');
@@ -366,7 +366,7 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     await page.selectOption('#pv-who', { label: 'Rae Sample' }); await settle(page);
     await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('.gv-notice'); 
     check('X the sender is told when the helper can come', /Sam Sample can help \(about 10 minutes\)/.test(await text(page)), await text(page));
-    await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'I need a ride' }).click(); await page.waitForSelector('[data-act="close"]'); await settle(page);
+    await page.goto(PREVIEW() + '#/giving/emergency'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'I need a ride' }).click(); await page.waitForSelector('[data-act="close"]'); await settle(page);
     check('X the sender\'s close button says All set', (await page.locator('[data-act="close"]').innerText()) === 'All set', '');
     await page.click('[data-act="close"]'); await settle(page);
     check('X after All set the request is closed', /has closed/.test(await text(page)), '');
@@ -396,7 +396,10 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('N the Reserved icon opens the reserved items screen', /Items you reserved/.test(await text(page)), await text(page));
     await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('#gv-minebtn');
     await page.click('#gv-requestslink'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
-    check('N the requests screen uses icons too: New request and Urgent', (await page.locator('#gv-newrequest svg').count()) === 1 && (await page.locator('#gv-urgentnew svg').count()) === 1 && (await page.locator('.gv-head .btn').count()) === 0, '');
+    check('N the requests screen has New request and no urgent section; the Urgent icon opens its own screen', (await page.locator('#gv-newrequest svg').count()) === 1 && (await page.locator('#gv-urgent-h').count()) === 0 && (await page.locator('#gv-urgentnew').count()) === 0 && (await page.locator('.gv-head .btn').count()) === 0, '');
+    await page.click('text=Back to Giving Center'); await page.waitForSelector('#gv-urgentbtn'); await page.click('#gv-urgentbtn'); await page.waitForSelector('#gv-emerg-h'); await settle(page);
+    check('N the Urgent icon opens Urgent help, where you can ask for help and see who needs it', (await page.locator('#gv-urgentnew svg').count()) === 1 && (await page.locator('#gv-urgent-h').count()) === 1 && !/Family requests/.test(await text(page)), await text(page));
+    await page.click('#gv-urgentnew'); await page.waitForSelector('#gv-etitle');
     await who(page, 'Una Sample'); await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('#gv-urgentbtn');
     check('N a kid sees the same icons', (await page.locator('#gv-minebtn').count()) === 1 && (await page.locator('#gv-requestslink').count()) === 1, '');
     await ctx.close(); }
