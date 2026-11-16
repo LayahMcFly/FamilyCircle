@@ -540,7 +540,7 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       let hit = etsy.cache.get(key);
       if (!hit) {
         try { hit = await etsy.fetch(id, size); etsy.cache.set(key, hit); }
-        catch (e) { if (e && e.linkPicture) throw new ApiError(e.kind === 'off' ? 503 : 422, 'no_picture', e.kind === 'off' ? 'Etsy pictures are not set up yet.' : 'No picture is available for that Etsy listing right now.'); throw e; }
+        catch (e) { if (e && e.linkPicture) throw new ApiError(e.kind === 'off' ? 503 : 422, 'no_picture', e.kind === 'off' ? 'Etsy did not accept the app key (' + e.message + '). It may still be waiting for Etsy to switch it on, or the key may not be saved in the keystring:sharedsecret form.' : 'No picture is available for that Etsy listing right now (' + e.message + ').'); throw e; }
       }
       return { image: 'data:' + hit.mime + ';base64,' + Buffer.from(hit.bytes).toString('base64'), notice: etsy.notice };
     },

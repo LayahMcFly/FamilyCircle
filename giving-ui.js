@@ -353,7 +353,7 @@
         if (r.stale) return;
         if (r.ok && r.image) { etsyPics[it.id] = r.image; return got(r.image); }
         if (r.error === 'no_picture' && /not set up/.test(r.message || '')) etsyOff = true;
-        if (hint) hint.textContent = 'Placeholder picture. Etsy has no picture to show for this listing right now.';
+        if (hint) hint.textContent = 'Placeholder picture. ' + (r.error === 'no_picture' && r.message && !/not set up/.test(r.message) ? r.message : 'Etsy has no picture to show for this listing right now.');
       });
     }
 
