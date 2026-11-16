@@ -35,7 +35,7 @@
     var families = {}, members = [], lists = {}, items = {}, notices = {}, reports = {};
     var requests = {}, pledges = {};   // Phase A: family requests and the pledges made on them
     var reservations = {};   // itemId -> row. One key per item = "unique index on itemId": a second insert for the same item is refused.
-    var seq = 0;
+    var seq = 0, clockMs = 0;   // clockMs: pretend time that has passed (the preview can fast-forward it)
     var nid = function (p) { return p + (++seq); };
 
     /* the unique-key insert the real backend would get from a unique index; returns false on conflict */
@@ -76,10 +76,17 @@
     var RQ = C.REQ;
     /** A request is reachable if it exists, its owner is still a member, and the viewer may see it:
      *  approved ones follow the audience rule; one waiting for approval is seen only by its owner and by adult owners/admins. */
+    var HOUR = 36e5;
+    function settleUrgent(r) { if (r.urgent && r.status === 'open' && clockMs >= r.expiresAt) r.status = 'closed'; return r; }
     function requestFor(m, id) {
       var r = requests[id];
       if (!r || r.familyId !== m.familyId || r.archived) return null;
       if (!membership(r.ownerId, m.familyId)) return null;
+      if (r.urgent) {   // an emergency is seen only by its owner and the adults they chose (not by admins, not by anyone else)
+        settleUrgent(r);
+        if (r.ownerId === m.userId) return r;
+        return m.adult && r.helpers.indexOf(m.userId) >= 0 && membership(m.userId, m.familyId) ? r : null;
+      }
       if (r.ownerId === m.userId) return r;
       if (r.approval !== 'approved') return canModerate(m) ? r : null;
       if (r.audience === 'adults' && !m.adult) return null;
@@ -92,6 +99,10 @@
         ownerName: nameOf(r.familyId, r.ownerId), mine: r.ownerId === m.userId, status: r.status, approval: r.approval,
         pledgedCount: active.length, doneCount: active.filter(function (p) { return p.status === 'done'; }).length };
       v.stillNeeded = Math.max(0, r.needed - active.length);
+      if (r.urgent) {
+        v.urgent = true; v.hoursLeft = r.status === 'open' ? Math.max(0, Math.ceil((r.expiresAt - clockMs) / HOUR)) : 0;
+        if (r.ownerId === m.userId) v.helperNames = r.helpers.map(function (id) { return nameOf(r.familyId, id); });
+      }
       if (full) {
         v.pledges = active.map(function (p) { return { id: p.id, userId: p.userId, name: nameOf(r.familyId, p.userId), note: p.note, status: p.status, mine: p.userId === m.userId }; });
         var mineP = active.filter(function (p) { return p.userId === m.userId; })[0]; if (mineP) v.myPledgeId = mineP.id;
@@ -130,7 +141,7 @@
         var open = canModerate(m) ? Object.keys(reports).filter(function (k) { return reports[k].familyId === m.familyId; }).length : 0;
         var out = { ok: true, lists: ls, reservations: mine, notices: (notices[m.userId] || []).slice(), canCreateList: ls.filter(function (x) { return x.mine; }).length < L.lists,
           me: { adult: !!m.adult }, canManageAges: isManager(m), canModerate: canModerate(m) };
-        out.requests = { open: Object.keys(requests).filter(function (k) { var q = requests[k]; return q.status === 'open' && q.approval === 'approved' && requestFor(m, q.id); }).length };
+        out.requests = { urgent: Object.keys(requests).map(function (k) { return settleUrgent(requests[k]); }).filter(function (q) { return q.urgent && q.status === 'open' && q.ownerId !== m.userId && requestFor(m, q.id); }).length, open: Object.keys(requests).filter(function (k) { var q = requests[k]; return q.status === 'open' && q.approval === 'approved' && requestFor(m, q.id); }).length };
         if (canModerate(m)) { out.openReports = open; out.requests.waiting = Object.keys(requests).filter(function (k) { var q = requests[k]; return q.approval === 'pending' && q.ownerId !== m.userId && requestFor(m, q.id); }).length; }   // everyone else gets no report field at all
         return out;
       },
@@ -220,13 +231,35 @@
       },
 
 
+      /* ----- Emergency requests (Phase B) ----- */
+      emergencySave: function (m, b) {
+        var v = C.validateEmergency(b); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted fields.', fields: v.errors };
+        var bad = v.value.helpers.some(function (id) { var mm = membership(id, m.familyId); return !mm || !mm.adult || id === m.userId; });
+        if (bad) return fail('invalid', 'You can only ask other adults in your family.');
+        var mineOpen = Object.keys(requests).map(function (k) { return settleUrgent(requests[k]); }).filter(function (x) { return x.urgent && x.familyId === m.familyId && x.ownerId === m.userId && x.status === 'open'; }).length;
+        if (mineOpen >= 1) return fail('limit', 'You already have an emergency request open. Close it before sending another.');
+        var nr = { id: nid('q'), n: seq, familyId: m.familyId, ownerId: m.userId, status: 'open', archived: false, approval: 'approved', audience: 'chosen', urgent: true, kind: 'time', needed: v.value.helpers.length, amount: '', neededBy: '', title: v.value.title, details: v.value.details, helpers: v.value.helpers, expiresAt: clockMs + C.EMERGENCY.hours * HOUR };
+        requests[nr.id] = nr;
+        v.value.helpers.forEach(function (id) { notify(id, nameOf(m.familyId, m.userId) + ' needs help. Tap to open.'); });
+        return { ok: true, request: requestView(m, nr, true) };
+      },
+      emergencyHelpers: function (m) {
+        return { ok: true, helpers: members.filter(function (x) { return x.familyId === m.familyId && x.active && x.adult && x.userId !== m.userId; }).map(function (x) { return { userId: x.userId, name: nameOf(m.familyId, x.userId) }; }), max: C.EMERGENCY.helpers };
+      },
+      emergencyKeepOpen: function (m, b) {
+        var r = requestFor(m, b.requestId); if (!r || !r.urgent || r.ownerId !== m.userId) return NA();
+        r.status = 'open'; r.expiresAt = clockMs + C.EMERGENCY.hours * HOUR;
+        return { ok: true, request: requestView(m, r, true) };
+      },
       /* ----- Requests and pledges (Phase A) ----- */
       requestsHome: function (m) {
         var all = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (r) { return requestFor(m, r.id); }).sort(function (a, b) { return b.n - a.n; });
+        var urgent = all.filter(function (r) { return r.urgent && r.status === 'open'; }); all = all.filter(function (r) { return !(r.urgent && r.status === 'open'); });
         var pending = canModerate(m) ? all.filter(function (r) { return r.approval === 'pending' && r.ownerId !== m.userId; }) : [];
         var visible = all.filter(function (r) { return r.approval === 'approved' || r.ownerId === m.userId; });
-        var openCount = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (r) { return r.familyId === m.familyId && r.ownerId === m.userId && r.status === 'open' && !r.archived; }).length;
+        var openCount = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (r) { return r.familyId === m.familyId && r.ownerId === m.userId && r.status === 'open' && !r.archived && !r.urgent; }).length;
         return { ok: true, me: { adult: !!m.adult }, canModerate: canModerate(m), canCreate: openCount < RQ.open,
+          urgent: urgent.map(function (r) { return requestView(m, r, false); }),
           open: visible.filter(function (r) { return r.status === 'open'; }).map(function (r) { return requestView(m, r, false); }),
           closed: visible.filter(function (r) { return r.status === 'closed'; }).slice(0, 20).map(function (r) { return requestView(m, r, false); }),
           waiting: pending.map(function (r) { return requestView(m, r, false); }) };
@@ -239,12 +272,12 @@
         var v = C.validateRequest(b); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted fields.', fields: v.errors };
         if (v.value.audience === 'adults' && !m.adult) return fail('adults_only', 'Only adults can make a request adults only.');
         if (b.requestId) {
-          var r = requestFor(m, b.requestId); if (!r || r.ownerId !== m.userId) return NA();
+          var r = requestFor(m, b.requestId); if (!r || r.ownerId !== m.userId || r.urgent) return NA();
           Object.assign(r, v.value);
           if (!m.adult) { r.approval = 'pending'; }   // a kid's edit goes back for an adult to look at again
           return { ok: true, request: requestView(m, r, true) };
         }
-        var openCount = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (x) { return x.familyId === m.familyId && x.ownerId === m.userId && x.status === 'open' && !x.archived; }).length;
+        var openCount = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (x) { return x.familyId === m.familyId && x.ownerId === m.userId && x.status === 'open' && !x.archived && !x.urgent; }).length;
         if (openCount >= RQ.open) return fail('limit', 'You can have up to ' + RQ.open + ' open requests. Close one to add another.');
         var nr = Object.assign({ id: nid('q'), n: seq, familyId: m.familyId, ownerId: m.userId, status: 'open', archived: false, approval: m.adult ? 'approved' : 'pending' }, v.value);
         requests[nr.id] = nr;
@@ -263,6 +296,7 @@
       },
       requestClose: function (m, b) {
         var r = requestFor(m, b.requestId); if (!r || r.ownerId !== m.userId) return NA();
+        if (b.reopen && r.urgent) return fail('invalid', 'Use Keep open for an emergency request.');
         r.status = b.reopen ? 'open' : 'closed';
         if (b.reopen) { var open2 = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (x) { return x.familyId === m.familyId && x.ownerId === m.userId && x.status === 'open' && !x.archived; }).length; if (open2 > RQ.open) { r.status = 'closed'; return fail('limit', 'You can have up to ' + RQ.open + ' open requests. Close one to reopen this.'); } }
         return { ok: true, request: requestView(m, r, true) };
@@ -378,6 +412,7 @@
       reserveFor: function (userId, itemId) { var it = items[itemId]; return call(userId, 'reserve', { familyId: it.familyId, itemId: itemId }); },
       addRequest: function (familyId, ownerId, fields) { var m = membership(ownerId, familyId); var r = Object.assign({ id: nid('q'), n: seq, familyId: familyId, ownerId: ownerId, details: '', kind: 'thing', needed: 1, amount: '', neededBy: '', audience: 'everyone', status: 'open', archived: false, approval: m && m.adult ? 'approved' : 'pending' }, fields); requests[r.id] = r; return r; },
       clearNotices: function (userId) { notices[userId] = []; },
+      advanceHours: function (h) { clockMs += h * 36e5; },
       pledgeFor: function (userId, requestId, note) { var r = requests[requestId]; return call(userId, 'pledgeSave', { familyId: r.familyId, requestId: requestId, note: note || '' }); },
       /** For tests only: everything the server holds. */
       dump: function () { return JSON.stringify({ lists: lists, items: items, reservations: reservations, notices: notices, reports: reports, requests: requests, pledges: pledges }); }

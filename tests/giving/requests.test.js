@@ -144,3 +144,69 @@ test('money is only plain text: no amount is ever parsed, added or charged', () 
   assert.equal(r.amount, 'about $40, or a gift card'); assert.ok(!('priceCents' in r) && !('total' in r));
   assert.ok(w.bad('ann', 'requestSave', REQ({ amount: 'x'.repeat(61) })).fields.amount);
 });
+
+/* ---------- Emergency requests (Phase B) ---------- */
+const EM = (o) => Object.assign({ title: 'Car broke down, need a ride', helpers: ['bob', 'gus'] }, o || {});
+
+test('emergency: rules are strict and plain (at least one, at most 8, adults only, no repeats)', () => {
+  assert.equal(C.validateEmergency({ title: 'x', helpers: [] }).ok, false);
+  assert.equal(C.validateEmergency({ title: '', helpers: ['a'] }).errors.title.length > 0, true);
+  assert.equal(C.validateEmergency({ title: 'x', helpers: ['1', '2', '3', '4', '5', '6', '7', '8', '9'] }).errors.helpers, 'You can ask up to 8 adults.');
+  assert.deepEqual(C.validateEmergency({ title: 'x', helpers: ['a', 'a', 'b'] }).value.helpers, ['a', 'b']);
+  const w = world();
+  w.bad('ann', 'emergencySave', EM({ helpers: ['kit'] }), 'invalid');   // a kid cannot be chosen
+  w.bad('ann', 'emergencySave', EM({ helpers: ['ann'] }), 'invalid');   // not yourself
+  w.bad('ann', 'emergencySave', EM({ helpers: ['xan'] }), 'invalid');   // not another family
+  w.bad('ann', 'emergencySave', EM({ title: '' }), 'invalid');
+});
+
+test('emergency: only the owner and the chosen adults can see it; admins, others and kids cannot', () => {
+  const w = world();
+  const q = w.ok('ann', 'emergencySave', EM()).request;
+  assert.equal(q.urgent, true); assert.equal(q.hoursLeft, 48); assert.deepEqual(q.helperNames, ['Bob', 'Gus']);
+  assert.equal(w.ok('bob', 'requestGet', { requestId: q.id }).request.helperNames, undefined);   // helpers do not see who else was asked
+  for (const u of ['own', 'ada', 'kit']) { w.bad(u, 'requestGet', { requestId: q.id }, 'not_available'); assert.equal(w.ok(u, 'requestsHome').urgent.length, 0); }
+  w.bad('xan', 'requestGet', { requestId: q.id, familyId: 'B' }, 'not_available');
+  assert.equal(w.ok('bob', 'requestsHome').urgent.length, 1);
+  assert.equal(w.ok('ann', 'requestsHome').open.length, 0);   // never mixed into the ordinary list
+});
+
+test('emergency: helpers get a short notice with no details; a helper answers; the owner sees who', () => {
+  const w = world();
+  const q = w.ok('kit', 'emergencySave', EM({ title: 'Stuck at the school, need pickup', details: 'Front gate', helpers: ['bob'] })).request;   // a kid can ask adults at once
+  const n = w.ok('bob', 'home').notices.map((x) => x.text);
+  assert.deepEqual(n, ['Kit needs help. Tap to open.']);
+  assert.equal(w.ok('bob', 'home').requests.urgent, 1);
+  w.ok('bob', 'pledgeSave', { requestId: q.id, note: 'On my way' });
+  const v = w.ok('kit', 'requestGet', { requestId: q.id }).request;
+  assert.equal(v.pledges[0].name, 'Bob'); assert.equal(v.pledges[0].note, 'On my way');
+  w.bad('ann', 'pledgeSave', { requestId: q.id }, 'not_available');
+});
+
+test('emergency: closes itself after 48 hours, keep open restarts it, one open at a time, cannot be edited or reopened as ordinary', () => {
+  const w = world();
+  const q = w.ok('ann', 'emergencySave', EM()).request;
+  w.bad('ann', 'emergencySave', EM(), 'limit');
+  w.bad('ann', 'requestSave', { requestId: q.id, title: 'Changed', kind: 'thing', needed: 1 }, 'not_available');
+  w.a.advanceHours(47);
+  assert.equal(w.ok('bob', 'requestGet', { requestId: q.id }).request.status, 'open');
+  w.ok('ann', 'emergencyKeepOpen', { requestId: q.id });          // restarts the 48 hours
+  w.a.advanceHours(47);
+  assert.equal(w.ok('ann', 'requestGet', { requestId: q.id }).request.status, 'open');
+  w.a.advanceHours(2);
+  const closed = w.ok('bob', 'requestGet', { requestId: q.id }).request;
+  assert.equal(closed.status, 'closed'); assert.equal(closed.hoursLeft, 0);
+  w.bad('bob', 'pledgeSave', { requestId: q.id }, 'closed');
+  assert.equal(w.ok('bob', 'requestsHome').urgent.length, 0);
+  w.bad('ann', 'requestClose', { requestId: q.id, reopen: true }, 'invalid');
+  w.ok('ann', 'emergencyKeepOpen', { requestId: q.id });          // the owner can still keep it going
+  assert.equal(w.ok('bob', 'requestGet', { requestId: q.id }).request.status, 'open');
+  w.bad('bob', 'emergencyKeepOpen', { requestId: q.id }, 'not_available');
+});
+
+test('emergency: the helper list holds only other adults in the family', () => {
+  const w = world();
+  const h = w.ok('ann', 'emergencyHelpers');
+  assert.deepEqual(h.helpers.map((x) => x.userId).sort(), ['ada', 'bob', 'gus', 'own']); assert.equal(h.max, 8);
+  assert.equal(w.ok('kit', 'emergencyHelpers').helpers.length, 5);
+});

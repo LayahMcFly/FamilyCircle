@@ -277,6 +277,49 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('W a kid making a request is told an adult approves first, then adults can pledge and the kid sees who', /adult owner or admin looks at your request first.*Adults can pledge.*you will see who pledged/.test(await page.locator('#gv-rwhosees').innerText()), await page.locator('#gv-rwhosees').innerText());
     check('W the notes do not cause sideways scrolling', !(await overflow(page)), ''); await ctx.close(); }
 
+  // E. emergency requests (Phase B)
+  { const { ctx, page, log } = await open(browser, { hash: '#/giving/emergency/new' });
+    await page.waitForSelector('#gv-etitle'); await settle(page);
+    check('E the form shows the 911 notice and the privacy line', /call 911/.test(await page.locator('#gv-911').innerText()) && /medical details, account numbers or passwords/.test(await text(page)), '');
+    const boxes = await page.locator('#gv-ehelpers .gv-check').count();
+    check('E only other adults can be chosen (not me, not kids)', boxes >= 2 && !/Rae Sample/.test(await page.locator('#gv-ehelpers').innerText()) && !/Riley|Quinn/.test(await page.locator('#gv-ehelpers').innerText()), await page.locator('#gv-ehelpers').innerText());
+    const tiny = await page.evaluate(() => [...document.querySelectorAll('#gv-ehelpers .gv-check')].filter(e => e.getBoundingClientRect().height < 40).length);
+    check('E each choice is a big tap target', tiny === 0, '');
+    const native = await page.evaluate(() => [...document.querySelectorAll('#gv-ehelpers input')].filter(e => getComputedStyle(e).appearance !== 'none').length);
+    check('E the tick boxes are themed, not the browser default', native === 0, '');
+    await page.click('#gv-esave'); await settle(page);
+    check('E sending with nothing filled in shows plain messages', /Say what you need/.test(await page.locator('#gv-etitle-err').innerText()) && /Choose at least one adult/.test(await page.locator('#gv-ehelpers-err').innerText()), '');
+    await page.fill('#gv-etitle', 'Car broke down, need a ride'); await page.locator('#gv-ehelpers .gv-check', { hasText: 'Sam Sample' }).click(); await page.click('#gv-esave');
+    await page.waitForSelector('#main h1:has-text("Car broke down")'); await settle(page);
+    let t = await text(page);
+    check('E the sender sees 911 notice, time left, who was asked, and no answers yet', /call 911/.test(t) && /Closes automatically in about 48 hours/.test(t) && /You asked: Sam Sample/.test(t) && /No one has answered yet/.test(t), t);
+    check('E the sender has Keep open and no Edit', (await page.locator('[data-act="keep"]').count()) === 1 && (await page.locator('[data-act="edit"]').count()) === 0, '');
+    await who(page, 'Sam Sample'); await settle(page);
+    check('E Sam gets a short notice and an urgent banner on the home screen', /Rae Sample needs help\. Tap to open\./.test(await text(page)) && (await page.locator('#gv-urgentbanner').count()) === 1, await text(page));
+    await page.click('#gv-urgentbanner'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'Car broke down' }).click();
+    await page.waitForSelector('#gv-pledge'); check('E the helper button says I can help', /I can help/.test(await page.locator('#gv-pledge').innerText()), '');
+    await page.fill('#gv-pnote', 'On my way'); await page.click('#gv-pledge'); await page.waitForSelector('.gv-pledge:has-text("You")'); await settle(page);
+    await who(page, 'Ada Admin'); await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
+    check('E an admin who was not chosen sees nothing of it', !/Car broke down/.test(await text(page)) && (await page.locator('#gv-urgent-h').count()) === 0, await text(page));
+    await who(page, 'Rae Sample'); await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'Car broke down' }).click(); await page.waitForSelector('#main h1:has-text("Car broke down")'); await settle(page);
+    check('E the sender sees Sam answered with his note', /Sam Sample/.test(await text(page)) && /On my way/.test(await text(page)) && /1 person says they can help/.test(await text(page)), await text(page));
+    await page.click('#pv-advance'); await settle(page); await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
+    check('E after 49 pretend hours it has closed itself and left the Urgent list', (await page.locator('#gv-urgent-h').count()) === 0, '');
+    await page.locator('.gv-row', { hasText: 'Car broke down' }).click(); await page.waitForSelector('#main h1:has-text("Car broke down")'); await settle(page);
+    check('E the closed one says so and can be kept open', /has closed/.test(await text(page)) && (await page.locator('[data-act="keep"]').count()) === 1, await text(page));
+    await page.click('[data-act="keep"]'); await settle(page);
+    check('E keep open brings it back for another 48 hours', /Closes automatically in about 48 hours/.test(await text(page)), await text(page));
+    check('E no page errors or outside requests in the emergency flow', log.errors.length === 0 && log.external.length === 0, log.errors.concat(log.external).join()); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/giving/emergency/new' }); await who(page, 'Riley Sample'); await page.goto(PREVIEW() + '#/giving/emergency/new'); await page.waitForSelector('#gv-etitle');
+    check('E a kid can ask adults for urgent help and is not made to wait for approval', /call 911/.test(await page.locator('#gv-911').innerText()) && /Tia Sample|Sam Sample/.test(await page.locator('#gv-ehelpers').innerText()), '');
+    await ctx.close(); }
+  for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
+    const { ctx, page } = await open(browser, { w, h, hash: '#/giving/emergency/new' });
+    await page.waitForSelector('#gv-etitle'); await settle(page);
+    await page.screenshot({ path: path.join(shots, 'giving-' + label + '-emergency.png'), fullPage: true });
+    check('E ' + label + ' emergency form has no sideways scroll', !(await overflow(page)), '');
+    await ctx.close(); }
+
   // H. layout at phone and desktop widths, plus screenshots
   for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
     const { ctx, page } = await open(browser, { w, h });

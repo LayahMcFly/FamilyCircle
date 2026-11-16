@@ -15,5 +15,6 @@
   if (!location.hash) location.hash = '#/giving';
   var server = GivingFake.create();
   GivingUI.mount({ server: server, viewers: GivingFake.VIEWERS, main: main, controls: controls, toasts: toasts, net: net,
+    onAdvance: function (h) { server.admin.advanceHours(h); },
     onReset: function () { location.hash = '#/giving'; location.reload(); } });
 })();

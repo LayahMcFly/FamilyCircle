@@ -82,3 +82,15 @@
 
 /* number and date fields match the text fields in Giving forms (the app-wide rule leaves them white on a white card) */
 .gv-form input[type="number"], .gv-form input[type="date"] { background: var(--surface-2); border-color: transparent; border-radius: 14px; }
+
+/* Emergency (Phase B) */
+.gv-911 { background: color-mix(in srgb, #d92d20 12%, var(--bg)); border: 1px solid color-mix(in srgb, #d92d20 45%, transparent); border-radius: 14px; padding: 12px 14px; font-weight: 600; margin: 8px 0 12px; }
+.gv-checks { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.gv-check { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 14px; background: var(--surface-2); border-radius: 14px; cursor: pointer; }
+.gv-check input.gv-cb { appearance: none; -webkit-appearance: none; width: 24px; height: 24px; flex: none; margin: 0; border: 2px solid var(--muted); border-radius: 8px; background: var(--bg); display: grid; place-content: center; cursor: pointer; }
+.gv-check input.gv-cb:checked { background: var(--accent); border-color: var(--accent); }
+.gv-check input.gv-cb:checked::after { content: ""; width: 6px; height: 11px; border: solid #fff; border-width: 0 3px 3px 0; transform: rotate(45deg) translate(-1px, -1px); }
+.gv-check input.gv-cb:focus-visible { outline: 3px solid var(--accent-text); outline-offset: 2px; }
+.gv-urgentbanner { border-color: color-mix(in srgb, #d92d20 55%, transparent) !important; }
+.badge.is-urgent, .gv-badge.is-urgent { background: #d92d20; color: #fff; }
+.gv-checklabel { display: block; font-weight: 600; }

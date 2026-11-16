@@ -122,6 +122,22 @@
     return { ok: !Object.keys(errors).length, errors: errors, value: { note: note } };
   }
 
-  return { REQ: REQ, REQUEST_KINDS: REQUEST_KINDS, validateRequest: validateRequest, validatePledge: validatePledge, REPORT_REASONS: REPORT_REASONS, AUDIENCES: AUDIENCES, validateReport: validateReport, LIMITS: LIMITS, PRIORITIES: PRIORITIES, PRIORITY_LABEL: PRIORITY_LABEL, CURRENCIES: CURRENCIES, cleanUrl: cleanUrl, hostOf: hostOf, parseAmount: parseAmount, fmtMoney: fmtMoney,
+  /* ---------- Emergency requests (Phase B). Numbers are the recommended defaults. ---------- */
+  var EMERGENCY = { helpers: 8, hours: 48, title: 120, details: 500 };
+  var EMERGENCY_911 = 'For a life-threatening emergency, call 911 (or your local emergency number) first. Family Circle is not an emergency service and nobody is watching it in real time.';
+  var EMERGENCY_PRIVACY = 'Do not put medical details, account numbers or passwords here. Helpers are only told that you need help.';
+  function validateEmergency(b) {
+    var errors = {}; b = b || {};
+    var title = trim(b.title), details = trim(b.details);
+    if (!title) errors.title = 'Say what you need, for example "Car broke down, need a ride".';
+    else if (title.length > EMERGENCY.title) errors.title = 'Keep it under ' + EMERGENCY.title + ' characters.';
+    if (details.length > EMERGENCY.details) errors.details = 'Details can be up to ' + EMERGENCY.details + ' characters.';
+    var hs = Array.isArray(b.helpers) ? b.helpers.filter(function (x, i, a) { return typeof x === 'string' && x && a.indexOf(x) === i; }) : [];
+    if (!hs.length) errors.helpers = 'Choose at least one adult to ask.';
+    else if (hs.length > EMERGENCY.helpers) errors.helpers = 'You can ask up to ' + EMERGENCY.helpers + ' adults.';
+    return { ok: !Object.keys(errors).length, errors: errors, value: { title: title, details: details, helpers: hs } };
+  }
+
+  return { EMERGENCY: EMERGENCY, EMERGENCY_911: EMERGENCY_911, EMERGENCY_PRIVACY: EMERGENCY_PRIVACY, validateEmergency: validateEmergency, REQ: REQ, REQUEST_KINDS: REQUEST_KINDS, validateRequest: validateRequest, validatePledge: validatePledge, REPORT_REASONS: REPORT_REASONS, AUDIENCES: AUDIENCES, validateReport: validateReport, LIMITS: LIMITS, PRIORITIES: PRIORITIES, PRIORITY_LABEL: PRIORITY_LABEL, CURRENCIES: CURRENCIES, cleanUrl: cleanUrl, hostOf: hostOf, parseAmount: parseAmount, fmtMoney: fmtMoney,
     totalsByCurrency: totalsByCurrency, validateList: validateList, validateItem: validateItem };
 });
