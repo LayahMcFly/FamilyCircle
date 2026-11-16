@@ -132,3 +132,9 @@
 .gv-hub .gv-circle-dot { width: 64px; height: 64px; }
 .gv-hub .gv-circle-dot .gv-ico { width: 30px; height: 30px; }
 .gv-hub .gv-circle-label { font-size: .85rem; }
+
+.gv-xrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line, rgba(0,0,0,.1)); list-style: none; }
+.gv-xpick { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.gv-xpick select { flex: 1 1 140px; }
+.gv-match { text-align: center; }
+.gv-match h2 { margin: 4px 0 8px; }

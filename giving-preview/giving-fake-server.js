@@ -33,6 +33,7 @@
   function create(options) {
     options = options || {};
     var families = {}, members = [], lists = {}, items = {}, notices = {}, reports = {};
+    var exchanges = {};   // Phase C: gift exchanges. Each holds its draw in `pairs` (giverId -> receiverId); no action ever returns that map.
     var requests = {}, pledges = {};   // Phase A: family requests and the pledges made on them
     var reservations = {};   // itemId -> row. One key per item = "unique index on itemId": a second insert for the same item is refused.
     var seq = 0, clockMs = 0;   // clockMs: pretend time that has passed (the preview can fast-forward it)
@@ -70,6 +71,46 @@
       v.reserved = !!r;
       if (r && r.buyerId === m.userId) { v.reservedByMe = true; v.changedSinceReserved = r.version !== it.version; }
       return v;
+    }
+
+
+    /* ---------- Gift exchanges (Phase C) ---------- */
+    var EX = C.EXCHANGE;
+    function exchangeFor(m, id) { var x = exchanges[id]; return x && x.familyId === m.familyId && !x.gone && m.adult ? x : null; }
+    function exchangeMembers(x) { return x.members.filter(function (u) { return membership(u, x.familyId) && membership(u, x.familyId).adult; }); }
+    function exchangeCount(m) { return m.adult ? Object.keys(exchanges).filter(function (k) { var x = exchanges[k]; return x.familyId === m.familyId && !x.gone && x.members.indexOf(m.userId) >= 0; }).length : 0; }
+    function exchangeRow(m, x) { return { id: x.id, name: x.name, date: x.date, limit: x.limit, status: x.drawn ? 'drawn' : 'open', organiserName: nameOf(x.familyId, x.organiserId), mine: x.organiserId === m.userId, joined: x.members.indexOf(m.userId) >= 0, count: exchangeMembers(x).length }; }
+    function exchangeView(m, x) {
+      var v = exchangeRow(m, x); v.note = x.note; v.round = x.round;
+      v.members = exchangeMembers(x).map(function (u) { return { userId: u, name: nameOf(x.familyId, u), organiser: u === x.organiserId, me: u === m.userId }; });
+      if (x.organiserId === m.userId) {
+        v.exclusions = x.exclusions.map(function (p) { return [{ userId: p[0], name: nameOf(x.familyId, p[0]) }, { userId: p[1], name: nameOf(x.familyId, p[1]) }]; });
+        v.canAdd = x.drawn ? [] : members.filter(function (o) { return o.familyId === x.familyId && o.active && o.adult && x.members.indexOf(o.userId) < 0; }).map(function (o) { return { userId: o.userId, name: o.name }; });
+      }
+      if (x.drawn && x.members.indexOf(m.userId) >= 0) {
+        var r = x.pairs[m.userId];
+        if (r && membership(r, x.familyId)) {
+          v.match = { name: nameOf(x.familyId, r), lists: Object.keys(lists).map(function (k) { return lists[k]; }).filter(function (l) { return l.ownerId === r && listFor(m, l.id); }).map(function (l) { return { id: l.id, name: l.name, count: itemsOf(l.id).filter(function (i) { return !i.received; }).length }; }) };
+        } else v.matchLeft = true;
+      }
+      return v;
+    }
+    function dropFromExchange(x, userId, why) {
+      var wasGiverOf = Object.keys(x.pairs).filter(function (g) { return x.pairs[g] === userId; });
+      x.members = x.members.filter(function (u) { return u !== userId; });
+      x.exclusions = x.exclusions.filter(function (p) { return p[0] !== userId && p[1] !== userId; });
+      if (!x.drawn) return;
+      delete x.pairs[userId];
+      wasGiverOf.forEach(function (g) { delete x.pairs[g]; notify(g, 'Your match for ' + x.name + ' left the exchange. ' + nameOf(x.familyId, x.organiserId) + ' can draw again.'); });
+      if (userId !== x.organiserId) notify(x.organiserId, nameOf(x.familyId, userId) + ' ' + why + ' ' + x.name + '. You can draw again for everyone, or leave it as it is.');
+    }
+    function runDraw(m, x, again) {
+      var ids = exchangeMembers(x);
+      if (ids.length < EX.min) return fail('too_few', 'You need at least ' + EX.min + ' people to draw names.');
+      var d = C.drawPairs(ids, x.exclusions, admin.rand); if (!d.ok) return fail('cannot_draw', C.EXCHANGE_NO_DRAW);
+      x.pairs = d.pairs; x.drawn = true; x.round = (x.round || 0) + 1;
+      ids.forEach(function (u) { if (u !== m.userId) notify(u, x.name + (again ? ' was drawn again. Tap to see who you have now.' : ' has been drawn. Tap to see who you have.')); });
+      return { ok: true, exchange: exchangeView(m, x) };
     }
 
     /* ---------- Requests and pledges (Phase A) ---------- */
@@ -142,6 +183,7 @@
         var open = canModerate(m) ? Object.keys(reports).filter(function (k) { return reports[k].familyId === m.familyId; }).length : 0;
         var out = { ok: true, lists: ls, reservations: mine, notices: (notices[m.userId] || []).slice(), canCreateList: ls.filter(function (x) { return x.mine; }).length < L.lists,
           me: { adult: !!m.adult }, canManageAges: isManager(m), canModerate: canModerate(m) };
+        out.exchanges = exchangeCount(m);
         out.requests = { urgent: Object.keys(requests).map(function (k) { return settleUrgent(requests[k]); }).filter(function (q) { return q.urgent && q.status === 'open' && q.ownerId !== m.userId && requestFor(m, q.id); }).length, open: Object.keys(requests).filter(function (k) { var q = requests[k]; return q.status === 'open' && q.approval === 'approved' && requestFor(m, q.id); }).length };
         if (canModerate(m)) { out.openReports = open; out.requests.waiting = Object.keys(requests).filter(function (k) { var q = requests[k]; return q.approval === 'pending' && q.ownerId !== m.userId && requestFor(m, q.id); }).length; }   // everyone else gets no report field at all
         return out;
@@ -256,6 +298,57 @@
         var r = requestFor(m, b.requestId); if (!r || !r.urgent || r.ownerId !== m.userId) return NA();
         r.status = 'open'; r.expiresAt = clockMs + C.EMERGENCY.hours * HOUR;
         return { ok: true, request: requestView(m, r, true) };
+      },
+
+      /* ----- Gift exchanges (Phase C). Adults only. The draw is never returned except as the one person you drew, to you alone. ----- */
+      exchangesHome: function (m) {
+        if (!m.adult) return NA();
+        var ls = Object.keys(exchanges).map(function (k) { return exchanges[k]; }).filter(function (x) { return exchangeFor(m, x.id); }).sort(function (a, b) { return b.n - a.n; });
+        return { ok: true, exchanges: ls.map(function (x) { return exchangeRow(m, x); }) };
+      },
+      exchangeGet: function (m, b) { var x = exchangeFor(m, b.exchangeId); if (!x) return NA(); return { ok: true, exchange: exchangeView(m, x) }; },
+      exchangeSave: function (m, b) {
+        if (!m.adult) return NA();
+        var x = b.exchangeId ? exchangeFor(m, b.exchangeId) : null;
+        if (b.exchangeId && (!x || x.organiserId !== m.userId || x.drawn)) return NA();
+        var v = C.validateExchange(b, x ? x.members : [m.userId]); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted fields.', fields: v.errors };
+        if (!x) {
+          var mine = Object.keys(exchanges).filter(function (k) { var e = exchanges[k]; return e.familyId === m.familyId && !e.gone && e.organiserId === m.userId; }).length;
+          if (mine >= 5) return fail('limit', 'You can organise up to 5 exchanges at a time. Delete one to add another.');
+          x = exchanges[('x' + (++seq))] = { id: 'x' + seq, n: seq, familyId: m.familyId, organiserId: m.userId, members: [m.userId], exclusions: [], pairs: {}, drawn: false, round: 0 };
+        }
+        x.name = v.value.name; x.note = v.value.note; x.limit = v.value.limit; x.date = v.value.date; if (b.exchangeId) x.exclusions = v.value.exclusions;
+        return { ok: true, exchange: exchangeView(m, x) };
+      },
+      exchangeJoin: function (m, b) {
+        var x = exchangeFor(m, b.exchangeId); if (!x || x.drawn) return x ? fail('already_drawn', 'Names were already drawn, so no one can join now. Ask the organiser.') : NA();
+        if (x.members.length >= EX.members) return fail('full', 'This exchange is full.');
+        if (x.members.indexOf(m.userId) < 0) x.members.push(m.userId); return { ok: true, exchange: exchangeView(m, x) };
+      },
+      exchangeLeave: function (m, b) {
+        var x = exchangeFor(m, b.exchangeId); if (!x || x.members.indexOf(m.userId) < 0) return NA();
+        if (x.organiserId === m.userId) return fail('organiser', 'You organise this one. Delete it instead of leaving.');
+        dropFromExchange(x, m.userId, 'left'); return { ok: true, exchange: exchangeView(m, x) };
+      },
+      exchangeAddMember: function (m, b) {
+        var x = exchangeFor(m, b.exchangeId); if (!x || x.organiserId !== m.userId || x.drawn) return NA();
+        var t = membership(b.userId, m.familyId); if (!t || !t.adult) return NA();
+        if (x.members.length >= EX.members) return fail('full', 'This exchange is full.');
+        if (x.members.indexOf(t.userId) < 0) { x.members.push(t.userId); notify(t.userId, m.name + ' added you to ' + x.name + '.'); }
+        return { ok: true, exchange: exchangeView(m, x) };
+      },
+      exchangeRemoveMember: function (m, b) {
+        var x = exchangeFor(m, b.exchangeId); if (!x || x.organiserId !== m.userId || x.members.indexOf(b.userId) < 0) return NA();
+        if (b.userId === m.userId) return fail('organiser', 'You organise this one. Delete it instead.');
+        dropFromExchange(x, b.userId, 'was removed from'); notify(b.userId, 'You were removed from ' + x.name + '.');
+        return { ok: true, exchange: exchangeView(m, x) };
+      },
+      exchangeDraw: function (m, b) { var x = exchangeFor(m, b.exchangeId); if (!x || x.organiserId !== m.userId) return NA(); if (x.drawn) return fail('already_drawn', 'Names were already drawn. Use Draw again to start over.'); return runDraw(m, x, false); },
+      exchangeRedraw: function (m, b) { var x = exchangeFor(m, b.exchangeId); if (!x || x.organiserId !== m.userId || !x.drawn) return NA(); return runDraw(m, x, true); },
+      exchangeDelete: function (m, b) {
+        var x = exchangeFor(m, b.exchangeId); if (!x || x.organiserId !== m.userId) return NA();
+        x.members.forEach(function (u) { if (u !== m.userId) notify(u, x.name + ' was deleted by ' + m.name + '.'); });
+        x.gone = true; x.pairs = {}; return { ok: true };
       },
       /* ----- Requests and pledges (Phase A) ----- */
       requestsHome: function (m) {
@@ -402,6 +495,7 @@
       /** A removed member: the person's reservations are released, and their wishlists stop being reachable. */
       removeMember: function (familyId, userId) {
         members.forEach(function (m) { if (m.familyId === familyId && m.userId === userId) m.active = false; });
+        Object.keys(exchanges).forEach(function (k) { var x = exchanges[k]; if (x.familyId !== familyId || x.gone) return; if (x.organiserId === userId) { x.gone = true; x.pairs = {}; x.members.forEach(function (u) { if (u !== userId) notify(u, x.name + ' was cancelled because its organiser left the family.'); }); } else if (x.members.indexOf(userId) >= 0) dropFromExchange(x, userId, 'left'); });
         Object.keys(reservations).forEach(function (k) { var r = reservations[k]; if (r.familyId === familyId && r.buyerId === userId) delete reservations[k]; });
         Object.keys(requests).forEach(function (k) { var q = requests[k]; if (q.familyId === familyId && q.ownerId === userId) q.archived = true; });
         Object.keys(pledges).forEach(function (k) { var g = pledges[k]; if (g.familyId === familyId && g.userId === userId && g.status !== 'done') g.status = 'withdrawn'; });
@@ -417,11 +511,13 @@
       addItem: function (listId, fields) { var l = lists[listId]; var it = Object.assign({ id: nid('i'), n: seq, listId: listId, familyId: l.familyId, notes: '', priority: 'medium', url: '', priceCents: 0, currency: '', photo: '', received: false, version: 1 }, fields); items[it.id] = it; return it; },
       reserveFor: function (userId, itemId) { var it = items[itemId]; return call(userId, 'reserve', { familyId: it.familyId, itemId: itemId }); },
       addRequest: function (familyId, ownerId, fields) { var m = membership(ownerId, familyId); var r = Object.assign({ id: nid('q'), n: seq, familyId: familyId, ownerId: ownerId, details: '', kind: 'thing', needed: 1, amount: '', neededBy: '', audience: 'everyone', status: 'open', archived: false, approval: m && m.adult ? 'approved' : 'pending' }, fields); requests[r.id] = r; return r; },
+      rand: Math.random,   // tests replace it with a seeded generator
+      addExchange: function (familyId, organiserId, name, others, fields) { var r = call(organiserId, 'exchangeSave', Object.assign({ familyId: familyId, name: name }, fields || {})); (others || []).forEach(function (u) { call(u, 'exchangeJoin', { familyId: familyId, exchangeId: r.exchange.id }); }); return r.exchange; },
       clearNotices: function (userId) { notices[userId] = []; },
       advanceHours: function (h) { clockMs += h * 36e5; },
       pledgeFor: function (userId, requestId, note) { var r = requests[requestId]; return call(userId, 'pledgeSave', { familyId: r.familyId, requestId: requestId, note: note || '' }); },
       /** For tests only: everything the server holds. */
-      dump: function () { return JSON.stringify({ lists: lists, items: items, reservations: reservations, notices: notices, reports: reports, requests: requests, pledges: pledges }); }
+      dump: function () { return JSON.stringify({ lists: lists, items: items, reservations: reservations, notices: notices, reports: reports, requests: requests, pledges: pledges, exchanges: exchanges }); }
     };
 
     function call(userId, action, body) {
@@ -475,6 +571,7 @@
     a.addRequest('famA', 'u-sam', { title: 'Winter coat for Riley, size 8', details: 'Any colour. Used is fine.', kind: 'thing', needed: 1, amount: 'about $40', audience: 'adults' });
     a.addRequest('famA', 'u-riley', { title: 'Can someone take me to the library?', details: 'Saturday morning if possible.', kind: 'task', needed: 1 });   // a kid: waits for an adult to approve
     a.pledgeFor('u-sam', rq1.id, 'I can come after 10.'); a.clearNotices('u-rae');   // sample data starts with no notices
+    a.addExchange('famA', 'u-rae', 'Holiday gift exchange', ['u-sam', 'u-tia'], { date: '2026-12-20', limit: 'about $25', note: 'Wrap it and bring it to the party.' }); a.clearNotices('u-sam'); a.clearNotices('u-tia'); a.clearNotices('u-rae');
     a.reserveFor('u-sam', mug.id);   // Sam already reserved Rae's mug
     a.reserveFor('u-tia', tape.id);   // Tia reserved Sam's tape measure, so Rae sees one item as "Reserved" without a name
   }

@@ -165,3 +165,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.44/.45: emergency extras (where, pickup, drop-off, one-time location, kinds, on-my-way times, All set) in preview AND real; home navigation turned into small circular icon buttons (Mine, Family, Requests, New list, Urgent). Only urgent help glows.
 - v1.51.99.46: Giving home is a hub of round icons (Mine, Family, Reserved, Requests, New list, Adults, Urgent), each opening its own screen; only Urgent glows. Calendar: buttons above cards (New group, Add a task, Add a product) now have a 16px gap.
 - v1.51.99.47: Urgent help has its own screen (#/giving/emergency): ask for help and see who needs it, in one place. Removed from Family requests.
+- v1.51.99.48: Gift exchanges (Phase C) in the PREVIEW ONLY (hidden zone). Shared draw logic lives in giving-core.js (drawPairs, validateExchange). The real app hides the Exchange icon until the function has the exchange actions.

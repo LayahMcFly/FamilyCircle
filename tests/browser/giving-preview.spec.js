@@ -409,6 +409,56 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('N ' + label + ' icon row has no sideways scroll', !(await overflow(page)), '');
     check('N ' + label + ' icons are all visible without scrolling the row sideways', await page.evaluate(() => [...document.querySelectorAll('.gv-hub .gv-circle')].every(e => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })), ''); await ctx.close(); }
 
+  // X2. gift exchanges: the draw is private to each person, including from the organiser
+  { const { ctx, page } = await open(browser); await settle(page);
+    check('X2 an adult sees the Exchange icon with a count of exchanges they are in', (await page.locator('#gv-exchangesbtn .gv-circle-count').innerText()).trim() === '1', '');
+    await who(page, 'Riley Sample'); await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('#gv-minebtn');
+    check('X2 a kid has no Exchange icon', (await page.locator('#gv-exchangesbtn').count()) === 0, '');
+    await page.goto(PREVIEW() + '#/giving/exchanges'); await page.waitForSelector('.gv-blocked, .gv-page'); await settle(page);
+    check('X2 a kid who types the address gets "not available"', /not available/i.test(await text(page)) && !/Holiday gift exchange/.test(await text(page)), await text(page));
+    await who(page, 'Rae Sample'); await goto(page, '/exchanges');
+    check('X2 the list shows the seeded exchange, not drawn, with the organiser badge', /Holiday gift exchange/.test(await text(page)) && /Not drawn yet · 3 people/.test(await text(page)) && /You organise/.test(await text(page)), await text(page));
+    await page.click('.gv-row:has-text("Holiday gift exchange")'); await page.waitForSelector('#gv-xtitle'); await settle(page);
+    check('X2 before the draw there is no match and Draw names is on', (await page.locator('#gv-match').count()) === 0 && await page.locator('#gv-xdraw').isEnabled(), '');
+    await page.selectOption('#gv-xaddsel', { label: 'Ada Admin' }); await page.click('#gv-xaddbtn'); await settle(page);
+    check('X2 the organiser added Ada before the draw', (await page.locator('#gv-xmembers li').count()) === 4, '');
+    await page.click('#gv-xedit'); await page.waitForSelector('#gv-xa'); await settle(page);
+    await page.selectOption('#gv-xa', { label: 'Sam Sample' }); await page.selectOption('#gv-xb', { label: 'Tia Sample' }); await page.click('#gv-xadd');
+    check('X2 an exclusion can be added and is listed', /Sam Sample and Tia Sample cannot draw each other/.test(await page.locator('#gv-xlist').innerText()), '');
+    await page.click('#gv-xsave'); await page.waitForSelector('#gv-xtitle'); await settle(page);
+    check('X2 the organiser sees the exclusion count but nothing about the draw', /1 exclusion is set/.test(await text(page)), await text(page));
+    await page.click('#gv-xdraw'); await page.click('#gv-d-ok'); await page.waitForSelector('#gv-xhidden'); await settle(page);
+    check('X2 after drawing, the organiser sees she cannot see who drew whom, and no match card for anyone else', (await page.locator('#gv-xhidden').count()) === 1 && (await page.locator('#gv-xredraw').count()) === 1, '');
+    const raeMatch = await page.locator('#gv-matchname').innerText();
+    check('X2 the organiser sees exactly one match: her own', ['Sam Sample', 'Tia Sample'].includes(raeMatch) && (await page.locator('#gv-matchname').count()) === 1, raeMatch);
+    check('X2 the page never shows two people paired', !/drew|is giving to/i.test((await text(page)).replace('You are giving a gift to', '').replace(/You cannot see who drew whom\./, '')), await text(page));
+    await who(page, 'Sam Sample'); await goto(page, '/exchanges'); await page.click('.gv-row:has-text("Holiday gift exchange")'); await page.waitForSelector('#gv-xtitle'); await settle(page);
+    const samMatch = await page.locator('#gv-matchname').innerText();
+    check('X2 Sam sees one match, never himself, and not the person he is excluded from', samMatch !== 'Sam Sample' && samMatch !== 'Tia Sample', samMatch);
+    check('X2 Sam has no organiser buttons', (await page.locator('#gv-xdraw, #gv-xredraw, #gv-xdelete, #gv-xedit').count()) === 0, '');
+    if (samMatch === 'Rae Sample') check('X2 Sam can open the match\'s wishlist', await page.locator('#gv-matchlists a').count() >= 1, '');
+    await page.click('#gv-xleave'); await page.click('#gv-d-ok'); await settle(page);
+    await who(page, 'Rae Sample'); await goto(page, '/');
+    check('X2 the organiser is told Sam left, in plain words with no pairing', /Sam Sample left Holiday gift exchange/.test(await text(page)) && !/drew/.test(await text(page)), await text(page));
+    await goto(page, '/exchanges'); await page.click('.gv-row:has-text("Holiday gift exchange")'); await page.waitForSelector('#gv-xtitle'); await settle(page);
+    check('X2 with three people left, a redraw is offered and works', (await page.locator('#gv-xredraw').count()) === 1, '');
+    await page.click('#gv-xredraw'); await page.click('#gv-d-ok'); await page.waitForSelector('#gv-matchname'); await settle(page);
+    check('X2 after the redraw the organiser has a fresh match and still cannot see anyone else\'s', ['Tia Sample', 'Ada Admin'].includes(await page.locator('#gv-matchname').innerText()), '');
+    await who(page, 'Tia Sample'); await goto(page, '/'); await settle(page);
+    check('X2 Tia was told it was drawn again', /drawn again/.test(await text(page)), await text(page));
+    await who(page, 'Rae Sample'); await goto(page, '/exchanges/new'); await page.fill('#gv-xname', ''); await page.click('#gv-xsave'); await settle(page);
+    check('X2 a name is required, with a message under the field', /Give the exchange a name/.test(await page.locator('#gv-xname-err').innerText()), '');
+    await page.fill('#gv-xname', 'Cousins swap'); await page.click('#gv-xsave'); await page.waitForSelector('#gv-xtitle'); await settle(page);
+    check('X2 a new exchange starts with just the organiser and Draw names off', (await page.locator('#gv-xmembers li').count()) === 1 && await page.locator('#gv-xdraw').isDisabled(), '');
+    await page.selectOption('#gv-xaddsel', { label: 'Ada Admin' }); await page.click('#gv-xaddbtn'); await settle(page);
+    check('X2 the organiser can add an adult', (await page.locator('#gv-xmembers li').count()) === 2, '');
+    await page.click('#gv-xdelete'); await page.click('#gv-d-ok'); await page.waitForSelector('#gv-exchanges'); await settle(page);
+    check('X2 deleting returns to the list without it', !/Cousins swap/.test(await text(page)), '');
+    for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
+      const c2 = await open(browser, { w, h, hash: '#/giving/exchanges' }); await settle(c2.page);
+      check('X2 ' + label + ' exchanges list has no sideways scroll', !(await overflow(c2.page)), ''); await c2.ctx.close(); }
+    await ctx.close(); }
+
   // H. layout at phone and desktop widths, plus screenshots
   for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
     const { ctx, page } = await open(browser, { w, h });

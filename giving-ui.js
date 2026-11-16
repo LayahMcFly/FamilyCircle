@@ -24,6 +24,7 @@
     alert: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/>',
     hands: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    swap: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
     tag: '<path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/>',
     badge: '<rect x="4" y="3" width="16" height="18" rx="3"/><circle cx="12" cy="10" r="2.6"/><path d="M7.5 17c.6-2 2.4-3 4.5-3s3.9 1 4.5 3"/>',
     gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/><path d="M12 8c-1-3-5-4-5-1.5C7 8 9 8 12 8zM12 8c1-3 5-4 5-1.5C17 8 15 8 12 8z"/>',
@@ -117,6 +118,12 @@
       var p = (location.hash || '').replace(/^#\/?/, '').split('/');
       if (p[0] !== 'giving') return { name: 'home' };
       if (p[1] === 'emergency') return p[2] === 'new' ? { name: 'emergencyNew' } : { name: 'emergencies' };
+      if (p[1] === 'exchanges') {
+        if (p[2] === 'new') return { name: 'exchangeForm' };
+        if (p[2] && p[3] === 'edit') return { name: 'exchangeForm', id: p[2] };
+        if (p[2]) return { name: 'exchange', id: p[2] };
+        return { name: 'exchanges' };
+      }
       if (['mine', 'family', 'reserved', 'people'].indexOf(p[1]) >= 0) return { name: 'section', which: p[1] };
       if (p[1] === 'requests') {
         if (p[2] === 'new') return { name: 'requestNew' };
@@ -219,6 +226,7 @@
         circleBtn({ id: 'gv-minebtn', href: '#/giving/mine', icon: 'gift', label: 'Mine', count: mineCount, aria: 'Your wishlists, ' + mineCount }),
         circleBtn({ id: 'gv-familybtn', href: '#/giving/family', icon: 'users', label: 'Family', count: famCount, aria: 'Family wishlists, ' + famCount }),
         r.me.adult ? circleBtn({ id: 'gv-reservedbtn', href: '#/giving/reserved', icon: 'tag', label: 'Reserved', count: r.reservations.length, aria: 'Items you reserved, ' + r.reservations.length }) : null,
+        r.me.adult && r.exchanges !== undefined ? circleBtn({ id: 'gv-exchangesbtn', href: '#/giving/exchanges', icon: 'swap', label: 'Exchange', count: r.exchanges || 0, aria: 'Gift exchanges, ' + (r.exchanges || 0) }) : null,
         circleBtn({ id: 'gv-requestslink', href: '#/giving/requests', icon: 'hands', label: 'Requests', count: openReq + waitReq, aria: 'Family requests, ' + openReq + (openReq === 1 ? ' open request' : ' open requests') + (waitReq ? ', ' + waitReq + ' waiting for approval' : '') }),
         r.canCreateList ? circleBtn({ id: 'gv-newlist', href: '#/giving/list/new', icon: 'plus', label: 'New list', aria: 'New wishlist' }) : null,
         r.canManageAges ? circleBtn({ id: 'gv-peoplebtn', href: '#/giving/people', icon: 'badge', label: 'Adults', aria: 'Who is an adult' }) : null,
@@ -566,6 +574,9 @@
         st.data = r; var page = renderHome(r); fin(page);
         if (real) api('status').then(function (s) { if (s.stale || mine !== token || !s.ok || !s.canTurnOn || !page.isConnected) return; page.appendChild(ownerSwitchPanel()); });
       });
+      if (rt.name === 'exchanges') return api('exchangesHome').then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); fin(renderExchanges(r)); });
+      if (rt.name === 'exchangeForm' && !rt.id) return fin(renderExchangeForm(null));
+      if (rt.name === 'exchange' || rt.name === 'exchangeForm') return api('exchangeGet', { exchangeId: rt.id }).then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); fin(rt.name === 'exchange' ? renderExchange(r.exchange) : (r.exchange.mine && r.exchange.status === 'open' ? renderExchangeForm(r.exchange) : blocked({ error: 'not_available' }))); });
       if (rt.name === 'emergencyNew') return api('emergencyHelpers').then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); fin(renderEmergencyForm(r)); });
       if (rt.name === 'requests' || rt.name === 'requestNew' || rt.name === 'emergencies') return api('requestsHome').then(function (r) {
         if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r));
@@ -624,6 +635,106 @@
       page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-urgent-h', text: 'Needs help now' }));
       if (!live.length) page.appendChild(h('p', { class: 'muted', id: 'gv-nourgent', text: 'No one needs urgent help right now.' })); else page.appendChild(requestRows(live));
       if (done.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Closed' })); page.appendChild(requestRows(done)); }
+      return page;
+    }
+
+    /* ---------- Gift exchanges (Phase C) ---------- */
+    var WHO_EX = 'Only adults can join. After the draw, each person sees only the one person they drew. Nobody else sees it, and that includes the organiser.';
+    function renderExchanges(r) {
+      var page = h('div', { class: 'gv-page' }, backLink('#/giving', 'Back to Giving Center'));
+      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Gift exchanges', 'data-focus': '' })));
+      page.appendChild(h('p', { class: 'muted', text: 'Draw names for a family gift exchange. ' + WHO_EX }));
+      page.appendChild(h('nav', { class: 'gv-quick', 'aria-label': 'Gift exchanges' }, circleBtn({ id: 'gv-newexchange', href: '#/giving/exchanges/new', icon: 'plus', label: 'New exchange' })));
+      if (!r.exchanges.length) page.appendChild(h('p', { class: 'muted', id: 'gv-noexch', text: 'No exchanges yet.' }));
+      else page.appendChild(h('ul', { class: 'gv-rows', id: 'gv-exchanges' }, r.exchanges.map(function (x) {
+        return h('li', null, h('a', { class: 'gv-row', href: '#/giving/exchanges/' + x.id, 'data-exchange': x.id },
+          h('strong', { text: x.name }),
+          h('span', { class: 'muted', text: (x.status === 'drawn' ? 'Drawn' : 'Not drawn yet') + ' · ' + x.count + (x.count === 1 ? ' person' : ' people') + (x.date ? ' · ' + x.date : '') + (x.joined ? '' : ' · You have not joined') }),
+          x.mine ? badge('You organise', '') : null));
+      })));
+      return page;
+    }
+    function renderExchangeForm(existing) {
+      var f = {};
+      f.name = h('input', { type: 'text', id: 'gv-xname', autocomplete: 'off', placeholder: 'For example: Holiday gift exchange', value: existing ? existing.name : '' });
+      f.date = h('input', { type: 'date', id: 'gv-xdate', value: existing ? existing.date : '' });
+      f.limit = h('input', { type: 'text', id: 'gv-xlimit', autocomplete: 'off', placeholder: 'For example: about $25 (optional)', value: existing ? existing.limit : '' });
+      f.note = h('textarea', { id: 'gv-xnote', rows: 3, placeholder: 'Where and when to hand gifts over (optional)' }); f.note.value = existing ? existing.note : '';
+      var ex = existing ? existing.exclusions.map(function (p) { return [p[0].userId, p[1].userId, p[0].name, p[1].name]; }) : [];
+      var names = existing ? existing.members : [];
+      var exList = h('ul', { class: 'gv-rows', id: 'gv-xlist' });
+      var pa = h('select', { id: 'gv-xa', 'aria-label': 'First person' }, h('option', { value: '', text: 'First person' }), names.map(function (m) { return h('option', { value: m.userId, text: m.name }); }));
+      var pb = h('select', { id: 'gv-xb', 'aria-label': 'Second person' }, h('option', { value: '', text: 'Second person' }), names.map(function (m) { return h('option', { value: m.userId, text: m.name }); }));
+      function paint() {
+        exList.textContent = '';
+        ex.forEach(function (p, i) { exList.appendChild(h('li', { class: 'gv-xrow' }, h('span', { text: p[2] + ' and ' + p[3] + ' cannot draw each other' }), h('button', { type: 'button', class: 'btn ghost small', 'data-xremove': String(i), 'aria-label': 'Remove: ' + p[2] + ' and ' + p[3], text: 'Remove', onclick: function () { ex.splice(i, 1); paint(); } }))); });
+      }
+      var exMsg = h('p', { class: 'ev-formmsg', role: 'alert', id: 'gv-xexmsg' });
+      var addEx = h('button', { type: 'button', class: 'btn secondary small', id: 'gv-xadd', text: 'Add exclusion', onclick: function () {
+        exMsg.textContent = '';
+        if (!pa.value || !pb.value) { exMsg.textContent = 'Choose two people.'; return; }
+        if (pa.value === pb.value) { exMsg.textContent = 'Choose two different people.'; return; }
+        if (ex.some(function (p) { return (p[0] === pa.value && p[1] === pb.value) || (p[0] === pb.value && p[1] === pa.value); })) { exMsg.textContent = 'That pair is already listed.'; return; }
+        ex.push([pa.value, pb.value, pa.options[pa.selectedIndex].text, pb.options[pb.selectedIndex].text]); pa.value = ''; pb.value = ''; paint();
+      } });
+      paint();
+      var ids = { name: 'gv-xname', date: 'gv-xdate', limit: 'gv-xlimit', note: 'gv-xnote' };
+      var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
+      var back = existing ? '#/giving/exchanges/' + existing.id : '#/giving/exchanges';
+      var form = h('form', { class: 'card gv-form', novalidate: '', onsubmit: function (e) {
+        e.preventDefault(); msg.textContent = ''; Object.keys(ids).forEach(function (k) { setErr(ids[k], ''); });
+        api('exchangeSave', { exchangeId: existing && existing.id, name: f.name.value, date: f.date.value, limit: f.limit.value, note: f.note.value, exclusions: ex.map(function (p) { return [p[0], p[1]]; }) }).then(function (r) {
+          if (r.stale) return;
+          if (!r.ok) { var first = null; Object.keys(r.fields || {}).forEach(function (k) { if (ids[k]) { setErr(ids[k], r.fields[k]); if (!first) first = document.getElementById(ids[k]); } else msg.textContent = r.fields[k]; }); if (!msg.textContent) msg.textContent = r.message; if (first) first.focus(); return; }
+          toast(existing ? 'Saved.' : 'Exchange created. Ask people to join, then draw names.'); go('#/giving/exchanges/' + r.exchange.id);
+        });
+      } }, h('h1', { text: existing ? 'Edit exchange' : 'New gift exchange', 'data-focus': '' }),
+        field('gv-xname', 'Name', f.name), field('gv-xdate', 'Exchange date (optional)', f.date), field('gv-xlimit', 'Spending limit (optional)', f.limit, '', 'Plain text for reference only. Family Circle never collects or sends money.'),
+        field('gv-xnote', 'Note (optional)', f.note),
+        existing ? h('div', { class: 'gv-xex' }, h('h2', { class: 'gv-sub', text: 'Cannot draw each other (optional)' }), h('p', { class: 'hint', text: 'For example, partners who already buy for each other. Works both ways.' }), exList, h('div', { class: 'gv-xpick' }, pa, pb, addEx), exMsg) : h('p', { class: 'hint', text: 'After you save, you can add people and set exclusions.' }),
+        whoNote('gv-xwho', WHO_EX), msg,
+        h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-xsave', text: 'Save' }), h('a', { class: 'btn secondary', href: back, text: 'Cancel' })));
+      return h('div', { class: 'gv-page' }, backLink(back, 'Back'), form);
+    }
+    function renderExchange(x) {
+      var page = h('div', { class: 'gv-page' }, backLink('#/giving/exchanges', 'Back to gift exchanges'));
+      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { id: 'gv-xtitle', text: x.name, 'data-focus': '' })));
+      page.appendChild(h('p', { class: 'gv-badges' }, badge(x.status === 'drawn' ? 'Names drawn' : 'Not drawn yet', x.status === 'drawn' ? 'is-done' : ''), x.mine ? badge('You organise', '') : null));
+      page.appendChild(h('p', { class: 'muted', text: 'Organised by ' + x.organiserName + (x.date ? ' · ' + x.date : '') + (x.limit ? ' · Limit ' + x.limit : '') }));
+      if (x.note) page.appendChild(h('p', { text: x.note }));
+      var act = function (name, extra, okMsg) { return api(name, Object.assign({ exchangeId: x.id }, extra || {})).then(function (r) { if (r.stale) return; if (!r.ok) return showErr(r); if (okMsg) toast(okMsg); render(); }); };
+      if (x.match) {
+        page.appendChild(h('section', { class: 'card gv-match', id: 'gv-match' }, h('p', { class: 'muted', text: 'You are giving a gift to' }), h('h2', { id: 'gv-matchname', text: x.match.name }),
+          h('p', { class: 'hint', text: 'Only you can see this. Not even the organiser can.' }),
+          x.match.lists.length ? h('ul', { class: 'gv-rows', id: 'gv-matchlists' }, x.match.lists.map(function (l) { return h('li', null, h('a', { class: 'gv-row', href: '#/giving/list/' + l.id, 'data-matchlist': l.id }, h('strong', { text: l.name }), h('span', { class: 'muted', text: l.count + (l.count === 1 ? ' idea' : ' ideas') })));  })) : h('p', { class: 'muted', id: 'gv-matchnolist', text: x.match.name + ' has no wishlist you can see yet. Reservations work the same as always, so you can come back later.' })));
+      } else if (x.matchLeft) {
+        page.appendChild(h('section', { class: 'card', id: 'gv-matchleft' }, h('p', { text: 'Your match left the exchange. ' + x.organiserName + ' can draw again.' })));
+      }
+      page.appendChild(h('h2', { class: 'gv-sub', text: 'Who is in (' + x.members.length + ')' }));
+      page.appendChild(h('ul', { class: 'gv-rows', id: 'gv-xmembers' }, x.members.map(function (m) {
+        return h('li', { class: 'gv-xrow', 'data-xmember': m.userId }, h('span', { text: m.name + (m.me ? ' (you)' : '') + (m.organiser ? ' · organiser' : '') }),
+          x.mine && !m.me ? h('button', { type: 'button', class: 'btn ghost small', 'data-xkick': m.userId, 'aria-label': 'Remove ' + m.name, text: 'Remove', onclick: function () { confirmDialog('Remove ' + m.name + '?', x.status === 'drawn' ? m.name + ' is told. Whoever drew ' + m.name + ' is told their match left, and you can then draw again.' : m.name + ' is told they were removed.', 'Remove', function () { act('exchangeRemoveMember', { userId: m.userId }, 'Removed.'); }); } }) : null);
+      })));
+      var acts = h('div', { class: 'gv-actions' });
+      if (x.status === 'open' && !x.joined) acts.appendChild(h('button', { type: 'button', class: 'btn', id: 'gv-xjoin', text: 'Join', onclick: function () { act('exchangeJoin', null, 'You joined.'); } }));
+      if (x.joined && !x.mine) acts.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'gv-xleave', text: 'Leave exchange', onclick: function () { confirmDialog('Leave ' + x.name + '?', x.status === 'drawn' ? 'The organiser is told you left and can draw again. Whoever drew you is told their match left.' : 'You can join again until names are drawn.', 'Leave', function () { act('exchangeLeave', null, 'You left.'); }); } }));
+      if (x.mine) {
+        if (x.status === 'open') {
+          if (x.canAdd.length) {
+            var pick = h('select', { id: 'gv-xaddsel', 'aria-label': 'Add an adult' }, h('option', { value: '', text: 'Add an adult' }), x.canAdd.map(function (c) { return h('option', { value: c.userId, text: c.name }); }));
+            page.appendChild(h('div', { class: 'gv-xpick' }, pick, h('button', { type: 'button', class: 'btn secondary small', id: 'gv-xaddbtn', text: 'Add', onclick: function () { if (pick.value) act('exchangeAddMember', { userId: pick.value }, 'Added. They were told.'); } })));
+          }
+          if (x.exclusions.length) page.appendChild(h('p', { class: 'hint', id: 'gv-xexsum', text: x.exclusions.length + (x.exclusions.length === 1 ? ' exclusion is set.' : ' exclusions are set.') }));
+          page.appendChild(h('p', { class: 'hint', id: 'gv-xdrawhint', text: x.members.length < C.EXCHANGE.min ? 'You need at least ' + C.EXCHANGE.min + ' people to draw names.' : 'When everyone is in, draw names. Everyone is told. You will not see who drew whom.' }));
+          acts.appendChild(h('button', { type: 'button', class: 'btn', id: 'gv-xdraw', text: 'Draw names', disabled: x.members.length < C.EXCHANGE.min ? 'disabled' : null, onclick: function () { confirmDialog('Draw names now?', 'Everyone in the exchange is told. After this, people cannot join. Nobody, including you, can see who drew whom.', 'Draw names', function () { act('exchangeDraw', null, 'Names drawn. Everyone was told.'); }, true); } }));
+          acts.appendChild(h('a', { class: 'btn secondary', id: 'gv-xedit', href: '#/giving/exchanges/' + x.id + '/edit', text: 'Edit' }));
+        } else {
+          page.appendChild(h('p', { class: 'hint', id: 'gv-xhidden', text: 'You cannot see who drew whom. Nobody can. If someone leaves or you want a fresh draw, draw again and everyone is told.' }));
+          acts.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'gv-xredraw', text: 'Draw again', onclick: function () { confirmDialog('Draw again?', 'Everyone gets a new match and is told. The old matches are gone.', 'Draw again', function () { act('exchangeRedraw', null, 'Drawn again. Everyone was told.'); }, true); } }));
+        }
+        acts.appendChild(h('button', { type: 'button', class: 'btn danger', id: 'gv-xdelete', text: 'Delete exchange', onclick: function () { confirmDialog('Delete ' + x.name + '?', 'Everyone in it is told. The draw is erased.', 'Delete exchange', function () { api('exchangeDelete', { exchangeId: x.id }).then(function (r) { if (r.stale) return; if (!r.ok) return showErr(r); toast('Exchange deleted.'); go('#/giving/exchanges'); }); }); } }));
+      }
+      page.appendChild(h('div', { class: 'gv-errslot' })); page.appendChild(acts);
       return page;
     }
     function requestLimitMsg() { return h('section', { class: 'card' }, h('h1', { text: 'New request', 'data-focus': '' }), h('p', { text: 'You have ' + C.REQ.open + ' open requests, which is the limit. Close one to add another.' }), h('a', { class: 'btn secondary', href: '#/giving/requests', text: 'Back to requests' })); }
@@ -781,7 +892,7 @@
     function errorWithRetry(r) { return h('section', { class: 'card' }, h('h1', { text: 'Giving Center', 'data-focus': '' }), errorBox(r), h('button', { type: 'button', class: 'btn', id: 'gv-retry', text: 'Try again', onclick: function () { render(); } })); }
     function refresh() {
       var y = window.scrollY; var rt = route(), mineToken = ++token;
-      if (/^(request|emergenc|section)/.test(rt.name)) return render();
+      if (/^(request|emergenc|section|exchange)/.test(rt.name)) return render();
       var redo = rt.name === 'home' ? api('home') : api('listGet', { listId: rt.id });
       return redo.then(function (r) {
         if (r.stale || mineToken !== token) return;
