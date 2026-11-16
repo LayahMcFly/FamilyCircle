@@ -42,7 +42,7 @@
     return Promise.resolve().then(function () { return gen !== st.gen ? { ok: false, stale: true } : r; });
   }
   var X = { S: { user: { $id: st.userId } }, VIEWS: {}, h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, reroute: function () { render(); } };
-  var P = window.RecipesPubUI.create({ h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, call: call, family: family, reroute: function () { render(); } });
+  var P = window.RecipesPubUI.create({ h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, call: call, pictures: function (img) { return Promise.resolve({ photo: img, thumb: img }); }, family: family, reroute: function () { render(); } });
   X.publish = P;
   window.FCRecipes.install(X);
 

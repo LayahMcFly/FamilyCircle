@@ -404,6 +404,7 @@
       if (R.query) { var q = R.query.toLowerCase(); a = a.filter(function (r) { return (r.name + ' ' + r.ingredients.join(' ') + ' ' + r.categories.join(' ') + ' ' + r.tags.join(' ')).toLowerCase().indexOf(q) >= 0; }); }
       if (R.cat) a = a.filter(function (r) { return r.categories.some(function (c) { return slugify(c) === R.cat; }); });
       if (R.onlyFavs) a = a.filter(function (r) { return r.fav; });
+      if (P && P.showIt) a = a.filter(P.showIt);
       return a;
     }
     function categories() { var m = new Map(); R.demo.forEach(function (r) { r.categories.forEach(function (c) { m.set(slugify(c), c); }); }); return Array.from(m); }
@@ -411,8 +412,8 @@
     /* ---------- list ---------- */
     function viewList(main) {
       main.appendChild(h('h1', { text: 'Recipes' }));
-      if (P) { main.appendChild(P.tabs()); if (P.section() !== 'mine') { P.body(main); return; } }
-      main.appendChild(h('p', { class: 'muted', text: 'Our recipes, meals, cook mode and timers. Kept on this device, for your account only.' + (P ? ' Everything is private to you until you publish it to your family.' : '') }));
+      if (P) { var tb = P.tabs(); if (tb) main.appendChild(tb); if (P.section() !== 'mine') { P.body(main); return; } }
+      main.appendChild(h('p', { class: 'muted', text: 'Our recipes, meals, cook mode and timers. Kept on this device, for your account only.' + (P && P.sharing() ? ' Everything is private to you until you publish it to your family.' : '') }));
       var q = h('input', { id: 'rc-q', type: 'search', autocomplete: 'off', enterkeyhint: 'search', placeholder: 'Search by name or ingredient', 'aria-label': 'Search recipes', value: R.query });
       var grid = h('ul', { class: 'rc-grid', id: 'rc-grid' }), more = h('div', { id: 'rc-more' });
       var chipsBox = h('div', { class: 'rc-chips', role: 'group', 'aria-label': 'Categories' });
@@ -475,7 +476,7 @@
           shared ? null : heartB,
           h('button', { type: 'button', class: 'btn secondary', onclick: printIt }, 'Print'),
           shared ? null : h('button', { type: 'button', class: 'btn ghost', onclick: function () { remove(r); } }, 'Remove'))));
-      if (P && !shared) art.appendChild(P.panel(r));
+      var pn = P && !shared ? P.panel(r) : null; if (pn) art.appendChild(pn);
       if (r.image) art.appendChild(h('figure', { class: 'rc-hero' }, photoEl(r.image, r.name)));
       var ps = shared ? [] : partsOf(r), ui = shared ? [] : usedIn(r);
       if (ps.length) art.appendChild(h('section', { class: 'rc-parts' }, h('h2', { text: 'Made from' }), h('ul', null, ps.map(partCard))));

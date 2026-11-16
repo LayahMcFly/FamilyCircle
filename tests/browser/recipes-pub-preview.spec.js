@@ -15,7 +15,7 @@ async function open(browser, w) {
   await ctx.route(/^https?:\/\/(?!127\.0\.0\.1)/, r => { log.external.push(r.request().url()); r.abort(); });
   await page.goto(URL_()); await page.waitForSelector('.rc-card .rc-pub', { timeout: 8000 }); return { ctx, page, log };
 }
-const text = p => p.locator('#main').innerText(), pause = p => p.waitForTimeout(200);
+const text = p => p.locator('#main').innerText(), pause = p => p.waitForTimeout(250);
 const who = async (p, n) => { await p.selectOption('#pv-who', { label: n }); await p.waitForSelector('#rc-sharing, .rc-card'); await pause(p); };
 const sec = async (p, s) => { await p.click('[data-section="' + s + '"]'); await pause(p); };
 const card = (p, name) => p.locator('.rc-card', { hasText: name }).first();

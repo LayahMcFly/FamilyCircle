@@ -12,18 +12,30 @@ test('labels and the confirmation text match the spec exactly', () => {
   assert.equal(C.TEXT.publishConfirm('Happy Family'), 'This recipe will be visible to members of Happy Family. They can print it or save a copy using their device.');
   assert.match(C.TEXT.unpublishNote, /cannot recall pages already printed, files already downloaded, screenshots or copies/);
 });
-test('a snapshot never carries ids, favourites, sources or private fields', () => {
-  const s = C.snapshotOf({ name: 'A', ingredients: ['x'], steps: ['y'], id: 'book-1', fav: true, source: 'http://x', slug: 's' });
-  assert.deepEqual(Object.keys(s).filter(k => ['id', 'fav', 'source', 'slug'].includes(k)), []);
+test('a snapshot never carries ids, favourites, sources, photos or private fields', () => {
+  const s = C.snapshotOf({ name: 'A', ingredients: ['x'], steps: ['y'], id: 'book-1', fav: true, source: 'http://x', slug: 's', image: SQ });
+  assert.deepEqual(Object.keys(s).filter(k => ['id', 'fav', 'source', 'slug', 'image'].includes(k)), []);
 });
 const SQ = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCABAAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCaiiivGPaCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP/9k=', WIDE = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCABAAGADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCaiiivGPaCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//2Q==';
-test('validation: name, an ingredient and a step are required; the photo must be a real square JPEG', () => {
+test('validation: name, an ingredient and a step are required; the photo must be a real square JPEG within the size limit', () => {
   assert.equal(C.validate({ name: '', ingredients: [], steps: [] }).ok, false);
   assert.deepEqual(C.jpegDims(SQ), { w: 64, h: 64 }); assert.deepEqual(C.jpegDims(WIDE), { w: 96, h: 64 });
-  assert.equal(C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: WIDE }).fields.image.length > 0, true);
-  const ok = C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: SQ }); assert.equal(ok.ok, true); assert.equal(ok.snapshot.image, SQ);
-  assert.equal(C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: 'data:text/html;base64,AAAA' }).ok, false);
-  assert.equal(C.validate({ name: 'A', ingredients: ['x'], steps: ['y'], image: 'data:image/jpeg;base64,AAAA' }).ok, false);   // not a readable JPEG
+  const d = { name: 'A', ingredients: ['x'], steps: ['y'], image: SQ };
+  assert.equal(C.validate(d).ok, false);                                                     // a photo with no processed copy is refused
+  assert.equal(C.validate(d, { photo: WIDE, thumb: SQ }).ok, false);                         // not square
+  assert.equal(C.validate(d, { photo: SQ, thumb: WIDE }).ok, false);
+  assert.equal(C.validate(d, { photo: 'data:image/jpeg;base64,AAAA', thumb: SQ }).ok, false);  // not a readable JPEG
+  assert.equal(C.validate(d, { photo: 'data:text/html;base64,AAAA', thumb: SQ }).ok, false);
+  const ok = C.validate(d, { photo: SQ, thumb: SQ }); assert.equal(ok.ok, true); assert.equal(ok.hasPhoto, true);
+  assert.equal(C.validate({ name: 'A', ingredients: ['x'], steps: ['y'] }).hasPhoto, false);
+});
+test('the hash changes with the text, the photo or a sub-recipe, and not with private fields', () => {
+  const base = { name: 'A', ingredients: ['x'], steps: ['y'], fav: false };
+  const h = d => C.hashOf(C.snapshotOf(d), C.imageKeyOf(d));
+  assert.equal(h(base), h(Object.assign({}, base, { fav: true, source: 'http://x', id: 'z' })));
+  assert.notEqual(h(base), h(Object.assign({}, base, { steps: ['y2'] })));
+  assert.notEqual(h(base), h(Object.assign({}, base, { image: SQ })));
+  assert.notEqual(h(base), h(Object.assign({}, base, { parts: [{ name: 'Sauce', ingredients: ['a'], steps: ['b'] }] })));
 });
 test('the library shows only this family\'s published recipes, never drafts or another family', () => {
   const s = F.create();
