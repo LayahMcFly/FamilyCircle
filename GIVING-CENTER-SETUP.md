@@ -113,3 +113,7 @@ Nothing else changes. Turn nothing on: the Exchange icon appears for adults once
 | `givingExchangePairs` | `idx_family` | Key | `familyId` |
 
 No client permissions on either table (leave Permissions empty, same as the others). Honest limit: the draw is stored so each person can be shown their match. Only someone with direct access to the Appwrite project can read it there. The app never shows it to anyone else, including the organiser.
+
+## Group gifts (Phase D1): two more tables
+
+See `GIVING-GIFTS-CONSOLE-COMMANDS.md` for copy-paste commands. `givingGifts`: familyId 36, organiserId 36, status 10, data 2500. `givingGiftParts`: familyId 36, giftId 36, userId 36, status 10, partKey 80 (**unique index**), data 400. Both with empty permissions. It only tracks contributions; no money moves through Family Circle.

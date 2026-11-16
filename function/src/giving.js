@@ -29,6 +29,8 @@ export const GIVING_TABLES = {
   pledges: 'givingPledges',           // familyId, requestId, userId, status (pledged|done), pledgeKey (UNIQUE: requestId_userId), data (JSON: note)
   exchanges: 'givingExchanges',       // familyId, organiserId, status (open|drawn), round, data (JSON: name, date, limit, note, members, exclusions)
   exchangePairs: 'givingExchangePairs', // row id = the exchange's id; familyId, data (JSON: pairs). Private: only exchangeView reads it, and only to find the caller's own match
+  gifts: 'givingGifts',               // familyId, organiserId, status (open|closed), data (JSON: title, note, forId, goalCents, eachCents, currency)
+  giftParts: 'givingGiftParts',       // familyId, giftId, userId, status (marked|confirmed), partKey (UNIQUE: giftId_userId), data (JSON: cents, note)
   state: 'givingState'                // row id = familyId; enabled (bool), enabledBy, enabledAt
 };
 export const GIVING_LIMITS = { ...R.LIMITS, hideDays: 30, reportsPerPerson: 20, noticesShown: 20, perMinute: 60, thumbBytes: 10000, photoBytes: 250000, linkPicturesPer10Min: 10 };
@@ -163,6 +165,40 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
     for (const u of ids) if (u !== c.me.userId) await notify(c, u, d.name + (again ? ' was drawn again. Tap to see who you have now.' : ' has been drawn. Tap to see who you have.'));
     return saved;
   }
+
+
+  /* ---------- Group gifts (Phase D1). A tracker only: no money is taken, held or sent. The person a gift is for never reaches it. ---------- */
+  const GF = R.GIFT;
+  const gData = (g) => { const d = parse(g.data); return { title: d.title || '', note: d.note || '', forId: d.forId || '', goalCents: d.goalCents || 0, eachCents: d.eachCents || 0, currency: d.currency || 'USD' }; };
+  const gOk = (c, g) => !!(g && g.familyId === c.familyId && c.me.adult && c.names.has(g.organiserId) && gData(g).forId !== c.me.userId);
+  async function gRow(c, id) { const g = await getRowOrNull(T.gifts, idOf(id, 'giftId')); if (!gOk(c, g)) throw NA(); return g; }
+  const partsOf = (g) => all(T.giftParts, [Query.equal('giftId', [g.$id])], GF.contributions + 20);
+  const partData = (p) => { const d = parse(p.data); return { cents: d.cents || 0, note: d.note || '' }; };
+  const gTotals = (c, parts) => { let conf = 0, pend = 0; for (const p of parts) if (c.names.has(p.userId)) { if (p.status === 'confirmed') conf += partData(p).cents; else pend += partData(p).cents; } return { confirmedCents: conf, pendingCents: pend }; };
+  function gRowView(c, g, parts) {
+    const d = gData(g), t = gTotals(c, parts), mine = parts.find((p) => p.userId === c.me.userId);
+    const v = { id: g.$id, title: d.title, forName: d.forId ? nameOf(c, d.forId) : '', status: g.status === 'closed' ? 'closed' : 'open', currency: d.currency, goalCents: d.goalCents, confirmedCents: t.confirmedCents, organiserName: nameOf(c, g.organiserId), mine: g.organiserId === c.me.userId, reached: t.confirmedCents >= d.goalCents };
+    if (mine) { v.myCents = partData(mine).cents; v.myStatus = mine.status; }
+    if (v.mine) v.pendingCents = t.pendingCents;
+    return v;
+  }
+  function gView(c, g, parts) {
+    const d = gData(g), v = { ...gRowView(c, g, parts), note: d.note, eachCents: d.eachCents };
+    const mine = parts.find((p) => p.userId === c.me.userId); if (mine) v.myNote = partData(mine).note;
+    if (v.mine) {   // only the organiser ever receives who gave what
+      v.contributions = parts.filter((p) => c.names.has(p.userId)).map((p) => ({ userId: p.userId, name: nameOf(c, p.userId), cents: partData(p).cents, status: p.status, note: partData(p).note }));
+      v.canRecord = c.members.filter((m) => m.adult && m.userId !== d.forId && m.userId !== c.me.userId && !parts.some((p) => p.userId === m.userId)).map((m) => ({ userId: m.userId, name: m.name }));
+    }
+    return v;
+  }
+  async function gSetPart(c, g, parts, userId, cents, note, status) {
+    const data = JSON.stringify({ cents, note }), key = g.$id + '_' + userId, old = parts.find((p) => p.userId === userId);
+    if (old) return updateRow(T.giftParts, old.$id, { status, data });
+    if (parts.length >= GF.contributions) throw new ApiError(400, 'full', 'This group gift already has ' + GF.contributions + ' contributions.');
+    try { return await createRow(T.giftParts, ID.unique(), { familyId: c.familyId, giftId: g.$id, userId, status, partKey: key, data }, []); }
+    catch (e) { if (sdkCode(e) !== 409) throw e; const again = (await listRows(T.giftParts, [Query.equal('partKey', [key]), Query.limit(1)])).rows[0]; if (!again) throw e; return updateRow(T.giftParts, again.$id, { status, data }); }
+  }
+  async function gOut(c, g) { return { gift: gView(c, g, await partsOf(g)) }; }
 
   /* ---------- shapes ---------- */
   function itemView(c, it, list, res) {
@@ -355,6 +391,7 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       const out = { lists: summaries, reservations: mine, notices: notes.rows.map((n) => ({ id: n.$id, text: parse(n.data).text || '' })), canCreateList: summaries.filter((x) => x.mine).length < L.lists, me: { adult: c.me.adult }, canManageAges: c.manager, canModerate: c.moderator };
       { const rq = (await inFamily(T.requests, c.familyId, [], 600)).filter((q) => requestOk(c, q)); out.requests = { open: rq.filter((q) => q.approval === 'approved' && q.status !== 'closed' && q.audience !== 'chosen').length, urgent: rq.filter((q) => q.audience === 'chosen' && q.status !== 'closed' && q.ownerId !== user.$id && now() < (parse(q.data).expiresAt || 0)).length }; if (c.moderator) out.requests.waiting = rq.filter((q) => q.audience !== 'chosen' && q.approval !== 'approved' && q.ownerId !== user.$id).length; }
       if (c.me.adult) out.exchanges = (await inFamily(T.exchanges, c.familyId, [], 200)).filter((x) => exOk(c, x) && exData(x).members.includes(user.$id)).length;
+      if (c.me.adult) out.gifts = (await inFamily(T.gifts, c.familyId, [], 200)).filter((g) => gOk(c, g) && g.status === 'open').length;
       if (c.moderator) out.openReports = (await inFamily(T.reports, c.familyId)).length;   // everyone else gets no report field at all
       return out;
     },
@@ -669,6 +706,80 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       for (const u of d.members) if (u !== user.$id) await notify(c, u, d.name + ' was deleted by ' + nameOf(c, user.$id) + '.');
       if (await getRowOrNull(T.exchangePairs, x.$id)) await deleteRow(T.exchangePairs, x.$id);
       await deleteRow(T.exchanges, x.$id); return {};
+    },
+
+    /* ----- Group gifts (Phase D1). Adults only; the person a gift is for never sees it. ----- */
+    async givingGiftsHome({ user, body }) {
+      const c = await context(user, body.familyId); if (!c.me.adult) throw NA();
+      const gs = (await inFamily(T.gifts, c.familyId, [], 200)).filter((g) => gOk(c, g)).sort((a, b) => String(b.$createdAt).localeCompare(String(a.$createdAt)));
+      const parts = await inFamily(T.giftParts, c.familyId, [], 5000);
+      return { gifts: gs.map((g) => gRowView(c, g, parts.filter((p) => p.giftId === g.$id))), who: c.members.filter((m) => m.userId !== user.$id).map((m) => ({ userId: m.userId, name: m.name })) };
+    },
+    async givingGiftGet({ user, body }) { const c = await context(user, body.familyId); return gOut(c, await gRow(c, body.giftId)); },
+    async givingGiftSave({ user, body }) {
+      const c = await context(user, body.familyId); if (!c.me.adult) throw NA();
+      let g = null;
+      if (body.giftId) { g = await gRow(c, body.giftId); if (g.organiserId !== user.$id || g.status === 'closed') throw NA(); }
+      const v = R.validateGift(body, c.members.filter((m) => m.userId !== user.$id).map((m) => m.userId)); if (!v.ok) throw invalid(v.errors);
+      const data = JSON.stringify({ title: v.value.title, note: v.value.note, forId: v.value.forId, goalCents: v.value.goalCents, eachCents: v.value.eachCents, currency: v.value.currency });
+      if (g) {
+        g = await updateRow(T.gifts, g.$id, { data });
+        if (v.value.forId) { const mine = (await partsOf(g)).find((p) => p.userId === v.value.forId); if (mine) await deleteRow(T.giftParts, mine.$id); }   // the person it is for cannot have a part in it
+      } else {
+        const open = (await inFamily(T.gifts, c.familyId, [], 200)).filter((x) => x.organiserId === user.$id && x.status === 'open' && gOk(c, x)).length;
+        if (open >= GF.open) throw new ApiError(400, 'limit', 'You can run up to ' + GF.open + ' open group gifts. Close one to start another.');
+        g = await createRow(T.gifts, ID.unique(), { familyId: c.familyId, organiserId: user.$id, status: 'open', data }, []);
+        for (const m of c.members) if (m.adult && m.userId !== user.$id && m.userId !== v.value.forId) await notify(c, m.userId, nameOf(c, user.$id) + ' started a group gift: ' + v.value.title + '. Tap to open.');
+      }
+      return gOut(c, g);
+    },
+    async givingGiftContribute({ user, body }) {
+      const c = await context(user, body.familyId); const g = await gRow(c, body.giftId);
+      if (g.status === 'closed') throw new ApiError(409, 'closed', 'This group gift is closed.');
+      const parts = await partsOf(g), cur = parts.find((p) => p.userId === user.$id);
+      if (cur && cur.status === 'confirmed') throw new ApiError(409, 'confirmed', 'Your contribution was already confirmed. Ask ' + nameOf(c, g.organiserId) + ' if it needs to change.');
+      const v = R.validateContribution(body); if (!v.ok) throw invalid(v.errors);
+      const mine = g.organiserId === user.$id;
+      await gSetPart(c, g, parts, user.$id, v.value.cents, v.value.note, mine ? 'confirmed' : 'marked');
+      if (!mine) await notify(c, g.organiserId, nameOf(c, user.$id) + ' marked a contribution to ' + gData(g).title + '. Confirm it when you have it.');
+      return gOut(c, g);
+    },
+    async givingGiftWithdraw({ user, body }) {
+      const c = await context(user, body.familyId); const g = await gRow(c, body.giftId);
+      const mine = (await partsOf(g)).find((p) => p.userId === user.$id); if (!mine) throw NA();
+      if (mine.status === 'confirmed' && g.organiserId !== user.$id) throw new ApiError(409, 'confirmed', 'Your contribution was already confirmed. Ask ' + nameOf(c, g.organiserId) + ' if it needs to change.');
+      await deleteRow(T.giftParts, mine.$id); return gOut(c, g);
+    },
+    async givingGiftConfirm({ user, body }) {
+      const c = await context(user, body.familyId); const g = await gRow(c, body.giftId); if (g.organiserId !== user.$id) throw NA();
+      const p = (await partsOf(g)).find((x) => x.userId === idOf(body.userId, 'userId')); if (!p) throw NA();
+      await updateRow(T.giftParts, p.$id, { status: 'confirmed' }); await notify(c, p.userId, 'Your contribution to ' + gData(g).title + ' was confirmed. Thank you.');
+      return gOut(c, g);
+    },
+    async givingGiftDecline({ user, body }) {
+      const c = await context(user, body.familyId); const g = await gRow(c, body.giftId); if (g.organiserId !== user.$id) throw NA();
+      const p = (await partsOf(g)).find((x) => x.userId === idOf(body.userId, 'userId')); if (!p) throw NA();
+      await deleteRow(T.giftParts, p.$id); await notify(c, p.userId, nameOf(c, user.$id) + ' could not confirm your contribution to ' + gData(g).title + '. Please check with them.');
+      return gOut(c, g);
+    },
+    async givingGiftRecord({ user, body }) {
+      const c = await context(user, body.familyId); const g = await gRow(c, body.giftId); if (g.organiserId !== user.$id) throw NA();
+      const t = c.byId.get(idOf(body.userId, 'userId')); if (!t || !t.adult || t.userId === gData(g).forId || t.userId === user.$id) throw NA();
+      if (g.status === 'closed') throw new ApiError(409, 'closed', 'This group gift is closed.');
+      const v = R.validateContribution(body); if (!v.ok) throw invalid(v.errors);
+      await gSetPart(c, g, await partsOf(g), t.userId, v.value.cents, v.value.note, 'confirmed');
+      await notify(c, t.userId, nameOf(c, user.$id) + ' recorded your contribution to ' + gData(g).title + '. Thank you.');
+      return gOut(c, g);
+    },
+    async givingGiftSetStatus({ user, body }) {
+      const c = await context(user, body.familyId); let g = await gRow(c, body.giftId); if (g.organiserId !== user.$id) throw NA();
+      g = await updateRow(T.gifts, g.$id, { status: body.closed ? 'closed' : 'open' }); return gOut(c, g);
+    },
+    async givingGiftDelete({ user, body }) {
+      const c = await context(user, body.familyId); const g = await gRow(c, body.giftId); if (g.organiserId !== user.$id) throw NA();
+      const parts = await partsOf(g);
+      for (const p of parts) { if (p.userId !== user.$id) await notify(c, p.userId, gData(g).title + ' was deleted by ' + nameOf(c, user.$id) + '.'); await deleteRow(T.giftParts, p.$id); }
+      await deleteRow(T.gifts, g.$id); return {};
     },
     async givingRequestsHome({ user, body }) {
       const c = await context(user, body.familyId);

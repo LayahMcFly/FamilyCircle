@@ -22,7 +22,7 @@ function makeWorld() {
   };
   for (const t of [...Object.values(TABLES), ...Object.values(CHAT_TABLES), ...Object.values(GIVING_TABLES)]) world.tables[t] = new Map();
   const err = (code, m) => Object.assign(new Error(m), { code });
-  const UNIQUE = ['sendKey', 'channelKey', 'dmKey', 'reactionKey', 'blockKey', 'readKey', 'profileKey', 'itemId', 'pledgeKey'];
+  const UNIQUE = ['sendKey', 'channelKey', 'dmKey', 'reactionKey', 'blockKey', 'readKey', 'profileKey', 'itemId', 'pledgeKey', 'partKey'];
   const match = (r, q) => {
     switch (q.method) {
       case 'equal': return q.values.includes(q.attribute === '$id' ? r.$id : r[q.attribute]);
@@ -827,4 +827,75 @@ test('exchange: impossible rules are refused plainly; a member removed from the 
   await w.ok('owner', 'givingExchangeSave', EXF({ exchangeId: x.id, name: 'Holiday', exclusions: [] }));
   await w.ok('owner', 'givingExchangeDraw', EXF({ exchangeId: x.id }));
   assert.equal((await w.ok('owner', 'givingExchangeGet', EXF({ exchangeId: x.id }))).exchange.status, 'drawn');
+});
+
+/* ---------- Group gifts (Phase D1, real server) ---------- */
+const GG = (extra = {}) => F({ title: 'Gran present', goal: '120', each: '20', currency: 'USD', forId: 'tia', ...extra });
+const gsetup = async () => { const w = await setup(); await w.ok('owner', 'givingMemberSetAdult', F({ userId: 'tia', adult: true })); return w; };
+test('gift: rules match the preview', async () => {
+  const P = createRequire(import.meta.url)('../../giving-core.js');
+  const M = await import('../src/giving-rules.js');
+  for (const b of [{ title: 'x', goal: '120', currency: 'USD' }, { title: '', goal: '1', currency: 'USD' }, { title: 'x', goal: '', currency: 'USD' }, { title: 'x', goal: '1,5', currency: 'USD' }, { title: 'x', goal: '5', each: 'a', currency: 'USD' }, { title: 'x', goal: '5', currency: 'ZZZ' }, { title: 'x', goal: '5', currency: 'USD', forId: 'q' }]) assert.deepEqual(M.validateGift(b, ['a']), P.validateGift(b, ['a']));
+  for (const b of [{ amount: '20' }, { amount: '' }, { amount: '-1' }, { amount: '5', note: 'x'.repeat(101) }]) assert.deepEqual(M.validateContribution(b), P.validateContribution(b));
+  assert.deepEqual(M.GIFT, P.GIFT); assert.equal(M.GIFT_MONEY, P.GIFT_MONEY);
+});
+test('gift: only adults reach it; the person it is for, kids, other families and off families get "not available"', async () => {
+  const w = await gsetup(); const g = (await w.ok('owner', 'givingGiftSave', GG())).gift;
+  assert.deepEqual(rows(w, 'givingGifts')[0].$permissions, []);
+  for (const u of ['tia', 'kid']) { await w.fail(u, 'givingGiftGet', F({ giftId: g.id }), 404); await w.fail(u, 'givingGiftContribute', F({ giftId: g.id, amount: '5' }), 404); }
+  await w.fail('kid', 'givingGiftsHome', F(), 404); assert.equal((await w.ok('tia', 'givingGiftsHome', F())).gifts.length, 0);
+  await w.fail('zed', 'givingGiftGet', { familyId: 'famB', giftId: g.id }, 404);
+  assert.equal((await w.ok('ann', 'givingGiftsHome', F())).gifts.length, 1);
+  assert.equal((await w.ok('kid', 'givingHome', F())).gifts, undefined); assert.equal((await w.ok('owner', 'givingHome', F())).gifts, 1); assert.equal((await w.ok('tia', 'givingHome', F())).gifts, 0);
+  assert.ok(!JSON.stringify(await w.ok('tia', 'givingHome', F())).includes('Gran present'));
+  assert.ok((await w.ok('ann', 'givingHome', F())).notices.some((n) => /started a group gift: Gran present/.test(n.text)));
+  await w.ok('owner', 'givingSetEnabled', F({ enabled: false })); await w.fail('ann', 'givingGiftsHome', F(), 404, 'not_available');
+});
+test('gift: marked, confirmed, declined and withdrawn contributions; totals count only confirmed money', async () => {
+  const w = await gsetup(); const g = (await w.ok('owner', 'givingGiftSave', GG())).gift;
+  await w.ok('ann', 'givingGiftContribute', F({ giftId: g.id, amount: '20', note: 'Venmo' })); await w.ok('bob', 'givingGiftContribute', F({ giftId: g.id, amount: '25.50' }));
+  let v = (await w.ok('owner', 'givingGiftGet', F({ giftId: g.id }))).gift; assert.equal(v.confirmedCents, 0); assert.equal(v.pendingCents, 4550); assert.equal(v.contributions.length, 2);
+  assert.ok((await w.ok('owner', 'givingHome', F())).notices.some((n) => /Ann|ann marked a contribution/.test(n.text)));
+  await w.ok('owner', 'givingGiftConfirm', F({ giftId: g.id, userId: 'ann' })); await w.ok('owner', 'givingGiftDecline', F({ giftId: g.id, userId: 'bob' }));
+  v = (await w.ok('owner', 'givingGiftGet', F({ giftId: g.id }))).gift; assert.equal(v.confirmedCents, 2000); assert.equal(v.pendingCents, 0); assert.equal(v.contributions.length, 1);
+  assert.ok((await w.ok('ann', 'givingHome', F())).notices.some((n) => /was confirmed/.test(n.text))); assert.ok((await w.ok('bob', 'givingHome', F())).notices.some((n) => /could not confirm/.test(n.text)));
+  await w.fail('ann', 'givingGiftContribute', F({ giftId: g.id, amount: '30' }), 409, 'confirmed'); await w.fail('ann', 'givingGiftWithdraw', F({ giftId: g.id }), 409, 'confirmed');
+  await w.ok('bob', 'givingGiftContribute', F({ giftId: g.id, amount: '10' })); assert.equal((await w.ok('bob', 'givingGiftContribute', F({ giftId: g.id, amount: '15' }))).gift.myCents, 1500);
+  assert.equal(rows(w, 'givingGiftParts').filter((p) => p.userId === 'bob').length, 1);   // one row per person
+  assert.equal((await w.ok('bob', 'givingGiftWithdraw', F({ giftId: g.id }))).gift.myCents, undefined);
+  await w.fail('bob', 'givingGiftContribute', F({ giftId: g.id, amount: 'abc' }), 400, 'invalid');
+});
+test('gift: only the organiser sees who gave what; nothing else carries it', async () => {
+  const w = await gsetup(); const g = (await w.ok('owner', 'givingGiftSave', GG())).gift;
+  await w.ok('ann', 'givingGiftContribute', F({ giftId: g.id, amount: '20' })); await w.ok('owner', 'givingGiftConfirm', F({ giftId: g.id, userId: 'ann' })); await w.ok('bob', 'givingGiftContribute', F({ giftId: g.id, amount: '33' }));
+  const b = (await w.ok('bob', 'givingGiftGet', F({ giftId: g.id }))).gift;
+  assert.equal(b.contributions, undefined); assert.equal(b.pendingCents, undefined); assert.equal(b.confirmedCents, 2000); assert.equal(b.myCents, 3300);
+  const all = [b, await w.ok('bob', 'givingGiftsHome', F()), await w.ok('bob', 'givingHome', F())];
+  assert.ok(!keysOf(all).some((k) => /^(contributions|canRecord)$/.test(k)), 'no organiser fields'); assert.ok(!/"userId":"ann"/.test(JSON.stringify(all[0])));
+  for (const a of ['givingGiftConfirm', 'givingGiftDecline']) await w.fail('bob', a, F({ giftId: g.id, userId: 'ann' }), 404);
+  for (const a of ['givingGiftSetStatus', 'givingGiftDelete', 'givingGiftSave', 'givingGiftRecord']) await w.fail('bob', a, GG({ giftId: g.id, userId: 'ann', amount: '5' }), 404);
+});
+test('gift: record cash, closing, the organiser\'s own part, and limits', async () => {
+  const w = await gsetup(); const g = (await w.ok('owner', 'givingGiftSave', GG())).gift;
+  const can = (await w.ok('owner', 'givingGiftGet', F({ giftId: g.id }))).gift.canRecord.map((p) => p.userId); assert.ok(!can.includes('tia') && !can.includes('kid') && can.includes('ann'));
+  await w.fail('owner', 'givingGiftRecord', F({ giftId: g.id, userId: 'tia', amount: '10' }), 404); await w.fail('owner', 'givingGiftRecord', F({ giftId: g.id, userId: 'kid', amount: '10' }), 404);
+  assert.equal((await w.ok('owner', 'givingGiftRecord', F({ giftId: g.id, userId: 'ann', amount: '40' }))).gift.confirmedCents, 4000);
+  assert.ok((await w.ok('ann', 'givingHome', F())).notices.some((n) => /recorded your contribution/.test(n.text)));
+  assert.equal((await w.ok('owner', 'givingGiftContribute', F({ giftId: g.id, amount: '30' }))).gift.confirmedCents, 7000);
+  await w.ok('owner', 'givingGiftSetStatus', F({ giftId: g.id, closed: true })); await w.fail('bob', 'givingGiftContribute', F({ giftId: g.id, amount: '5' }), 409, 'closed');
+  await w.fail('owner', 'givingGiftSave', GG({ giftId: g.id }), 404); await w.ok('owner', 'givingGiftSetStatus', F({ giftId: g.id, closed: false }));
+  await w.ok('bob', 'givingGiftContribute', F({ giftId: g.id, amount: '5' }));
+  for (let i = 0; i < 4; i++) await w.ok('owner', 'givingGiftSave', GG({ title: 'G' + i })); await w.fail('owner', 'givingGiftSave', GG(), 400, 'limit');
+  await w.fail('owner', 'givingGiftSave', F({ title: 'x', goal: '', currency: 'USD' }), 400, 'invalid');
+});
+test('gift: changing who it is for drops that person\'s part and access; delete tells contributors and erases both tables', async () => {
+  const w = await gsetup(); const g = (await w.ok('owner', 'givingGiftSave', GG({ forId: '' }))).gift;
+  await w.ok('tia', 'givingGiftContribute', F({ giftId: g.id, amount: '5' }));
+  await w.ok('ann', 'givingGiftContribute', F({ giftId: g.id, amount: '40' }));
+  await w.ok('owner', 'givingGiftSave', GG({ giftId: g.id, forId: 'tia' }));
+  await w.fail('tia', 'givingGiftGet', F({ giftId: g.id }), 404);
+  assert.equal((await w.ok('owner', 'givingGiftGet', F({ giftId: g.id }))).gift.contributions.some((c) => c.userId === 'tia'), false);
+  await w.ok('owner', 'givingGiftDelete', F({ giftId: g.id }));
+  assert.equal(rows(w, 'givingGifts').length, 0); assert.equal(rows(w, 'givingGiftParts').length, 0);
+  assert.ok((await w.ok('ann', 'givingHome', F())).notices.some((n) => /was deleted/.test(n.text)));
 });

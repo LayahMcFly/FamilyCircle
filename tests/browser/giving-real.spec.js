@@ -229,6 +229,25 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await as('owner', exUrl); await page.click('#gv-xdelete'); await dlgOk(); await page.waitForSelector('#gv-exchanges, #gv-noexch'); await settle();
   check('5j real: deleting erases both rows', rowsOf('givingExchanges').length === 0 && rowsOf('givingExchangePairs').length === 0, '');
 
+  // 5k group gifts work against the real server code
+  await as('owner', '#/giving'); await page.locator('#gv-peoplebtn').click(); await page.waitForSelector('#gv-members .gv-member');
+  await page.locator('button[aria-label="Mark as adult: tia"]').click(); await settle(); await page.waitForSelector('button[aria-label="Mark as kid: tia"]');
+  await as('owner', '#/giving'); check('5k real: an adult sees the Group gift icon', (await page.locator('#gv-giftsbtn').count()) === 1, '');
+  await as('kid', '#/giving'); check('5k real: a kid has no Group gift icon', (await page.locator('#gv-giftsbtn').count()) === 0, '');
+  await as('owner', '#/giving/gifts/new'); await page.fill('#gv-gtitle', 'Gran present'); await page.selectOption('#gv-gfor', { label: 'tia' }); await page.fill('#gv-ggoal', '100'); await page.click('#gv-gsave'); await page.waitForSelector('#gv-gsum'); await settle();
+  const gUrl = await page.evaluate(() => location.hash);
+  check('5k real: the organiser created a gift at $0 of $100', /\$0\.00( USD)? of \$100\.00/.test(await text()), await text());
+  await as('ann', gUrl); await page.fill('#gv-gamount', '30'); await page.click('#gv-gmark'); await settle();
+  check('5k real: ann marked $30 and it is waiting', /You marked \$30\.00/.test(await text()) && /\$0\.00( USD)? of/.test(await text()), await text());
+  await as('owner', gUrl); await page.click('[data-gconfirm]'); await settle();
+  check('5k real: the organiser confirmed it and the total moved', /\$30\.00( USD)? of \$100\.00/.test(await text()), await text());
+  await as('bob', gUrl); check('5k real: bob sees the total but not who gave what', /\$30\.00( USD)? of/.test(await text()) && (await page.locator('#gv-gcontribs').count()) === 0, await text());
+  await as('tia', '#/giving/gifts'); check('5k real: the person it is for sees an empty list, never the gift', /No group gifts yet/.test(await text()) && !/Gran present/.test(await text()), await text());
+  await as('tia', gUrl); check('5k real: and cannot open it by its address', /not available/i.test(await text()) && !/Gran present/.test(await text()), await text());
+  check('5k real: stored with no client permissions, one part row, money only as plain numbers', rowsOf('givingGifts')[0].$permissions.length === 0 && rowsOf('givingGiftParts').length === 1 && rowsOf('givingGiftParts')[0].$permissions.length === 0, '');
+  await as('owner', gUrl); await page.click('#gv-gdelete'); await dlgOk(); await page.waitForSelector('#gv-gifts, #gv-nogift'); await settle();
+  check('5k real: deleting erases both rows', rowsOf('givingGifts').length === 0 && rowsOf('givingGiftParts').length === 0, '');
+
   await as('owner'); await page.locator('#gv-turnoff').click(); await dlgOk(); await page.waitForSelector('.gv-off'); await settle();
   check('10 Owner turns it off and sees the turn-on button again', await page.locator('#gv-turnon').isVisible(), await text());
   await as('ann'); check('10 Everyone else is told it is not turned on', /not turned on/.test(await text()), await text());
