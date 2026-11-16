@@ -8,6 +8,7 @@
 
   var F = window.RecipesPubFake, server = F.create(), main = document.getElementById('main'), controls = document.getElementById('pv-controls'), toasts = document.getElementById('toasts');
   var st = { userId: 'u-rae', familyId: 'fHappy', gen: 0 };
+  if (/[?&]sharing=off/.test(location.search)) server.setSharing('fHappy', false);
 
   /* each person's own private book (what the real app keeps in that browser) */
   var drafts = F.sampleDrafts();

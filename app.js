@@ -6005,6 +6005,47 @@
     new MutationObserver(function (ms) { ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, mark); }); }).observe(document.body, { childList: true, subtree: true });
   })();
 
+
+  /* Recipes family publishing (screens: recipes-pub-ui.js, rules: recipes-pub-core.js, server: function/src/recipes.js).
+     Every rule is enforced by the function; this only translates calls. While sharing is off for the family (the default), or the function does not know
+     these actions yet, the screen part hides itself and the Recipe Book looks exactly as it did before. */
+  function recipesPublishing() {
+    if (!window.RecipesPubUI || !window.RecipesPubCore) return null;
+    function call(action, body) {
+      var sent = S.familyId, name = 'recipes' + action.charAt(0).toUpperCase() + action.slice(1);
+      return api(name, Object.assign({ familyId: sent }, body || {})).then(function (json) {
+        if (S.familyId !== sent) return { ok: false, stale: true };
+        return Object.assign({}, json, { ok: true });
+      }, function (e) {
+        if (S.familyId !== sent) return { ok: false, stale: true };
+        if (e && e.apiCode === undefined && e.code === undefined) return { ok: false, error: 'network', message: 'Could not reach the server. Check your connection and try again.' };
+        return { ok: false, error: e && e.apiCode ? e.apiCode : 'server', message: (e && e.message) || 'Something went wrong. Try again.' };
+      });
+    }
+    // A square JPEG for the family (about 600 px, kept under 110 KB) and a small thumbnail (about 128 px, under 9 KB), both made on this device.
+    function squareJpeg(img, side, limit) {
+      var c = document.createElement('canvas'); c.width = c.height = side;
+      var g = c.getContext('2d'), m = Math.min(img.naturalWidth, img.naturalHeight), sx = (img.naturalWidth - m) / 2, sy = (img.naturalHeight - m) / 2;
+      g.fillStyle = '#fff'; g.fillRect(0, 0, side, side); g.drawImage(img, sx, sy, m, m, 0, 0, side, side);
+      for (var q = 0.85; q >= 0.3; q -= 0.1) { var u = c.toDataURL('image/jpeg', q); if ((u.length - 23) * 0.75 <= limit) return u; }
+      return null;
+    }
+    function pictures(src) {
+      return new Promise(function (resolve) {
+        var img = new Image();
+        img.onload = function () {
+          if (!img.naturalWidth || !img.naturalHeight) return resolve(null);
+          var photo = squareJpeg(img, 600, 110000) || squareJpeg(img, 400, 110000), thumb = squareJpeg(img, 128, 9000) || squareJpeg(img, 80, 9000);
+          resolve(photo && thumb ? { photo: photo, thumb: thumb } : null);
+        };
+        img.onerror = function () { resolve(null); };
+        img.src = src;
+      });
+    }
+    return window.RecipesPubUI.create({ h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, call: call, pictures: pictures, reroute: function () { route(false); },
+      family: function () { var f = currentFamily(); return f ? { id: f.id, name: f.name } : null; } });
+  }
+
   async function boot() {
     applyPrefs();
     var maint = await maintenanceFlag();
@@ -6036,7 +6077,7 @@
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, noteDenied: noteDenied, route: route,
       functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });
-    if (window.FCRecipes) window.FCRecipes.install({ S: S, VIEWS: VIEWS, h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, reroute: function () { route(false); } });
+    if (window.FCRecipes) window.FCRecipes.install({ S: S, VIEWS: VIEWS, h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, reroute: function () { route(false); }, publish: recipesPublishing() });
     if (window.FCBoard) window.FCBoard.install({ S: S, VIEWS: VIEWS, h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, api: api, route: route });
     if (window.FCGiving) window.FCGiving.install({ S: S, VIEWS: VIEWS, toast: toast, api: api });
     if (window.FCHub) window.FCHub.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, icon: icon, famName: famName, familySwitcher: familySwitcher, shopEnabled: shopEnabled });

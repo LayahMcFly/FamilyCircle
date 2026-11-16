@@ -8,7 +8,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api; else root.RecipesPubCore = api;
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var LIMITS = { title: 80, description: 300, line: 160, step: 700, notes: 1500, ingredients: 60, steps: 40, tags: 10, tag: 30, categories: 5, parts: 5, search: 60, photoBytes: 120000, thumbBytes: 10000, publishedPerAuthor: 200 };
+  var LIMITS = { title: 80, description: 300, line: 160, step: 700, notes: 1500, ingredients: 60, steps: 40, tags: 10, tag: 30, categories: 5, parts: 5, search: 60, photoBytes: 120000, thumbBytes: 10000, publishedPerAuthor: 200, snapshotChars: 60000 };
   var HIDDEN_DAYS = 30;   // an author who left: their published recipes stay hidden this long, then are deleted
   var TEXT = {
     mine: 'My Recipes', cookbooks: 'My Cookbooks', library: 'Family Library', shared: 'Shared Recipes', sharedCookbooks: 'Shared Cookbooks',
@@ -62,6 +62,7 @@
     if (!s.name) fields.name = 'Give the recipe a name.';
     if (!s.ingredients.length) fields.ingredients = 'Add at least one ingredient.';
     if (!s.steps.length) fields.steps = 'Add at least one step.';
+    if (JSON.stringify(s).length > LIMITS.snapshotChars) fields.size = 'This recipe is too long to publish. Shorten the steps, notes or sub-recipes.';
     if (hasPhoto) {
       if (!pics || !squareJpeg(pics.photo, LIMITS.photoBytes) || !squareJpeg(pics.thumb, LIMITS.thumbBytes)) fields.photo = 'The photo must be a square JPEG under about 120 KB.';
       if (imageKey !== undefined && !KEY.test(String(imageKey))) fields.photo = 'The photo could not be read.';

@@ -16,3 +16,11 @@ The first preview had its own look. This version loads the real `recipes.js` and
 - `recipes-publishing-preview/`: hidden page (noindex, unlinked, fake data, forgets on reload), fake server, screens.
 - Tests: `node --test tests/recipes-pub/*.test.js` and `tests/browser/recipes-pub-preview.spec.js`.
 - Not in this slice: cookbooks, real backend, real photo cropping, PDF export. Fake-backend tests do not prove live permissions.
+
+## v1.51.99.57: live wiring (sharing OFF for every family until its owner turns it on)
+
+- Recipes screen: a lock ("Private to you") or two people ("Published to [family]") badge on every recipe card and recipe page; My Recipes / My Cookbooks / Family Library tabs; an All / Private / Published filter on My Recipes; the Family Library lists everyone's published recipes with yours marked "Yours".
+- Server: `function/src/recipes.js` (actions `recipesStatus`, `recipesSetEnabled`, `recipesMine`, `recipesLibrary`, `recipesGet`, `recipesPublish`, `recipesUpdate`, `recipesUnpublish`), rules mirror `function/src/recipes-rules.js` (a test checks it agrees with `recipes-pub-core.js`), tables `recipePubs` and `recipeState` (see RECIPES-SHARING-CONSOLE-COMMANDS.md). Photo: one fixed square JPEG in the media bucket, thumbnail in the row.
+- Off means off: until the owner turns it on, or if the function does not know the actions yet, every new control hides and the Recipe Book looks as it did before.
+- Tests: function 189 pass (11 new in test/recipes.test.js), rules 14, preview 47, recipes-native 59, hub 56, ui-followups 35.
+- Not claimed: PDF export of published recipes, cookbooks publishing (placeholders only), real-device checks of the 20-item list.

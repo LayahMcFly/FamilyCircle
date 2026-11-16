@@ -18,6 +18,7 @@ import dnsp from 'node:dns/promises';
 import { fetchLinkPicture, get as realGet } from './link-picture.js';
 import { etsyListingId, fetchEtsyPicture, makeEtsyCache, realGetApi, ETSY_NOTICE } from './etsy.js';
 import { createGiving } from './giving.js';
+import { createRecipes } from './recipes.js';
 
 export const TABLES = {
   families: 'families',
@@ -546,6 +547,8 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
   const etsyKey = cfg.etsyApiKey || '';
   const etsyDeps = cfg.etsyDeps || { lookup: dnsp.lookup, get: realGet, getApi: realGetApi };
   const etsy = { listingId: etsyListingId, enabled: () => !!etsyKey, fetch: (id, size) => fetchEtsyPicture(id, size, etsyKey, etsyDeps), cache: makeEtsyCache(now), notice: ETSY_NOTICE };
+  // Recipe family publishing. Built but OFF for every family until its owner turns it on. See recipes.js.
+  const recipes = createRecipes({ storage, photoBucket: cfg.givingBucketId || 'family-media', teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, requireMember, idOf, bad, forbidden, ApiError, sdkCode, now });
   const giving = createGiving({ etsy, linkPicture: cfg.linkPicture === undefined ? fetchLinkPicture : cfg.linkPicture, storage, photoBucket: cfg.givingBucketId || 'family-media', teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable: TABLES.profiles });
 
   const actions = {
@@ -553,6 +556,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     ...chat.actions,
     ...board.actions,
     ...giving.actions,
+    ...recipes.actions,
     /** Lists the caller's confirmed, registered families. Also keeps the `family` label in sync. */
     async listFamilies({ user }) {
       const mine = await confirmedMemberships(user);
@@ -1338,6 +1342,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       const profDone = await deleteWhere(TABLES.profiles, byFamily, deadline, async (p) => { await deleteFileQuiet(p.avatarFileId); try { const a = JSON.parse(p.about || '[]'); const b = a.find((x) => x && x.key === 'banner'); const v = b && b.items && b.items[0]; if (typeof v === 'string' && v.startsWith('file:')) await deleteFileQuiet(v.slice(5)); } catch (e) { /* no banner */ } });
       if (!profDone) return { done: false };
       if (!(await chat.purgeFamily(familyId, deleteWhere, deadline))) return { done: false };
+      try { if (!(await recipes.purgeFamily(familyId, deleteWhere, deadline))) return { done: false }; } catch (e) { /* recipe tables not set up yet */ }
       await deleteRow(TABLES.families, familyId);
       try {
         await teams.delete({ teamId: familyId });
@@ -1388,7 +1393,9 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     // the file cleanup above is unaffected and the next run tries again.
     let givingPurged = 0;
     try { givingPurged = (await giving.sweepGiving(deadline)).purged; } catch (e) { givingPurged = 0; }
-    return { removed, givingPurged };
+    let recipesPurged = 0;
+    try { recipesPurged = (await recipes.sweepRecipes(deadline)).purged; } catch (e) { recipesPurged = 0; }
+    return { removed, givingPurged, recipesPurged };
   }
 
   /* ---------- entry ---------- */

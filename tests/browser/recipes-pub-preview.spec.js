@@ -146,6 +146,18 @@ const overflow = p => p.evaluate(() => document.documentElement.scrollWidth > do
       check('I @' + w + ' no horizontal scroll and no page errors', !(await overflow(page)) && log.errors.length === 0, JSON.stringify(log.errors));
       await ctx.close(); } }
 
+  { const ctx = await browser.newContext({ viewport: { width: 1000, height: 900 } }), page = await ctx.newPage();   // J. sharing off for the family (the default): the Recipe Book looks as it did before
+    await page.goto(URL_() + '?sharing=off'); await page.waitForSelector('.rc-card'); await pause(page); await pause(page);
+    check('J off: no badges, no section tabs, no sharing panel text', (await page.locator('.rc-pub').count()) === 0 && (await page.locator('.rc-sections').count()) === 0 && !/Private to you/.test(await text(page)), await text(page));
+    check('J off: the owner sees one card offering to turn sharing on', (await page.locator('#rc-turnon').count()) === 1, '');
+    await openCard(page, "Gran's Sourdough");
+    check('J off: a recipe page has no Sharing panel', (await page.locator('.rc-pubpanel').count()) === 0, '');
+    await page.goto(URL_() + '?sharing=off#/recipes'); await page.waitForSelector('.rc-card'); await who(page, 'Sam Sample'); await page.waitForSelector('.rc-card'); await pause(page);
+    check('J off: an admin who is not the owner sees no turn-on card', (await page.locator('#rc-turnon').count()) === 0 && (await page.locator('.rc-sections').count()) === 0, '');
+    await who(page, 'Rae Sample'); await page.waitForSelector('#rc-turnon'); await page.click('#rc-turnon button'); await dlgBtn(page, 'Turn on').click(); await pause(page); await pause(page);
+    check('J turning it on shows the sections and badges', (await page.locator('.rc-sections').count()) === 1 && (await page.locator('.rc-pub').count()) > 0, await text(page));
+    await ctx.close(); }
+
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })();

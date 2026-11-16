@@ -23,7 +23,7 @@
      *  Any failure (including a server that does not know these actions yet) leaves sharing OFF, so the Recipe Book looks exactly as it did before. */
     function ensure() {
       var id = famId(); if (!id || st.key === id || st.loading) return;
-      st.loading = true; var asked = id;
+      st.loading = true; var asked = id; st.enabled = null; st.canTurnOn = false; st.pubs = {};
       Promise.resolve(o.call('status', {})).then(function (s) {
         if (famId() !== asked) return null;
         st.enabled = !!(s && s.ok && s.enabled); st.canTurnOn = !!(s && s.ok && s.canTurnOn);
