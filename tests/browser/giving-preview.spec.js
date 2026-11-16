@@ -459,6 +459,46 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
       check('X2 ' + label + ' exchanges list has no sideways scroll', !(await overflow(c2.page)), ''); await c2.ctx.close(); }
     await ctx.close(); }
 
+  // X3. group gifts: a tracker only, hidden from the person it is for
+  { const { ctx, page } = await open(browser); await settle(page);
+    check('X3 an adult sees the Group gift icon with the open count', (await page.locator('#gv-giftsbtn .gv-circle-count').innerText()).trim() === '1', '');
+    await who(page, 'Una Sample'); await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('#gv-minebtn');
+    check('X3 the person the gift is for (a kid) has no Group gift icon', (await page.locator('#gv-giftsbtn').count()) === 0, '');
+    await page.goto(PREVIEW() + '#/giving/gifts'); await page.waitForSelector('.gv-blocked, .gv-page'); await settle(page);
+    check('X3 typing the address gives "not available" and shows nothing about the gift', /not available/i.test((await text(page)).replace(/ USD/g, '')) && !/Gran/.test((await text(page)).replace(/ USD/g, '')), (await text(page)).replace(/ USD/g, ''));
+    await who(page, 'Sam Sample'); await goto(page, '/gifts');
+    check('X3 Sam sees the gift, who it is for, the total and his confirmed part', /Gran.s birthday present/.test((await text(page)).replace(/ USD/g, '')) && /For Una Sample/.test((await text(page)).replace(/ USD/g, '')) && /\$20\.00 of \$120\.00/.test((await text(page)).replace(/ USD/g, '')) && /Your part confirmed/.test((await text(page)).replace(/ USD/g, '')), (await text(page)).replace(/ USD/g, ''));
+    await page.click('.gv-row:has-text("Gran")'); await page.waitForSelector('#gv-gsum'); await settle(page);
+    check('X3 the detail shows a progress bar with a text label and the no-money line', (await page.locator('.gv-bar[role=progressbar]').getAttribute('aria-valuenow')) === '16' && /never takes, holds or sends money/.test((await text(page)).replace(/ USD/g, '')), (await text(page)).replace(/ USD/g, ''));
+    check('X3 Sam sees no list of who gave what and no organiser buttons', (await page.locator('#gv-gcontribs, #gv-gorg, #gv-gclose, #gv-gdelete').count()) === 0, '');
+    check('X3 a confirmed part cannot be changed by Sam', /You put in \$20\.00\. Rae Sample confirmed it/.test((await text(page)).replace(/ USD/g, '')) && (await page.locator('#gv-gmark').count()) === 0, (await text(page)).replace(/ USD/g, ''));
+    await who(page, 'Tia Sample'); await goto(page, '/gifts'); await page.click('.gv-row:has-text("Gran")'); await page.waitForSelector('#gv-gmark'); await settle(page);
+    await page.fill('#gv-gamount', 'abc'); await page.click('#gv-gmark'); await settle(page);
+    check('X3 a bad amount shows a message under the field', /plain amount/.test(await page.locator('#gv-gamount-err').innerText()), '');
+    await page.fill('#gv-gamount', '25'); await page.fill('#gv-gcnote', 'Venmo'); await page.click('#gv-gmark'); await settle(page);
+    check('X3 Tia marked $25, and it is waiting, not counted yet', /You marked \$25\.00\. Waiting for Rae Sample/.test((await text(page)).replace(/ USD/g, '')) && /\$20\.00 of \$120\.00 confirmed/.test((await text(page)).replace(/ USD/g, '')), (await text(page)).replace(/ USD/g, ''));
+    await who(page, 'Rae Sample'); await goto(page, '/'); check('X3 Rae was told Tia marked a contribution', /Tia Sample marked a contribution/.test((await text(page)).replace(/ USD/g, '')), '');
+    await goto(page, '/gifts'); await page.click('.gv-row:has-text("Gran")'); await page.waitForSelector('#gv-gcontribs'); await settle(page);
+    check('X3 the organiser sees who gave what and $25 waiting', /Tia Sample · \$25\.00 · waiting · Venmo/.test((await text(page)).replace(/ USD/g, '')) && /\$25\.00 more is waiting/.test((await text(page)).replace(/ USD/g, '')), (await text(page)).replace(/ USD/g, ''));
+    await page.click('[data-gconfirm]'); await settle(page);
+    check('X3 confirming moves it into the total', /\$45\.00 of \$120\.00 confirmed/.test((await text(page)).replace(/ USD/g, '')) && (await page.locator('#gv-gpending').count()) === 0, (await text(page)).replace(/ USD/g, ''));
+    await page.selectOption('#gv-grecwho', { label: 'Quinn Sample' }).catch(() => {});
+    check('X3 the person it is for cannot be recorded and is not in the dropdown', !(await page.locator('#gv-grecwho option', { hasText: 'Una' }).count()), '');
+    await page.selectOption('#gv-grecwho', { label: 'Ada Admin' }); await page.fill('#gv-grecamt', '75'); await page.click('#gv-grecbtn'); await settle(page);
+    check('X3 recording cash makes it confirmed and reaches the goal', /\$120\.00 of \$120\.00 confirmed/.test((await text(page)).replace(/ USD/g, '')) && /Goal reached/.test((await text(page)).replace(/ USD/g, '')), (await text(page)).replace(/ USD/g, ''));
+    await page.click('#gv-gclose'); await page.click('#gv-d-ok'); await settle(page);
+    check('X3 closing shows Closed and offers Reopen', /Closed/.test((await text(page)).replace(/ USD/g, '')) && /Reopen/.test(await page.locator('#gv-gclose').innerText()), '');
+    await goto(page, '/gifts/new'); await page.fill('#gv-gtitle', ''); await page.click('#gv-gsave'); await settle(page);
+    check('X3 a name is required, with a message under the field', /Give the gift a name/.test(await page.locator('#gv-gtitle-err').innerText()), '');
+    await page.fill('#gv-gtitle', 'Teacher thank-you'); await page.fill('#gv-ggoal', '60'); await page.click('#gv-gsave'); await page.waitForSelector('#gv-gsum'); await settle(page);
+    check('X3 a new gift starts at $0 of $60', /\$0\.00 of \$60\.00 confirmed/.test((await text(page)).replace(/ USD/g, '')), (await text(page)).replace(/ USD/g, ''));
+    await page.click('#gv-gdelete'); await page.click('#gv-d-ok'); await page.waitForSelector('#gv-gifts, #gv-nogift'); await settle(page);
+    check('X3 deleting returns to the list without it', !/Teacher thank-you/.test((await text(page)).replace(/ USD/g, '')), '');
+    for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
+      const c2 = await open(browser, { w, h, hash: '#/giving/gifts' }); await settle(c2.page);
+      check('X3 ' + label + ' group gifts list has no sideways scroll', !(await overflow(c2.page)), ''); await c2.ctx.close(); }
+    await ctx.close(); }
+
   // H. layout at phone and desktop widths, plus screenshots
   for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
     const { ctx, page } = await open(browser, { w, h });

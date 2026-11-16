@@ -24,6 +24,7 @@
     alert: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/>',
     hands: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.9-2.5.9-2.5 1.9 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/>',
     swap: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
     tag: '<path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/>',
     badge: '<rect x="4" y="3" width="16" height="18" rx="3"/><circle cx="12" cy="10" r="2.6"/><path d="M7.5 17c.6-2 2.4-3 4.5-3s3.9 1 4.5 3"/>',
@@ -118,6 +119,12 @@
       var p = (location.hash || '').replace(/^#\/?/, '').split('/');
       if (p[0] !== 'giving') return { name: 'home' };
       if (p[1] === 'emergency') return p[2] === 'new' ? { name: 'emergencyNew' } : { name: 'emergencies' };
+      if (p[1] === 'gifts') {
+        if (p[2] === 'new') return { name: 'giftForm' };
+        if (p[2] && p[3] === 'edit') return { name: 'giftForm', id: p[2] };
+        if (p[2]) return { name: 'gift', id: p[2] };
+        return { name: 'gifts' };
+      }
       if (p[1] === 'exchanges') {
         if (p[2] === 'new') return { name: 'exchangeForm' };
         if (p[2] && p[3] === 'edit') return { name: 'exchangeForm', id: p[2] };
@@ -227,6 +234,7 @@
         circleBtn({ id: 'gv-familybtn', href: '#/giving/family', icon: 'users', label: 'Family', count: famCount, aria: 'Family wishlists, ' + famCount }),
         r.me.adult ? circleBtn({ id: 'gv-reservedbtn', href: '#/giving/reserved', icon: 'tag', label: 'Reserved', count: r.reservations.length, aria: 'Items you reserved, ' + r.reservations.length }) : null,
         r.me.adult && r.exchanges !== undefined ? circleBtn({ id: 'gv-exchangesbtn', href: '#/giving/exchanges', icon: 'swap', label: 'Exchange', count: r.exchanges || 0, aria: 'Gift exchanges, ' + (r.exchanges || 0) }) : null,
+        r.me.adult && r.gifts !== undefined ? circleBtn({ id: 'gv-giftsbtn', href: '#/giving/gifts', icon: 'coin', label: 'Group gift', count: r.gifts || 0, aria: 'Group gifts, ' + (r.gifts || 0) + ' open' }) : null,
         circleBtn({ id: 'gv-requestslink', href: '#/giving/requests', icon: 'hands', label: 'Requests', count: openReq + waitReq, aria: 'Family requests, ' + openReq + (openReq === 1 ? ' open request' : ' open requests') + (waitReq ? ', ' + waitReq + ' waiting for approval' : '') }),
         r.canCreateList ? circleBtn({ id: 'gv-newlist', href: '#/giving/list/new', icon: 'plus', label: 'New list', aria: 'New wishlist' }) : null,
         r.canManageAges ? circleBtn({ id: 'gv-peoplebtn', href: '#/giving/people', icon: 'badge', label: 'Adults', aria: 'Who is an adult' }) : null,
@@ -574,6 +582,9 @@
         st.data = r; var page = renderHome(r); fin(page);
         if (real) api('status').then(function (s) { if (s.stale || mine !== token || !s.ok || !s.canTurnOn || !page.isConnected) return; page.appendChild(ownerSwitchPanel()); });
       });
+      if (rt.name === 'gifts') return api('giftsHome').then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); fin(renderGifts(r)); });
+      if (rt.name === 'giftForm' && !rt.id) return api('giftsHome').then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); fin(renderGiftForm(null, r.who)); });
+      if (rt.name === 'gift' || rt.name === 'giftForm') return Promise.all([api('giftGet', { giftId: rt.id }), rt.name === 'giftForm' ? api('giftsHome') : Promise.resolve({ ok: true })]).then(function (rs) { var r = rs[0]; if (r.stale || rs[1].stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); fin(rt.name === 'gift' ? renderGift(r.gift) : (r.gift.mine && r.gift.status === 'open' ? renderGiftForm(r.gift, rs[1].who || []) : blocked({ error: 'not_available' }))); });
       if (rt.name === 'exchanges') return api('exchangesHome').then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); fin(renderExchanges(r)); });
       if (rt.name === 'exchangeForm' && !rt.id) return fin(renderExchangeForm(null));
       if (rt.name === 'exchange' || rt.name === 'exchangeForm') return api('exchangeGet', { exchangeId: rt.id }).then(function (r) { if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r)); fin(rt.name === 'exchange' ? renderExchange(r.exchange) : (r.exchange.mine && r.exchange.status === 'open' ? renderExchangeForm(r.exchange) : blocked({ error: 'not_available' }))); });
@@ -737,6 +748,103 @@
       page.appendChild(h('div', { class: 'gv-errslot' })); page.appendChild(acts);
       return page;
     }
+
+    /* ---------- Group gifts (Phase D1): a tracker only. Nothing here takes, holds or sends money. ---------- */
+    var WHO_GIFT = 'Adults in the family can see this and chip in, except the person it is for, who never sees it. Kids cannot. Only the organiser sees who gave how much. Everyone else sees the total.';
+    function giftBar(g) {
+      var pct = g.goalCents ? Math.min(100, Math.floor(g.confirmedCents * 100 / g.goalCents)) : 0;
+      return h('div', { class: 'gv-bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct), 'aria-label': C.fmtMoney(g.confirmedCents, g.currency) + ' of ' + C.fmtMoney(g.goalCents, g.currency) + ' confirmed' }, h('span', { class: 'gv-bar-fill', style: 'width:' + pct + '%' }));
+    }
+    function renderGifts(r) {
+      var page = h('div', { class: 'gv-page' }, backLink('#/giving', 'Back to Giving Center'));
+      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Group gifts', 'data-focus': '' })));
+      page.appendChild(h('p', { class: 'muted', text: 'Chip in together for one gift. ' + C.GIFT_MONEY }));
+      page.appendChild(h('nav', { class: 'gv-quick', 'aria-label': 'Group gifts' }, circleBtn({ id: 'gv-newgift', href: '#/giving/gifts/new', icon: 'plus', label: 'New group gift' })));
+      if (!r.gifts.length) page.appendChild(h('p', { class: 'muted', id: 'gv-nogift', text: 'No group gifts yet.' }));
+      else page.appendChild(h('ul', { class: 'gv-rows', id: 'gv-gifts' }, r.gifts.map(function (g) {
+        return h('li', null, h('a', { class: 'gv-row', href: '#/giving/gifts/' + g.id, 'data-gift': g.id },
+          h('strong', { text: g.title }),
+          h('span', { class: 'muted', text: (g.forName ? 'For ' + g.forName + ' · ' : '') + C.fmtMoney(g.confirmedCents, g.currency) + ' of ' + C.fmtMoney(g.goalCents, g.currency) + (g.status === 'closed' ? ' · Closed' : g.reached ? ' · Goal reached' : '') }),
+          giftBar(g), g.mine ? badge('You organise', '') : g.myStatus ? badge(g.myStatus === 'confirmed' ? 'Your part confirmed' : 'Waiting for confirmation', g.myStatus === 'confirmed' ? 'is-done' : '') : null));
+      })));
+      return page;
+    }
+    function renderGiftForm(existing, who) {
+      var f = {}, cur = existing ? existing.currency : 'USD';
+      f.title = h('input', { type: 'text', id: 'gv-gtitle', autocomplete: 'off', placeholder: 'For example: Gran’s birthday present', value: existing ? existing.title : '' });
+      f.forId = h('select', { id: 'gv-gfor', 'aria-label': 'Who is it for' }, h('option', { value: '', text: 'Nobody in particular' }), who.map(function (w) { return h('option', { value: w.userId, text: w.name }); }));
+      f.forId.value = existing && existing.forId ? existing.forId : '';
+      f.goal = h('input', { type: 'text', id: 'gv-ggoal', inputmode: 'decimal', autocomplete: 'off', placeholder: 'For example: 120', value: existing ? (existing.goalCents / 100).toFixed(2).replace(/\.00$/, '') : '' });
+      f.each = h('input', { type: 'text', id: 'gv-geach', inputmode: 'decimal', autocomplete: 'off', placeholder: 'For example: 20 (optional)', value: existing && existing.eachCents ? (existing.eachCents / 100).toFixed(2).replace(/\.00$/, '') : '' });
+      f.currency = h('select', { id: 'gv-gcurrency' }, h('option', { value: '', text: 'Choose currency' }), Object.keys(C.CURRENCIES).map(function (c) { return h('option', { value: c, text: c + ' · ' + C.CURRENCIES[c].name }); })); f.currency.value = cur;
+      f.note = h('textarea', { id: 'gv-gnote', rows: 3, placeholder: 'How people should pay you, for example "Venmo or cash to me" (optional)' }); f.note.value = existing ? existing.note : '';
+      var ids = { title: 'gv-gtitle', forId: 'gv-gfor', goal: 'gv-ggoal', each: 'gv-geach', currency: 'gv-gcurrency', note: 'gv-gnote' };
+      var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' }), back = existing ? '#/giving/gifts/' + existing.id : '#/giving/gifts';
+      var form = h('form', { class: 'card gv-form', novalidate: '', onsubmit: function (e) {
+        e.preventDefault(); msg.textContent = ''; Object.keys(ids).forEach(function (k) { setErr(ids[k], ''); });
+        api('giftSave', { giftId: existing && existing.id, title: f.title.value, forId: f.forId.value, goal: f.goal.value, each: f.each.value, currency: f.currency.value, note: f.note.value }).then(function (r) {
+          if (r.stale) return;
+          if (!r.ok) { var first = null; Object.keys(r.fields || {}).forEach(function (k) { if (ids[k]) { setErr(ids[k], r.fields[k]); if (!first) first = document.getElementById(ids[k]); } }); if (!first) msg.textContent = r.message; if (first) first.focus(); return; }
+          toast(existing ? 'Saved.' : 'Group gift started. The adults who can see it were told.'); go('#/giving/gifts/' + r.gift.id);
+        });
+      } }, h('h1', { text: existing ? 'Edit group gift' : 'New group gift', 'data-focus': '' }),
+        field('gv-gtitle', 'Name', f.title), field('gv-gfor', 'Who is it for? (optional)', f.forId, '', 'They will not see this gift, so it stays a surprise.'),
+        h('div', { class: 'gv-pair' }, field('gv-ggoal', 'Goal', f.goal), field('gv-gcurrency', 'Currency', f.currency)),
+        field('gv-geach', 'Suggested amount per person (optional)', f.each, '', 'A suggestion only.'), field('gv-gnote', 'Note (optional)', f.note),
+        whoNote('gv-gwho', WHO_GIFT), h('p', { class: 'hint', text: C.GIFT_MONEY }), msg,
+        h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-gsave', text: 'Save' }), h('a', { class: 'btn secondary', href: back, text: 'Cancel' })));
+      return h('div', { class: 'gv-page' }, backLink(back, 'Back'), form);
+    }
+    function renderGift(g) {
+      var page = h('div', { class: 'gv-page' }, backLink('#/giving/gifts', 'Back to group gifts')), $ = function (c) { return C.fmtMoney(c, g.currency); };
+      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { id: 'gv-gtitle-h', text: g.title, 'data-focus': '' })));
+      page.appendChild(h('p', { class: 'gv-badges' }, g.status === 'closed' ? badge('Closed', '') : g.reached ? badge('Goal reached', 'is-done') : badge('Open', ''), g.mine ? badge('You organise', '') : null));
+      page.appendChild(h('p', { class: 'muted', text: 'Organised by ' + g.organiserName + (g.forName ? ' · For ' + g.forName : '') }));
+      page.appendChild(h('section', { class: 'card', id: 'gv-gprogress' }, h('p', { class: 'gv-big', id: 'gv-gsum', text: $(g.confirmedCents) + ' of ' + $(g.goalCents) + ' confirmed' }), giftBar(g),
+        g.mine && g.pendingCents ? h('p', { class: 'hint', id: 'gv-gpending', text: $(g.pendingCents) + ' more is waiting for you to confirm.' }) : null,
+        g.eachCents ? h('p', { class: 'hint', text: 'Suggested: ' + $(g.eachCents) + ' each.' }) : null));
+      if (g.note) page.appendChild(h('p', { id: 'gv-gnote-t', text: g.note }));
+      page.appendChild(h('p', { class: 'hint', text: C.GIFT_MONEY }));
+      var act = function (name, extra, okMsg) { return api(name, Object.assign({ giftId: g.id }, extra || {})).then(function (r) { if (r.stale) return; if (!r.ok) return showErr(r); if (okMsg) toast(okMsg); render(); }); };
+      // my part
+      var mineSec = h('section', { class: 'card', id: 'gv-gmine' }, h('h2', { class: 'gv-sub', text: 'Your part' }));
+      if (g.myStatus === 'confirmed' && !g.mine) mineSec.appendChild(h('p', { id: 'gv-gmystatus', text: 'You put in ' + $(g.myCents) + '. ' + g.organiserName + ' confirmed it. Thank you.' }));
+      else if (g.status === 'closed') mineSec.appendChild(h('p', { class: 'muted', text: g.myCents ? 'You put in ' + $(g.myCents) + '.' : 'This group gift is closed.' }));
+      else {
+        if (g.myStatus === 'marked') mineSec.appendChild(h('p', { id: 'gv-gmystatus', text: 'You marked ' + $(g.myCents) + '. Waiting for ' + g.organiserName + ' to confirm.' }));
+        var amt = h('input', { type: 'text', id: 'gv-gamount', inputmode: 'decimal', autocomplete: 'off', placeholder: g.eachCents ? 'For example: ' + (g.eachCents / 100) : 'Amount', value: g.myCents ? (g.myCents / 100).toFixed(2).replace(/\.00$/, '') : '' });
+        var gnote = h('input', { type: 'text', id: 'gv-gcnote', autocomplete: 'off', placeholder: 'A short note (optional)', value: g.myNote || '' });
+        var cmsg = h('p', { class: 'ev-formmsg', role: 'alert' });
+        mineSec.appendChild(h('form', { novalidate: '', class: 'gv-form', onsubmit: function (e) { e.preventDefault(); cmsg.textContent = ''; setErr('gv-gamount', ''); setErr('gv-gcnote', '');
+          api('giftContribute', { giftId: g.id, amount: amt.value, note: gnote.value }).then(function (r) { if (r.stale) return; if (!r.ok) { if (r.fields && r.fields.amount) { setErr('gv-gamount', r.fields.amount); document.getElementById('gv-gamount').focus(); } else if (r.fields && r.fields.note) setErr('gv-gcnote', r.fields.note); else cmsg.textContent = r.message; return; } toast(g.mine ? 'Added.' : 'Marked. ' + g.organiserName + ' was told.'); render(); }); } },
+          field('gv-gamount', g.myStatus ? 'Change the amount you put in' : 'Amount you put in', amt, '', 'After you paid ' + g.organiserName + ' your usual way.'), field('gv-gcnote', 'Note (optional)', gnote), cmsg,
+          h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-gmark', text: g.myStatus ? 'Update' : 'I put this in' }),
+            g.myStatus ? h('button', { type: 'button', class: 'btn secondary', id: 'gv-gwithdraw', text: 'Remove my part', onclick: function () { act('giftWithdraw', null, 'Removed.'); } }) : null)));
+      }
+      page.appendChild(mineSec);
+      if (g.mine) {
+        var org = h('section', { class: 'card', id: 'gv-gorg' }, h('h2', { class: 'gv-sub', text: 'Contributions (only you see this)' }));
+        if (!g.contributions.length) org.appendChild(h('p', { class: 'muted', id: 'gv-gnone', text: 'No one has marked anything yet.' }));
+        else org.appendChild(h('ul', { class: 'gv-rows', id: 'gv-gcontribs' }, g.contributions.map(function (c) {
+          return h('li', { class: 'gv-xrow', 'data-gc': c.userId }, h('span', { text: c.name + ' · ' + $(c.cents) + (c.status === 'confirmed' ? ' · confirmed' : ' · waiting') + (c.note ? ' · ' + c.note : '') }),
+            c.status === 'marked' ? h('span', { class: 'gv-xbtns' }, h('button', { type: 'button', class: 'btn small', 'data-gconfirm': c.userId, 'aria-label': 'Confirm ' + c.name + '’s ' + $(c.cents), text: 'Confirm', onclick: function () { act('giftConfirm', { userId: c.userId }, 'Confirmed. ' + c.name + ' was told.'); } }), h('button', { type: 'button', class: 'btn ghost small', 'data-gdecline': c.userId, 'aria-label': 'Not received from ' + c.name, text: 'Not received', onclick: function () { confirmDialog('Not received from ' + c.name + '?', c.name + ' is told you could not confirm it.', 'Not received', function () { act('giftDecline', { userId: c.userId }, 'Removed. ' + c.name + ' was told.'); }); } })) : null);
+        })));
+        if (g.status === 'open' && g.canRecord.length) {
+          var who = h('select', { id: 'gv-grecwho', 'aria-label': 'Person' }, h('option', { value: '', text: 'Person' }), g.canRecord.map(function (w) { return h('option', { value: w.userId, text: w.name }); }));
+          var ramt = h('input', { type: 'text', id: 'gv-grecamt', inputmode: 'decimal', autocomplete: 'off', placeholder: 'Amount' }), rmsg = h('p', { class: 'ev-formmsg', role: 'alert', id: 'gv-grecmsg' });
+          org.appendChild(h('h3', { class: 'gv-sub', text: 'Record cash someone handed you' }));
+          org.appendChild(h('div', { class: 'gv-xpick' }, who, ramt, h('button', { type: 'button', class: 'btn secondary small', id: 'gv-grecbtn', text: 'Record', onclick: function () { rmsg.textContent = ''; if (!who.value) { rmsg.textContent = 'Choose a person.'; return; }
+            api('giftRecord', { giftId: g.id, userId: who.value, amount: ramt.value }).then(function (r) { if (r.stale) return; if (!r.ok) { rmsg.textContent = (r.fields && (r.fields.amount || r.fields.note)) || r.message; return; } toast('Recorded. They were told.'); render(); }); } })), rmsg);
+        }
+        page.appendChild(org);
+        var acts = h('div', { class: 'gv-actions' });
+        if (g.status === 'open') acts.appendChild(h('a', { class: 'btn secondary', id: 'gv-gedit', href: '#/giving/gifts/' + g.id + '/edit', text: 'Edit' }));
+        acts.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'gv-gclose', text: g.status === 'open' ? 'Close this gift' : 'Reopen', onclick: function () { if (g.status === 'closed') return act('giftSetStatus', { closed: false }, 'Reopened.'); confirmDialog('Close this group gift?', 'No one can add more. You can reopen it later.', 'Close', function () { act('giftSetStatus', { closed: true }, 'Closed.'); }, true); } }));
+        acts.appendChild(h('button', { type: 'button', class: 'btn danger', id: 'gv-gdelete', text: 'Delete', onclick: function () { confirmDialog('Delete ' + g.title + '?', 'Everyone who contributed is told. This cannot be undone.', 'Delete', function () { api('giftDelete', { giftId: g.id }).then(function (r) { if (r.stale) return; if (!r.ok) return showErr(r); toast('Deleted.'); go('#/giving/gifts'); }); }); } }));
+        page.appendChild(acts);
+      }
+      return page;
+    }
     function requestLimitMsg() { return h('section', { class: 'card' }, h('h1', { text: 'New request', 'data-focus': '' }), h('p', { text: 'You have ' + C.REQ.open + ' open requests, which is the limit. Close one to add another.' }), h('a', { class: 'btn secondary', href: '#/giving/requests', text: 'Back to requests' })); }
     var TYPE_TITLE = { ride: 'I need a ride', stay: 'I need a place to stay tonight', care: 'I need someone to watch the kids', cost: 'I need help with a small cost', other: '' };
     function mapsUrl(q) { return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q); }
@@ -892,7 +1000,7 @@
     function errorWithRetry(r) { return h('section', { class: 'card' }, h('h1', { text: 'Giving Center', 'data-focus': '' }), errorBox(r), h('button', { type: 'button', class: 'btn', id: 'gv-retry', text: 'Try again', onclick: function () { render(); } })); }
     function refresh() {
       var y = window.scrollY; var rt = route(), mineToken = ++token;
-      if (/^(request|emergenc|section|exchange)/.test(rt.name)) return render();
+      if (/^(request|emergenc|section|exchange|gift)/.test(rt.name)) return render();
       var redo = rt.name === 'home' ? api('home') : api('listGet', { listId: rt.id });
       return redo.then(function (r) {
         if (r.stale || mineToken !== token) return;

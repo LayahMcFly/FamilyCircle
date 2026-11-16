@@ -197,6 +197,27 @@
     return place(0) ? { ok: true, pairs: pairs } : { ok: false, pairs: null };
   }
 
-  return { EXCHANGE: EXCHANGE, EXCHANGE_NO_DRAW: EXCHANGE_NO_DRAW, validateExchange: validateExchange, drawPairs: drawPairs, EMERGENCY: EMERGENCY, EMERGENCY_TYPES: EMERGENCY_TYPES, ETA: ETA, EMERGENCY_911: EMERGENCY_911, EMERGENCY_PRIVACY: EMERGENCY_PRIVACY, validateEmergency: validateEmergency, REQ: REQ, REQUEST_KINDS: REQUEST_KINDS, validateRequest: validateRequest, validatePledge: validatePledge, REPORT_REASONS: REPORT_REASONS, AUDIENCES: AUDIENCES, validateReport: validateReport, LIMITS: LIMITS, PRIORITIES: PRIORITIES, PRIORITY_LABEL: PRIORITY_LABEL, CURRENCIES: CURRENCIES, cleanUrl: cleanUrl, hostOf: hostOf, parseAmount: parseAmount, fmtMoney: fmtMoney,
+  /* ---------- Group gifts (Phase D1: a tracker only. No money is taken, held or sent.) ---------- */
+  var GIFT = { title: 80, note: 300, contribNote: 100, contributions: 40, open: 5 };
+  var GIFT_MONEY = 'Family Circle never takes, holds or sends money. Everyone pays however they normally would, then marks it here.';
+  function validateGift(b, memberIds) {
+    var errors = {}; b = b || {};
+    var title = trim(b.title), note = trim(b.note), forId = trim(b.forId), cur = trim(b.currency);
+    if (!title) errors.title = 'Give the gift a name, for example "Gran’s birthday present".'; else if (title.length > GIFT.title) errors.title = 'Names can be up to ' + GIFT.title + ' characters.';
+    if (note.length > GIFT.note) errors.note = 'Notes can be up to ' + GIFT.note + ' characters.';
+    var goal = parseAmount(b.goal); if (goal === '') errors.goal = 'Enter the goal amount, for example 120.'; else if (goal === null) errors.goal = 'Use a plain amount like 120 or 120.50.';
+    var each = parseAmount(b.each); if (each === null) errors.each = 'Use a plain amount like 20, or leave it empty.';
+    if (!CURRENCIES[cur]) errors.currency = 'Choose a currency.';
+    if (forId && memberIds && memberIds.indexOf(forId) < 0) errors.forId = 'Choose someone in the family, or leave it empty.';
+    return { ok: !Object.keys(errors).length, errors: errors, value: { title: title, note: note, forId: forId, goalCents: typeof goal === 'number' ? goal : 0, eachCents: typeof each === 'number' ? each : 0, currency: cur } };
+  }
+  function validateContribution(b) {
+    var errors = {}; b = b || {}; var note = trim(b.note);
+    var cents = parseAmount(b.amount); if (cents === '') errors.amount = 'Enter the amount you put in, for example 20.'; else if (cents === null) errors.amount = 'Use a plain amount like 20 or 20.50.';
+    if (note.length > GIFT.contribNote) errors.note = 'Notes can be up to ' + GIFT.contribNote + ' characters.';
+    return { ok: !Object.keys(errors).length, errors: errors, value: { cents: typeof cents === 'number' ? cents : 0, note: note } };
+  }
+
+  return { GIFT: GIFT, GIFT_MONEY: GIFT_MONEY, validateGift: validateGift, validateContribution: validateContribution, EXCHANGE: EXCHANGE, EXCHANGE_NO_DRAW: EXCHANGE_NO_DRAW, validateExchange: validateExchange, drawPairs: drawPairs, EMERGENCY: EMERGENCY, EMERGENCY_TYPES: EMERGENCY_TYPES, ETA: ETA, EMERGENCY_911: EMERGENCY_911, EMERGENCY_PRIVACY: EMERGENCY_PRIVACY, validateEmergency: validateEmergency, REQ: REQ, REQUEST_KINDS: REQUEST_KINDS, validateRequest: validateRequest, validatePledge: validatePledge, REPORT_REASONS: REPORT_REASONS, AUDIENCES: AUDIENCES, validateReport: validateReport, LIMITS: LIMITS, PRIORITIES: PRIORITIES, PRIORITY_LABEL: PRIORITY_LABEL, CURRENCIES: CURRENCIES, cleanUrl: cleanUrl, hostOf: hostOf, parseAmount: parseAmount, fmtMoney: fmtMoney,
     totalsByCurrency: totalsByCurrency, validateList: validateList, validateItem: validateItem };
 });

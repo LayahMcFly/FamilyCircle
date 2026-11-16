@@ -138,3 +138,10 @@
 .gv-xpick select { flex: 1 1 140px; }
 .gv-match { text-align: center; }
 .gv-match h2 { margin: 4px 0 8px; }
+
+.gv-bar { height: 12px; border-radius: 999px; background: var(--line, rgba(0,0,0,.12)); overflow: hidden; margin: 8px 0; }
+.gv-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width .3s; }
+@media (prefers-reduced-motion: reduce) { .gv-bar-fill { transition: none; } }
+.gv-big { font-size: 1.25rem; font-weight: 700; margin: 0 0 4px; }
+.gv-xbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.gv-xrow { flex-wrap: wrap; }

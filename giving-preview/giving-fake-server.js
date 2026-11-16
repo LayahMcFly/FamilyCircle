@@ -33,6 +33,7 @@
   function create(options) {
     options = options || {};
     var families = {}, members = [], lists = {}, items = {}, notices = {}, reports = {};
+    var gifts = {};       // Phase D1: group gifts (a tracker, no money moves). contribs: userId -> { cents, status: marked|confirmed, note }
     var exchanges = {};   // Phase C: gift exchanges. Each holds its draw in `pairs` (giverId -> receiverId); no action ever returns that map.
     var requests = {}, pledges = {};   // Phase A: family requests and the pledges made on them
     var reservations = {};   // itemId -> row. One key per item = "unique index on itemId": a second insert for the same item is refused.
@@ -113,6 +114,30 @@
       return { ok: true, exchange: exchangeView(m, x) };
     }
 
+    /* ---------- Group gifts (Phase D1) ---------- */
+    var GF = C.GIFT;
+    function giftFor(m, id) { var g = gifts[id]; return g && g.familyId === m.familyId && !g.gone && m.adult && g.forId !== m.userId && membership(g.organiserId, g.familyId) ? g : null; }   // the person it is for never reaches it
+    function giftTotals(g) { var conf = 0, pend = 0; Object.keys(g.contribs).forEach(function (u) { var c = g.contribs[u]; if (membership(u, g.familyId)) { if (c.status === 'confirmed') conf += c.cents; else pend += c.cents; } }); return { confirmedCents: conf, pendingCents: pend }; }
+    function giftRow(m, g) {
+      var t = giftTotals(g), mine = g.contribs[m.userId], r = { id: g.id, title: g.title, forName: g.forId ? nameOf(g.familyId, g.forId) : '', status: g.status, currency: g.currency, goalCents: g.goalCents, confirmedCents: t.confirmedCents, organiserName: nameOf(g.familyId, g.organiserId), mine: g.organiserId === m.userId, reached: t.confirmedCents >= g.goalCents };
+      if (mine) { r.myCents = mine.cents; r.myStatus = mine.status; }
+      if (r.mine) r.pendingCents = t.pendingCents;
+      return r;
+    }
+    function giftView(m, g) {
+      var v = giftRow(m, g); v.note = g.note; v.eachCents = g.eachCents;
+      if (g.contribs[m.userId]) v.myNote = g.contribs[m.userId].note;
+      if (v.mine) {
+        v.contributions = Object.keys(g.contribs).filter(function (u) { return membership(u, g.familyId); }).map(function (u) { var c = g.contribs[u]; return { userId: u, name: nameOf(g.familyId, u), cents: c.cents, status: c.status, note: c.note }; });
+        v.canRecord = members.filter(function (o) { return o.familyId === g.familyId && o.active && o.adult && o.userId !== g.forId && o.userId !== m.userId && !g.contribs[o.userId]; }).map(function (o) { return { userId: o.userId, name: o.name }; });
+      }
+      return v;
+    }
+    function giftSet(m, g, userId, cents, note, status) {
+      if (Object.keys(g.contribs).length >= GF.contributions && !g.contribs[userId]) return fail('full', 'This group gift already has ' + GF.contributions + ' contributions.');
+      g.contribs[userId] = { cents: cents, note: note || '', status: status }; return null;
+    }
+
     /* ---------- Requests and pledges (Phase A) ---------- */
     var RQ = C.REQ;
     /** A request is reachable if it exists, its owner is still a member, and the viewer may see it:
@@ -184,6 +209,7 @@
         var out = { ok: true, lists: ls, reservations: mine, notices: (notices[m.userId] || []).slice(), canCreateList: ls.filter(function (x) { return x.mine; }).length < L.lists,
           me: { adult: !!m.adult }, canManageAges: isManager(m), canModerate: canModerate(m) };
         out.exchanges = exchangeCount(m);
+        if (m.adult) out.gifts = Object.keys(gifts).filter(function (k) { return giftFor(m, k) && gifts[k].status === 'open'; }).length;
         out.requests = { urgent: Object.keys(requests).map(function (k) { return settleUrgent(requests[k]); }).filter(function (q) { return q.urgent && q.status === 'open' && q.ownerId !== m.userId && requestFor(m, q.id); }).length, open: Object.keys(requests).filter(function (k) { var q = requests[k]; return q.status === 'open' && q.approval === 'approved' && requestFor(m, q.id); }).length };
         if (canModerate(m)) { out.openReports = open; out.requests.waiting = Object.keys(requests).filter(function (k) { var q = requests[k]; return q.approval === 'pending' && q.ownerId !== m.userId && requestFor(m, q.id); }).length; }   // everyone else gets no report field at all
         return out;
@@ -350,6 +376,69 @@
         x.members.forEach(function (u) { if (u !== m.userId) notify(u, x.name + ' was deleted by ' + m.name + '.'); });
         x.gone = true; x.pairs = {}; return { ok: true };
       },
+
+      /* ----- Group gifts (Phase D1). Adults only; the person a gift is for never sees it. ----- */
+      giftsHome: function (m) {
+        if (!m.adult) return NA();
+        var ls = Object.keys(gifts).map(function (k) { return gifts[k]; }).filter(function (g) { return giftFor(m, g.id); }).sort(function (a, b) { return b.n - a.n; });
+        return { ok: true, gifts: ls.map(function (g) { return giftRow(m, g); }), who: members.filter(function (o) { return o.familyId === m.familyId && o.active && o.userId !== m.userId; }).map(function (o) { return { userId: o.userId, name: o.name }; }) };
+      },
+      giftGet: function (m, b) { var g = giftFor(m, b.giftId); if (!g) return NA(); return { ok: true, gift: giftView(m, g) }; },
+      giftSave: function (m, b) {
+        if (!m.adult) return NA();
+        var g = b.giftId ? giftFor(m, b.giftId) : null; if (b.giftId && (!g || g.organiserId !== m.userId || g.status === 'closed')) return NA();
+        var ids = members.filter(function (o) { return o.familyId === m.familyId && o.active && o.userId !== m.userId; }).map(function (o) { return o.userId; });
+        var v = C.validateGift(b, ids); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted fields.', fields: v.errors };
+        if (!g) {
+          var open = Object.keys(gifts).filter(function (k) { var e = gifts[k]; return e.familyId === m.familyId && !e.gone && e.organiserId === m.userId && e.status === 'open'; }).length;
+          if (open >= GF.open) return fail('limit', 'You can run up to ' + GF.open + ' open group gifts. Close one to start another.');
+          g = gifts['g' + (++seq)] = { id: 'g' + seq, n: seq, familyId: m.familyId, organiserId: m.userId, contribs: {}, status: 'open', gone: false };
+          g.fresh = true;
+        }
+        var wasFor = g.forId; g.title = v.value.title; g.note = v.value.note; g.forId = v.value.forId; g.goalCents = v.value.goalCents; g.eachCents = v.value.eachCents; g.currency = v.value.currency;
+        if (g.forId && g.contribs[g.forId]) delete g.contribs[g.forId];   // the person it is for cannot have contributed to it
+        if (g.fresh) { g.fresh = false; members.forEach(function (o) { if (o.familyId === m.familyId && o.active && o.adult && o.userId !== m.userId && o.userId !== g.forId) notify(o.userId, m.name + ' started a group gift: ' + g.title + '. Tap to open.'); }); }
+        return { ok: true, gift: giftView(m, g) };
+      },
+      giftContribute: function (m, b) {
+        var g = giftFor(m, b.giftId); if (!g) return NA();
+        if (g.status === 'closed') return fail('closed', 'This group gift is closed.');
+        var cur = g.contribs[m.userId]; if (cur && cur.status === 'confirmed') return fail('confirmed', 'Your contribution was already confirmed. Ask ' + nameOf(g.familyId, g.organiserId) + ' if it needs to change.');
+        var v = C.validateContribution(b); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted fields.', fields: v.errors };
+        var mine = g.organiserId === m.userId, e = giftSet(m, g, m.userId, v.value.cents, v.value.note, mine ? 'confirmed' : 'marked'); if (e) return e;
+        if (!mine) notify(g.organiserId, m.name + ' marked a contribution to ' + g.title + '. Confirm it when you have it.');
+        return { ok: true, gift: giftView(m, g) };
+      },
+      giftWithdraw: function (m, b) {
+        var g = giftFor(m, b.giftId); if (!g || !g.contribs[m.userId]) return NA();
+        if (g.contribs[m.userId].status === 'confirmed' && g.organiserId !== m.userId) return fail('confirmed', 'Your contribution was already confirmed. Ask ' + nameOf(g.familyId, g.organiserId) + ' if it needs to change.');
+        delete g.contribs[m.userId]; return { ok: true, gift: giftView(m, g) };
+      },
+      giftConfirm: function (m, b) {
+        var g = giftFor(m, b.giftId); if (!g || g.organiserId !== m.userId || !g.contribs[b.userId]) return NA();
+        g.contribs[b.userId].status = 'confirmed'; notify(b.userId, 'Your contribution to ' + g.title + ' was confirmed. Thank you.'); return { ok: true, gift: giftView(m, g) };
+      },
+      giftDecline: function (m, b) {
+        var g = giftFor(m, b.giftId); if (!g || g.organiserId !== m.userId || !g.contribs[b.userId]) return NA();
+        delete g.contribs[b.userId]; notify(b.userId, m.name + ' could not confirm your contribution to ' + g.title + '. Please check with them.'); return { ok: true, gift: giftView(m, g) };
+      },
+      giftRecord: function (m, b) {
+        var g = giftFor(m, b.giftId); if (!g || g.organiserId !== m.userId) return NA();
+        var t = membership(b.userId, m.familyId); if (!t || !t.adult || t.userId === g.forId || t.userId === m.userId) return NA();
+        if (g.status === 'closed') return fail('closed', 'This group gift is closed.');
+        var v = C.validateContribution(b); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted fields.', fields: v.errors };
+        var e = giftSet(m, g, t.userId, v.value.cents, v.value.note, 'confirmed'); if (e) return e;
+        notify(t.userId, m.name + ' recorded your contribution to ' + g.title + '. Thank you.'); return { ok: true, gift: giftView(m, g) };
+      },
+      giftSetStatus: function (m, b) {
+        var g = giftFor(m, b.giftId); if (!g || g.organiserId !== m.userId) return NA();
+        g.status = b.closed ? 'closed' : 'open'; return { ok: true, gift: giftView(m, g) };
+      },
+      giftDelete: function (m, b) {
+        var g = giftFor(m, b.giftId); if (!g || g.organiserId !== m.userId) return NA();
+        Object.keys(g.contribs).forEach(function (u) { if (u !== m.userId) notify(u, g.title + ' was deleted by ' + m.name + '.'); });
+        g.gone = true; g.contribs = {}; return { ok: true };
+      },
       /* ----- Requests and pledges (Phase A) ----- */
       requestsHome: function (m) {
         var all = Object.keys(requests).map(function (k) { return requests[k]; }).filter(function (r) { return requestFor(m, r.id); }).sort(function (a, b) { return b.n - a.n; });
@@ -513,11 +602,12 @@
       addRequest: function (familyId, ownerId, fields) { var m = membership(ownerId, familyId); var r = Object.assign({ id: nid('q'), n: seq, familyId: familyId, ownerId: ownerId, details: '', kind: 'thing', needed: 1, amount: '', neededBy: '', audience: 'everyone', status: 'open', archived: false, approval: m && m.adult ? 'approved' : 'pending' }, fields); requests[r.id] = r; return r; },
       rand: Math.random,   // tests replace it with a seeded generator
       addExchange: function (familyId, organiserId, name, others, fields) { var r = call(organiserId, 'exchangeSave', Object.assign({ familyId: familyId, name: name }, fields || {})); (others || []).forEach(function (u) { call(u, 'exchangeJoin', { familyId: familyId, exchangeId: r.exchange.id }); }); return r.exchange; },
+      addGift: function (familyId, organiserId, fields, contribs) { var g = call(organiserId, 'giftSave', Object.assign({ familyId: familyId }, fields)).gift; (contribs || []).forEach(function (c) { call(c[0], 'giftContribute', { familyId: familyId, giftId: g.id, amount: c[1] }); if (c[2]) call(organiserId, 'giftConfirm', { familyId: familyId, giftId: g.id, userId: c[0] }); }); return g; },
       clearNotices: function (userId) { notices[userId] = []; },
       advanceHours: function (h) { clockMs += h * 36e5; },
       pledgeFor: function (userId, requestId, note) { var r = requests[requestId]; return call(userId, 'pledgeSave', { familyId: r.familyId, requestId: requestId, note: note || '' }); },
       /** For tests only: everything the server holds. */
-      dump: function () { return JSON.stringify({ lists: lists, items: items, reservations: reservations, notices: notices, reports: reports, requests: requests, pledges: pledges, exchanges: exchanges }); }
+      dump: function () { return JSON.stringify({ lists: lists, items: items, reservations: reservations, notices: notices, reports: reports, requests: requests, pledges: pledges, exchanges: exchanges, gifts: gifts }); }
     };
 
     function call(userId, action, body) {
@@ -572,6 +662,7 @@
     a.addRequest('famA', 'u-riley', { title: 'Can someone take me to the library?', details: 'Saturday morning if possible.', kind: 'task', needed: 1 });   // a kid: waits for an adult to approve
     a.pledgeFor('u-sam', rq1.id, 'I can come after 10.'); a.clearNotices('u-rae');   // sample data starts with no notices
     a.addExchange('famA', 'u-rae', 'Holiday gift exchange', ['u-sam', 'u-tia'], { date: '2026-12-20', limit: 'about $25', note: 'Wrap it and bring it to the party.' }); a.clearNotices('u-sam'); a.clearNotices('u-tia'); a.clearNotices('u-rae');
+    a.addGift('famA', 'u-rae', { title: 'Gran\u2019s birthday present', note: 'Pay Rae by cash or Venmo, then mark it here.', forId: 'u-una', goal: '120', each: '20', currency: 'USD' }, [['u-sam', '20', true]]); ['u-sam', 'u-tia', 'u-rae'].forEach(function (u) { a.clearNotices(u); });
     a.reserveFor('u-sam', mug.id);   // Sam already reserved Rae's mug
     a.reserveFor('u-tia', tape.id);   // Tia reserved Sam's tape measure, so Rae sees one item as "Reserved" without a name
   }
