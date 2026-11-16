@@ -170,3 +170,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.50: Group gifts (Phase D1 tracker) in the PREVIEW ONLY. Real backend next (tables givingGifts + givingGiftParts). Honoree never reaches it; only the organiser sees who gave what; no money moves.
 - v1.51.99.51: Group gifts real backend (givingGifts + givingGiftParts, 10 actions). Needs new function build + GIVING-GIFTS-CONSOLE-COMMANDS.md.
 - v1.51.99.52: a customized profile page background now runs down to the footer's top line (no gap, square bottom corners).
+- v1.51.99.53: every text box that does not declare itself as a login box is marked autocomplete off (and password-manager ignore hints), so browsers stop treating all inputs like password fields.

@@ -5987,6 +5987,24 @@
    * 13. START-UP
    * ===================================================================== */
 
+  /* Password managers and browsers treat any box without an autocomplete setting as a login field and offer saved passwords or a key icon.
+     Every box that does not say what it is (the login and sign-up boxes do) is marked as "not a login", now and when new screens add boxes. */
+  (function quietBoxes() {
+    function mark(el) {
+      if (!el || el.nodeType !== 1) return;
+      var list = /^(INPUT|TEXTAREA)$/.test(el.tagName) ? [el] : [];
+      if (el.querySelectorAll) Array.prototype.push.apply(list, el.querySelectorAll('input:not([autocomplete]),textarea:not([autocomplete])'));
+      list.forEach(function (b) {
+        if (b.hasAttribute('autocomplete')) return;
+        var t = (b.getAttribute('type') || 'text').toLowerCase();
+        if (t === 'password' || t === 'checkbox' || t === 'radio' || t === 'file' || t === 'range' || t === 'color' || t === 'hidden' || t === 'button' || t === 'submit') return;
+        b.setAttribute('autocomplete', 'off'); b.setAttribute('data-lpignore', 'true'); b.setAttribute('data-1p-ignore', ''); b.setAttribute('data-form-type', 'other');
+      });
+    }
+    mark(document.body);
+    new MutationObserver(function (ms) { ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, mark); }); }).observe(document.body, { childList: true, subtree: true });
+  })();
+
   async function boot() {
     applyPrefs();
     var maint = await maintenanceFlag();
