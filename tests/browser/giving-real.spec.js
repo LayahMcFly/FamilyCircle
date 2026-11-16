@@ -37,6 +37,8 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   const as = async (user, hash) => { await page.goto(BASE + '?as=' + user + (hash || '#/giving')); await page.waitForSelector('.gv-page, .gv-blocked', { timeout: 8000 }); await settle(); };
   const text = () => page.locator('#main').innerText();
   const dlgOk = async () => { await page.locator('#gv-d-ok').click(); await settle(); };
+  const lists = async (user) => { let t = ''; for (const r of ['mine', 'family']) { await as(user, '#/giving/' + r); t += '\n' + await text(); } return t; };
+  const openBirthday = async (user) => { await as(user, '#/giving/' + (user === 'ann' ? 'mine' : 'family')); await page.locator('.gv-row', { hasText: 'Birthday' }).click(); };
   const rowsOf = t => [...w.world.tables[t].values()];
 
   // 1-2 off by default
@@ -48,12 +50,12 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   check('2 Off: a member is told to ask the owner, with no button', /Ask the family owner/.test(t) && (await page.locator('#gv-turnon').count()) === 0, t);
 
   // 3 owner turns it on
-  await as('owner'); await page.locator('#gv-turnon').click(); await dlgOk(); await page.waitForSelector('#main h2:has-text("Your wishlists")');
+  await as('owner'); await page.locator('#gv-turnon').click(); await dlgOk(); await page.waitForSelector('#gv-minebtn');
   check('3 Owner turns it on from the page and the home screen appears', rowsOf('givingState').length === 1 && rowsOf('givingState')[0].enabled === true, JSON.stringify(rowsOf('givingState')));
   await page.waitForSelector('#gv-switch'); check('3 The owner sees a Turn off button on the home screen', await page.locator('#gv-turnoff').isVisible(), '');
 
   // 4 owner marks adults
-  await page.waitForSelector('#gv-members .gv-member');
+  await page.locator('#gv-peoplebtn').click(); await page.waitForSelector('#gv-members .gv-member');
   for (const u of ['ann', 'bob']) { await page.locator('button[aria-label="Mark as adult: ' + u + '"]').click(); await settle(); await page.waitForSelector('button[aria-label="Mark as kid: ' + u + '"]'); }
   check('4 Owner marks ann and bob as adults; the flag is stored on their profiles', rowsOf('profiles').filter(p => p.givingAdult === true).map(p => p.userId).sort().join() === 'ann,bob', JSON.stringify(rowsOf('profiles').map(p => [p.userId, p.givingAdult])));
   check('4 Nobody else is an adult (kid and tia stay kids)', !rowsOf('profiles').some(p => ['kid', 'tia'].includes(p.userId) && p.givingAdult === true), '');
@@ -150,31 +152,31 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await page.locator('#gv-p-close').click();
 
   // 6 a kid sees it but cannot reserve
-  await as('kid'); await page.locator('.gv-row', { hasText: 'Birthday' }).click(); await page.waitForSelector('#main h1:has-text("Birthday")'); await settle();
+  await openBirthday('kid'); await page.waitForSelector('#main h1:has-text("Birthday")'); await settle();
   t = await text();
   check('6 A kid sees the wishlist and the item', /Blue mug/.test(t), t);
   check('6 A kid gets no reserve button and no reservation wording', (await page.locator('[data-act="reserve"]').count()) === 0 && !/Reserve|Reserved/.test(t), t);
 
   // 7 bob reserves, ann never learns
-  await as('bob'); await page.locator('.gv-row', { hasText: 'Birthday' }).click(); await page.waitForSelector('#main h1:has-text("Birthday")');
+  await openBirthday('bob'); await page.waitForSelector('#main h1:has-text("Birthday")');
   await page.locator('[data-act="reserve"]').click(); await page.waitForSelector('.gv-badge.is-mine'); await settle();
   check('7 An adult reserves an item and sees "Reserved by you"', /Reserved by you/.test(await text()) && rowsOf('givingReservations').length === 1, '');
-  await as('ann'); await page.locator('.gv-row', { hasText: 'Birthday' }).click(); await page.waitForSelector('#main h1:has-text("Birthday")'); await settle();
+  await openBirthday('ann'); await page.waitForSelector('#main h1:has-text("Birthday")'); await settle();
   const annHtml = await page.locator('#main').innerHTML();
   check('7 The list owner sees nothing about the reservation (no badge, no name, no button)', !/Reserved|reserve|bob/i.test(annHtml), annHtml.slice(0, 300));
   await as('ann'); check('7 The list owner has no notice about it', (await page.locator('.gv-notice').count()) === 0, '');
-  await as('tia'); await page.locator('.gv-row', { hasText: 'Birthday' }).click(); await page.waitForSelector('#main h1:has-text("Birthday")');
+  await openBirthday('tia'); await page.waitForSelector('#main h1:has-text("Birthday")');
   check('7 A person not yet marked as an adult (a tree admin) sees no reserve button', (await page.locator('[data-act="reserve"]').count()) === 0, '');
 
   // 8 adults-only list
   await as('ann', '#/giving/list/new'); await page.fill('#gv-name', 'Surprise for the kid'); await page.selectOption('#gv-audience', 'adults'); await page.locator('#gv-save').click(); await page.waitForSelector('#main h1:has-text("Surprise")'); await settle();
-  await as('kid'); check('8 An adults-only list is not listed for a kid', !/Surprise/.test(await text()), await text());
+  { const kt = await lists('kid'); check('8 An adults-only list is not listed for a kid', !/Surprise/.test(kt), kt); }
   await as('kid', '#/giving/list/' + rowsOf('givingLists').find(l => l.audience === 'adults').$id); await page.waitForSelector('.gv-blocked'); 
   check('8 A kid opening it by its address gets the same "not available" as for nothing', /That is not available/.test(await text()), await text());
-  await as('bob'); check('8 An adult sees the adults-only list, tagged', /Surprise for the kid/.test(await text()) && /Adults only/.test(await text()), await text());
+  { const bt = await lists('bob'); check('8 An adult sees the adults-only list, tagged', /Surprise for the kid/.test(bt) && /Adults only/.test(bt), bt); }
 
   // 9 report and remove
-  await as('kid'); await page.locator('.gv-row', { hasText: 'Birthday' }).click(); await page.waitForSelector('#main h1:has-text("Birthday")');
+  await openBirthday('kid'); await page.waitForSelector('#main h1:has-text("Birthday")');
   await page.locator('[data-act="report"]').first().click(); await page.waitForSelector('#gv-r-reason'); await page.selectOption('#gv-r-reason', 'unsafe'); await page.locator('#gv-r-send').click(); await settle();
   check('9 A kid can report an item', rowsOf('givingReports').length === 1, '');
   await as('owner'); await page.waitForSelector('#gv-reports'); t = await text();

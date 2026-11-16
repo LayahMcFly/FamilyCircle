@@ -134,6 +134,8 @@ async function newPage(ctx, mock, who, manager, errors) {
   check('13 the chosen section stays fully in view', after2.visible, JSON.stringify(after2));
   await page.click('.bd-tab:has-text("Groups")'); await page.waitForTimeout(150);
   check('13 choosing another section from the scrolled row still keeps it', (await page.evaluate(() => document.querySelector('.bd-tabs').scrollLeft)) > 0, '');
+  const gap = await page.evaluate(() => { const b = document.querySelector('main .bd-toprow .btn').getBoundingClientRect(), c = document.querySelector('main .bd-groups > section.card').getBoundingClientRect(); return Math.round(c.top - b.bottom); });
+  check('14 the New group button is not touching the card below it (gap ' + gap + 'px)', gap >= 14, String(gap));
   // groups (owner)
   await page.click('.bd-tab:has-text("Groups")'); await page.click('main .btn:has-text("New group")'); await page.waitForSelector('dialog[open]');
   await page.fill('dialog input[type="text"]', 'Chores'); await page.click('dialog button[type="submit"]'); await page.waitForSelector('.bd-chip.bd-group');

@@ -54,7 +54,7 @@ async function newPage(ctx, mock, errors) {
   check('1 Tapping the card opens Giving Center', (await page.evaluate(() => location.hash)) === '#/giving', '');
   check('2 Opening #/giving shows the off screen with a Back to Hub link', /not turned on/.test(await page.locator('main').innerText()) && (await page.locator('main .hub-back a[href="#/hub"]').count()) === 1, await page.locator('main').innerText());
   check('2 The tab title says Giving Center', /^Giving Center/.test(await page.title()), await page.title());
-  await page.locator('#gv-turnon').click(); await page.locator('#gv-d-ok').click(); await page.waitForSelector('main h2:has-text("Your wishlists")');
+  await page.locator('#gv-turnon').click(); await page.locator('#gv-d-ok').click(); await page.waitForSelector('#gv-minebtn');
   check('3 The owner turns it on and the home screen appears', await page.evaluate(() => window.__GV.on === true), '');
   await page.evaluate(() => { location.hash = '#/giving/list/new'; }); await page.waitForSelector('#gv-name');
   check('4 A deep link inside Giving Center (new wishlist form) opens', (await page.locator('main h1').innerText()) === 'New wishlist', await page.locator('main h1').innerText());

@@ -125,3 +125,10 @@
 .gv-quick { flex-wrap: wrap; }
 .gv-quick { gap: 10px; justify-content: space-between; }
 .gv-circle { min-width: 56px; }
+
+/* the home is a hub: a grid of round icon buttons, three to a row */
+.gv-hub { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 8px; justify-items: center; margin: 12px 0 18px; }
+.gv-hub .gv-circle { min-width: 0; width: 100%; }
+.gv-hub .gv-circle-dot { width: 64px; height: 64px; }
+.gv-hub .gv-circle-dot .gv-ico { width: 30px; height: 30px; }
+.gv-hub .gv-circle-label { font-size: .85rem; }

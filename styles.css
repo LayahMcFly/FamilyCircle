@@ -1992,3 +1992,8 @@ dialog.foot-dialog { display: grid; gap: 10px; font-size: .95rem; line-height: 1
 dialog.foot-dialog h2 { margin: 0; font-size: 1.2rem; }
 dialog.foot-dialog p { margin: 0; }
 dialog.foot-dialog .btn { justify-self: start; height: 44px; padding: 0 20px; margin: 6px 0 0; }
+
+/* buttons above a card never touch it (Groups, and any view that puts a button row over a card) */
+.bd-toprow { margin-bottom: 16px; }
+.bd-groups > .small.muted { margin: 0 0 12px; }
+.main > .row + .card, .main > .row + section.card { margin-top: 4px; }

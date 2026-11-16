@@ -32,7 +32,10 @@ const fam = async (page, name) => { await page.selectOption('#pv-fam', { label: 
 const text = page => page.locator('#main').innerText();
 const html = page => page.locator('#main').innerHTML();
 const overflow = page => page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
-const openList = async (page, name) => { await page.locator('.gv-row', { hasText: name }).first().click(); await page.waitForSelector('#main h1:has-text("' + name + '")'); await settle(page); };
+const goto = async (page, route) => { await page.goto(PREVIEW() + '#/giving' + route); await page.waitForSelector('.gv-page, .gv-blocked'); await settle(page); };
+/** The home is a hub of icons now; this reads every list screen (mine, family, reserved) the person has, then comes back home. */
+const allText = async (page) => { let t = await text(page); const adult = (await page.locator('#gv-reservedbtn').count()) > 0; for (const r of ['mine', 'family', 'reserved']) { if (r === 'reserved' && !adult) continue; await goto(page, '/' + r); t += '\n' + await text(page); } await goto(page, ''); return t; };
+const openList = async (page, name) => { for (const r of ['/mine', '/family']) { await goto(page, r); if (await page.locator('.gv-row', { hasText: name }).count()) break; } await page.locator('.gv-row', { hasText: name }).first().click(); await page.waitForSelector('#main h1:has-text("' + name + '")'); await settle(page); };
 const item = (page, title) => page.locator('.gv-item', { hasText: title }).first();
 const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Release reservation|Reserve this gift/;
 
@@ -55,9 +58,9 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
 
   // B. owner (Rae): wishlist behaviour and the surprise
   { const { ctx, page, log } = await open(browser); // Rae is first
-    const t = await text(page);
+    const t = await allText(page);
     check('B Rae sees her two wishlists and Sam\'s list', /Birthday ideas/.test(t) && /Spring ideas/.test(t) && /Home projects/.test(t), t);
-    check('B Rae\'s home shows nothing about who reserved what', !/Reserved by you|Release reservation|Reserve this gift/.test(t) && /You have not reserved anything/.test(t), t);
+    const ta = await allText(page); check('B Rae\'s screens show nothing about who reserved what', !/Reserved by you|Release reservation|Reserve this gift/.test(ta) && /You have not reserved anything/.test(ta), JSON.stringify(ta));
     await openList(page, 'Birthday ideas'); const lt = await text(page); const lh = await html(page);
     check('B Rae sees her items with no reservation words anywhere (text or markup)', !/Reserved|reserve|\bSam\b|\bTia\b/i.test(lt) && !/reserv|\bSam\b|\bTia\b|u-sam|u-tia/i.test(lh), lt);
     check('B received item is under "Received" and is not in the open list', await page.locator('#gv-received .gv-item', { hasText: 'Reading lamp' }).count() === 1 && await page.locator('#gv-items .gv-item', { hasText: 'Reading lamp' }).count() === 0, '');
@@ -90,7 +93,7 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('B no page errors', log.errors.length === 0, log.errors.join()); await ctx.close(); }
 
   // B2. photo optional, link supplies the picture, notes example
-  { const { ctx, page } = await open(browser); await page.click('.gv-row:has-text("Birthday ideas")'); await page.waitForSelector('#gv-additem'); await page.click('#gv-additem'); await page.waitForSelector('#gv-title');
+  { const { ctx, page } = await open(browser); await openList(page, 'Birthday ideas'); await page.waitForSelector('#gv-additem'); await page.click('#gv-additem'); await page.waitForSelector('#gv-title');
     check('B2 notes box shows an example', /For example: size medium/.test(await page.getAttribute('#gv-notes', 'placeholder')), '');
     check('B2 photo is labeled optional and says the link can supply it', /Photo \(optional\)/.test(await page.locator('label[for=gv-photo]').innerText()) && /come from your link/.test(await page.locator('#gv-photo-hint').innerText()), '');
     await page.fill('#gv-title', 'Bubble machine'); await page.fill('#gv-url', 'https://toys.example.com/bubbles'); await page.click('#gv-save'); await page.waitForSelector('#gv-items'); await settle(page);
@@ -100,13 +103,13 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('B2 no photo and no link: no picture box at all', await item(page, 'Plain thing').locator('img').count() === 0, '');
     await page.locator('.gv-item', { hasText: 'fern for the window' }).locator('img:not([data-from-link])').first().waitFor();
     check('B2 a chosen sample photo still wins over the link', await item(page, 'Blue ceramic mug').locator('img[data-from-link]').count() === 0, '');
-    await who(page, 'Tia Sample'); await page.click('.gv-row:has-text("wishes")'); await page.waitForSelector('#gv-items'); await settle(page);
+    await who(page, 'Tia Sample'); await openList(page, 'wishes'); await page.waitForSelector('#gv-items'); await settle(page);
     check('B2 Riley\'s Bubble gun (link, no photo) shows the link picture', await item(page, 'Bubble gun').locator('img[data-from-link=true]').count() === 1, '');
     await ctx.close(); }
 
   // C. givers: Sam and Tia
   { const { ctx, page } = await open(browser);
-    await who(page, 'Sam Sample'); let t = await text(page);
+    await who(page, 'Sam Sample'); await goto(page, '/reserved'); let t = await text(page);
     check('C Sam sees "Items you reserved" with the mug', /Blue ceramic mug/.test(await page.locator('#gv-resv').innerText()), t);
     await openList(page, 'Birthday ideas'); const mug = item(page, 'Blue ceramic mug');
     check('C Sam sees "Reserved by you" and a Release button on his item', /Reserved by you/.test(await mug.innerText()) && await mug.locator('[data-act=release]').count() === 1, await mug.innerText());
@@ -116,15 +119,15 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     check('C Tia has no hidden trace of Sam in the page markup', !/\bSam\b|u-sam/.test(await html(page)), '');
     const book = item(page, 'The Long Winter'); await book.locator('[data-act=reserve]').click(); await settle(page);
     check('C Tia reserves another item and sees "Reserved by you"', /Reserved by you/.test(await item(page, 'The Long Winter').innerText()), '');
-    await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('.gv-page'); await settle(page);
-    check('C Tia\'s home lists her reservations (the book and Sam\'s tape measure)', /The Long Winter/.test(await page.locator('#gv-resv').innerText()) && /Tape measure/.test(await page.locator('#gv-resv').innerText()), await text(page));
+    await goto(page, '/reserved');
+    check('C Tia\'s reserved screen lists her reservations (the book and Sam\'s tape measure)', /The Long Winter/.test(await page.locator('#gv-resv').innerText()) && /Tape measure/.test(await page.locator('#gv-resv').innerText()), await text(page));
     await who(page, 'Rae Sample'); await openList(page, 'Birthday ideas');
     check('C back as Rae: the list looks exactly as before, with no sign of the new reservation', !/Reserved|\bTia\b|by you|reserve/i.test(await text(page)) && !/reserv|\bTia\b|u-tia/i.test(await html(page)), await text(page));
     await ctx.close(); }
 
   // E. kids, removed member, other family
   { const { ctx, page } = await open(browser);
-    await who(page, 'Riley Sample'); let t = await text(page);
+    await who(page, 'Riley Sample'); let t = await allText(page);
     check('E Riley (a kid) sees the family\'s public lists and her own', /Riley.s wishes/.test(t) && /Birthday ideas/.test(t) && /Home projects/.test(t), t);
     check('E a kid sees the adults-only list nowhere', !/birthday gifts|Bike helmet/.test(t), t);
     check('E a kid gets a plain note and no reservations section', /Gift reservations are for adults/.test(t) && !/Items you reserved/.test(t), t);
@@ -146,23 +149,23 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
   // K. adult or kid control, adults-only lists, reporting
   { const { ctx, page } = await open(browser);
     await who(page, 'Rae Sample');
-    check('K a plain adult has no adult/kid panel and no reports panel', await page.locator('#gv-members').count() === 0 && await page.locator('#gv-reports').count() === 0, '');
+    check('K a plain adult has no Adults icon, no adult/kid panel and no reports panel', await page.locator('#gv-peoplebtn').count() === 0 && await page.locator('#gv-members').count() === 0 && await page.locator('#gv-reports').count() === 0, '');
     await page.click('#gv-newlist'); await page.waitForSelector('#gv-name');
     check('K an adult sees "Who can see it" when making a list', await page.locator('#gv-audience').count() === 1, '');
     await page.fill('#gv-name', 'Surprise ideas'); await page.selectOption('#gv-audience', 'adults'); await page.click('#gv-save'); await page.waitForSelector('#gv-additem'); await settle(page);
     check('K the new list shows "Adults only"', /Only adults can see it/.test(await text(page)) && await page.locator('.gv-badge.is-adults').count() === 1, await text(page));
     await who(page, 'Riley Sample');
-    check('K Riley (a kid) does not see that list', !/Surprise ideas/.test(await text(page)), '');
+    check('K Riley (a kid) does not see that list', !/Surprise ideas/.test(await allText(page)), '');
     await page.click('#gv-newlist'); await page.waitForSelector('#gv-name');
     check('K a kid\'s new-list form has no audience choice', await page.locator('#gv-audience').count() === 0, '');
     await page.goto(PREVIEW() + '#/giving'); await settle(page); await page.waitForSelector('.gv-page');
     await who(page, 'Ada Admin');
-    check('K the admin sees the adult/kid panel', await page.locator('#gv-members').count() === 1 && await page.locator('[data-member=u-una]').innerText().then(x => /Kid/.test(x)), '');
+    await goto(page, '/people'); check('K the admin sees the adult/kid panel', await page.locator('#gv-members').count() === 1 && await page.locator('[data-member=u-una]').innerText().then(x => /Kid/.test(x)), '');
     check('K the admin cannot change their own setting (no button on their row)', await page.locator('[data-member=u-ada] button').count() === 0, '');
     await page.locator('[data-member=u-una] button').click(); await page.waitForFunction(() => /Adult/.test(document.querySelector('[data-member=u-una]').innerText)); await settle(page);
     check('K marking Una as an adult updates her row', /Adult/.test(await page.locator('[data-member=u-una]').innerText()), '');
     await who(page, 'Una Sample');
-    check('K Una now has adult powers (reservations section, no kid note)', /Items you reserved/.test(await text(page)) && !/Gift reservations are for adults/.test(await text(page)), await text(page));
+    check('K Una now has adult powers (reserved icon, no kid note)', (await page.locator('#gv-reservedbtn').count()) === 1 && !/Gift reservations are for adults/.test(await text(page)), await text(page));
     // reporting
     await who(page, 'Riley Sample'); await openList(page, 'Birthday ideas');
     await item(page, 'Blue ceramic mug').locator('[data-act=report]').click(); await page.waitForSelector('dialog[open] #gv-r-reason'); await page.waitForTimeout(400);
@@ -212,7 +215,7 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     const t = await text(page);
     check('G a late answer for the previous person is dropped, not drawn', !/That is not available/.test(t) || /Giving Center/.test(t), t);
     const fam2 = await page.evaluate(() => document.querySelector('#pv-fam').value);
-    check('G switching person resets the screen to the Giving Center home', /Your wishlists/.test(t), t);
+    check('G switching person resets the screen to the Giving Center home', (await page.locator('#gv-minebtn').count()) === 1, t);
     await ctx.close(); }
 
   // R. requests and pledges (Phase A)
@@ -380,12 +383,18 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     const ids = ['gv-minebtn', 'gv-familybtn', 'gv-requestslink', 'gv-newlist', 'gv-urgentbtn'];
     for (const id of ids) { const b = await page.locator('#' + id + ' .gv-circle-dot').boundingBox(); check('N ' + id + ' is a small circle with an icon and a label', Math.abs(b.width - b.height) < 1 && b.width >= 44 && b.width <= 64 && (await page.locator('#' + id + ' svg').count()) === 1 && (await page.locator('#' + id + ' .gv-circle-label').innerText()).length > 0, id); }
     check('N the old text buttons are gone from the home header', (await page.locator('.gv-head .btn').count()) === 0 && !(await page.locator('#gv-requestslink').evaluate(e => e.classList.contains('gv-row'))), '');
+    const hubCols = await page.evaluate(() => getComputedStyle(document.querySelector('.gv-hub')).gridTemplateColumns.split(' ').length);
+    check('N the icons sit three to a row', hubCols === 3, String(hubCols));
     const glow = await page.evaluate(() => [...document.querySelectorAll('.gv-circle-dot, .gv-row, .gv-circle')].filter(e => getComputedStyle(e).animationName !== 'none').length);
     check('N nothing glows when nobody needs help', glow === 0, String(glow));
-    await page.click('#gv-familybtn'); await settle(page); await page.waitForTimeout(400);
-    check('N the Family icon jumps to the family wishlists', await page.evaluate(() => { const r = document.getElementById('gv-sec-family').getBoundingClientRect(); return r.top >= 0 && r.top < 400; }) && (await page.evaluate(() => document.activeElement && document.activeElement.id)) === 'gv-sec-family', '');
-    await page.click('#gv-minebtn'); await page.waitForTimeout(400);
-    check('N the Mine icon jumps to your wishlists', (await page.evaluate(() => document.activeElement && document.activeElement.id)) === 'gv-sec-mine', '');
+    check('N the home shows icons only, with no wishlists listed on it', (await page.locator('#main .gv-rows').count()) === 0 && (await page.locator('#gv-reservedbtn').count()) === 1, '');
+    await page.click('#gv-familybtn'); await page.waitForSelector('#gv-sec-family'); await settle(page);
+    check('N the Family icon opens the family wishlists on their own screen', /Home projects/.test(await text(page)) && !/Your wishlists/.test(await text(page)) && (await page.locator('.gv-circle-dot').count()) === 0, await text(page));
+    await page.click('text=Back to Giving Center'); await page.waitForSelector('#gv-minebtn'); await page.click('#gv-minebtn'); await page.waitForSelector('#gv-sec-mine'); await settle(page);
+    check('N the Mine icon opens only your wishlists, with a New list icon', /Birthday ideas/.test(await text(page)) && !/Home projects/.test(await text(page)) && (await page.locator('#gv-newlist2 svg').count()) === 1, await text(page));
+    await page.click('text=Back to Giving Center'); await page.waitForSelector('#gv-reservedbtn'); await page.click('#gv-reservedbtn'); await page.waitForSelector('#gv-sec-reserved'); await settle(page);
+    check('N the Reserved icon opens the reserved items screen', /Items you reserved/.test(await text(page)), await text(page));
+    await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('#gv-minebtn');
     await page.click('#gv-requestslink'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
     check('N the requests screen uses icons too: New request and Urgent', (await page.locator('#gv-newrequest svg').count()) === 1 && (await page.locator('#gv-urgentnew svg').count()) === 1 && (await page.locator('.gv-head .btn').count()) === 0, '');
     await who(page, 'Una Sample'); await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('#gv-urgentbtn');
@@ -395,7 +404,7 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
     const { ctx, page } = await open(browser, { w, h, hash: '#/giving' }); await settle(page);
     await page.screenshot({ path: path.join(shots, 'giving-' + label + '-icons.png') });
     check('N ' + label + ' icon row has no sideways scroll', !(await overflow(page)), '');
-    check('N ' + label + ' all five icons sit on one row', await page.evaluate(() => { const t = [...document.querySelectorAll('.gv-quick .gv-circle-dot')].map(e => Math.round(e.getBoundingClientRect().top)); return new Set(t).size === 1 && t.length === 5; }), ''); await ctx.close(); }
+    check('N ' + label + ' icons are all visible without scrolling the row sideways', await page.evaluate(() => [...document.querySelectorAll('.gv-hub .gv-circle')].every(e => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })), ''); await ctx.close(); }
 
   // H. layout at phone and desktop widths, plus screenshots
   for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {

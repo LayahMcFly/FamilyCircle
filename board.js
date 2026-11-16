@@ -164,7 +164,7 @@
       var done = visibleTasks().filter(function (t) { return t.status === 'complete'; }).sort(function (a, b) { return String(b.completedAt || '').localeCompare(String(a.completedAt || '')); });
       var showDone = h('button', { type: 'button', class: 'btn secondary small', 'aria-expanded': String(B.filter.done), onclick: function () { B.filter.done = !B.filter.done; paint(); } }, (B.filter.done ? 'Hide' : 'Show') + ' finished (' + done.length + ')');
       return h('div', null,
-        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: function () { editTask(null, B.day || today()); } }, icon('plus'), h('span', { text: 'Add a task' })), showDone),
+        h('div', { class: 'row bd-toprow' }, h('button', { type: 'button', class: 'btn', onclick: function () { editTask(null, B.day || today()); } }, icon('plus'), h('span', { text: 'Add a task' })), showDone),
         h('section', { class: 'card' }, h('h3', { text: 'To do' }), taskList(open, 'Nothing to do. Add a task to get started.')),
         B.filter.done ? h('section', { class: 'card' }, h('h3', { text: 'Finished' }), done.length ? h('ul', { class: 'bd-list' }, done.map(function (t) { return taskRow(t, {}); })) : h('p', { class: 'muted bd-empty', text: 'Nothing finished yet.' })) : null);
     }
@@ -286,7 +286,7 @@
       var low = items.filter(function (p) { return p.low; });
       var list = items.length ? h('ul', { class: 'bd-list' }, items.map(productRow)) : h('p', { class: 'muted bd-empty', text: 'No products yet. Add the things your family buys again and again.' });
       return h('div', null,
-        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: function () { editProduct(null); } }, icon('plus'), h('span', { text: 'Add a product' }))),
+        h('div', { class: 'row bd-toprow' }, h('button', { type: 'button', class: 'btn', onclick: function () { editProduct(null); } }, icon('plus'), h('span', { text: 'Add a product' }))),
         low.length ? h('section', { class: 'card' }, h('h3', { text: 'Running low (' + low.length + ')' }), h('ul', { class: 'bd-list' }, low.map(function (p) { return h('li', { class: 'bd-prod low' }, h('span', { class: 'bd-task-title', text: p.name }), h('span', { class: 'small muted', text: lowText(p) })); }))) : null,
         h('section', { class: 'card' }, h('h3', { text: 'All products' }), list));
     }
@@ -365,7 +365,7 @@
         return h('li', { class: 'bd-prod' }, h('div', { class: 'bd-prod-main' }, chip(g.name, 'bd-group', g.color), h('span', { class: 'small muted', text: (g.description ? g.description + ' · ' : '') + n + (n === 1 ? ' task' : ' tasks') })),
           mgr ? h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Edit ' + g.name, onclick: function () { groupForm(g); } }, icon('pencil')), h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Delete ' + g.name, onclick: function () { deleteGroup(g, n); } }, icon('trash'))) : null);
       })) : h('p', { class: 'muted bd-empty', text: 'No groups yet. Groups sort tasks, like Chores or School.' });
-      return h('div', null, h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: function () { groupForm(null, !mgr); } }, icon('plus'), h('span', { text: mgr ? 'New group' : 'Ask for a group' }))),
+      return h('div', { class: 'bd-groups' }, h('div', { class: 'row bd-toprow' }, h('button', { type: 'button', class: 'btn', onclick: function () { groupForm(null, !mgr); } }, icon('plus'), h('span', { text: mgr ? 'New group' : 'Ask for a group' }))),
         mgr ? null : h('p', { class: 'small muted', text: 'Owners and admins manage groups. You can send them a request.' }), h('section', { class: 'card' }, list));
     }
     function deleteGroup(g, n) {

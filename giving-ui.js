@@ -24,6 +24,8 @@
     alert: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/>',
     hands: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/>',
+    badge: '<rect x="4" y="3" width="16" height="18" rx="3"/><circle cx="12" cy="10" r="2.6"/><path d="M7.5 17c.6-2 2.4-3 4.5-3s3.9 1 4.5 3"/>',
     gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/><path d="M12 8c-1-3-5-4-5-1.5C7 8 9 8 12 8zM12 8c1-3 5-4 5-1.5C17 8 15 8 12 8z"/>',
     users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.8.2 4.5 2 4.5 4.9"/>'
   };
@@ -42,7 +44,6 @@
     if (o.onclick) { attrs.type = 'button'; attrs.onclick = o.onclick; return h('button', attrs, kids); }
     attrs.href = o.href; return h('a', attrs, kids);
   }
-  function jumpTo(id) { return function () { var el = document.getElementById(id); if (!el) return; var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' }); el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); }; }
   function badge(text, cls) { return h('span', { class: 'gv-badge' + (cls ? ' ' + cls : ''), text: text }); }
   /* PREVIEW ONLY: stands in for the picture the live version would take from the item's link. Nothing is fetched. */
   function linkTile(url) {
@@ -116,6 +117,7 @@
       var p = (location.hash || '').replace(/^#\/?/, '').split('/');
       if (p[0] !== 'giving') return { name: 'home' };
       if (p[1] === 'emergency' && p[2] === 'new') return { name: 'emergencyNew' };
+      if (['mine', 'family', 'reserved', 'people'].indexOf(p[1]) >= 0) return { name: 'section', which: p[1] };
       if (p[1] === 'requests') {
         if (p[2] === 'new') return { name: 'requestNew' };
         if (p[2] && p[3] === 'edit') return { name: 'requestEdit', id: p[2] };
@@ -212,11 +214,14 @@
       page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Giving Center', 'data-focus': '' })));
       page.appendChild(h('p', { class: 'muted', text: 'Wishlists for the people in your family. Prices are estimates for reference only. Nothing here is bought or paid through Family Circle.' }));
       var openReq = r.requests ? r.requests.open : 0, waitReq = r.requests && r.requests.waiting ? r.requests.waiting : 0;
-      page.appendChild(h('nav', { class: 'gv-quick', 'aria-label': 'Giving Center' },
-        circleBtn({ id: 'gv-minebtn', onclick: jumpTo('gv-sec-mine'), icon: 'gift', label: 'Mine', aria: 'Your wishlists' }),
-        circleBtn({ id: 'gv-familybtn', onclick: jumpTo('gv-sec-family'), icon: 'users', label: 'Family', aria: 'Family wishlists' }),
+      var mineCount = r.lists.filter(function (l) { return l.mine; }).length, famCount = r.lists.filter(function (l) { return !l.mine; }).length;
+      page.appendChild(h('nav', { class: 'gv-quick gv-hub', 'aria-label': 'Giving Center' },
+        circleBtn({ id: 'gv-minebtn', href: '#/giving/mine', icon: 'gift', label: 'Mine', count: mineCount, aria: 'Your wishlists, ' + mineCount }),
+        circleBtn({ id: 'gv-familybtn', href: '#/giving/family', icon: 'users', label: 'Family', count: famCount, aria: 'Family wishlists, ' + famCount }),
+        r.me.adult ? circleBtn({ id: 'gv-reservedbtn', href: '#/giving/reserved', icon: 'tag', label: 'Reserved', count: r.reservations.length, aria: 'Items you reserved, ' + r.reservations.length }) : null,
         circleBtn({ id: 'gv-requestslink', href: '#/giving/requests', icon: 'hands', label: 'Requests', count: openReq + waitReq, aria: 'Family requests, ' + openReq + (openReq === 1 ? ' open request' : ' open requests') + (waitReq ? ', ' + waitReq + ' waiting for approval' : '') }),
         r.canCreateList ? circleBtn({ id: 'gv-newlist', href: '#/giving/list/new', icon: 'plus', label: 'New list', aria: 'New wishlist' }) : null,
+        r.canManageAges ? circleBtn({ id: 'gv-peoplebtn', href: '#/giving/people', icon: 'badge', label: 'Adults', aria: 'Who is an adult' }) : null,
         circleBtn({ id: 'gv-urgentbtn', href: '#/giving/emergency/new', icon: 'alert', label: 'Urgent', aria: 'Urgent help', cls: 'is-urgent' + (r.requests && r.requests.urgent ? ' is-pulsing' : '') })));
       if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidnote', text: 'You can make your own wishlist and see the family’s lists. Gift reservations are for adults.' }));
       if (r.canModerate) page.appendChild(reportsPanel(r.openReports));
@@ -225,21 +230,31 @@
           h('button', { type: 'button', class: 'btn ghost small', 'data-notice': n.id, text: 'Dismiss', onclick: function () { api('noticeDismiss', { noticeId: n.id }).then(function (x) { if (x.stale) return; refresh(); }); } })));
       });
       if (r.requests && r.requests.urgent) page.appendChild(h('a', { class: 'gv-row gv-urgentbanner', id: 'gv-urgentbanner', href: '#/giving/requests' }, h('strong', { text: r.requests.urgent === 1 ? 'Someone needs urgent help' : r.requests.urgent + ' people need urgent help' }), h('span', { class: 'muted', text: 'Tap to open' })));
+      return page;
+    }
+    /** One screen per icon: Mine, Family, Reserved, Adults. */
+    function renderSection(r, which) {
+      var page = h('div', { class: 'gv-page' }, backLink('#/giving', 'Back to Giving Center'));
       var mine = r.lists.filter(function (l) { return l.mine; }), others = r.lists.filter(function (l) { return !l.mine; });
-      page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-sec-mine', text: 'Your wishlists' }));
-      if (!mine.length) page.appendChild(h('p', { class: 'muted', text: 'You have no wishlists yet.' }));
-      else page.appendChild(listRows(mine));
-      page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-sec-family', text: 'Family wishlists' }));
-      if (!others.length) page.appendChild(h('p', { class: 'muted', text: 'No one else has shared a wishlist yet.' })); else page.appendChild(listRows(others));
-      if (r.canManageAges) page.appendChild(membersPanel());
-      if (r.me.adult) page.appendChild(h('h2', { class: 'gv-sub', text: 'Items you reserved' }));
-      if (!r.me.adult) { /* kids have no reservations section */ }
-      else if (!r.reservations.length) page.appendChild(h('p', { class: 'muted', id: 'gv-noresv', text: 'You have not reserved anything. Only you can see your reservations.' }));
-      else page.appendChild(h('ul', { class: 'gv-rows', id: 'gv-resv' }, r.reservations.map(function (x) {
-        return h('li', null, h('a', { class: 'gv-row', href: '#/giving/list/' + x.listId, 'data-resv': x.itemId },
-          h('strong', { text: x.title }), h('span', { class: 'muted', text: 'On ' + x.ownerName + '’s wishlist' }),
-          x.changedSinceReserved ? badge('Changed since you reserved', 'is-warn') : null));
-      })));
+      if (which === 'mine') {
+        page.appendChild(h('div', { class: 'gv-head' }, h('h1', { id: 'gv-sec-mine', text: 'Your wishlists', 'data-focus': '' }), r.canCreateList ? circleBtn({ id: 'gv-newlist2', href: '#/giving/list/new', icon: 'plus', label: 'New list', aria: 'New wishlist' }) : null));
+        page.appendChild(!mine.length ? h('p', { class: 'muted', text: 'You have no wishlists yet.' }) : listRows(mine));
+      } else if (which === 'family') {
+        page.appendChild(h('h1', { id: 'gv-sec-family', text: 'Family wishlists', 'data-focus': '' }));
+        page.appendChild(!others.length ? h('p', { class: 'muted', text: 'No one else has shared a wishlist yet.' }) : listRows(others));
+      } else if (which === 'reserved') {
+        page.appendChild(h('h1', { id: 'gv-sec-reserved', text: 'Items you reserved', 'data-focus': '' }));
+        if (!r.me.adult) page.appendChild(h('p', { class: 'muted', text: 'Gift reservations are for adults.' }));
+        else if (!r.reservations.length) page.appendChild(h('p', { class: 'muted', id: 'gv-noresv', text: 'You have not reserved anything. Only you can see your reservations.' }));
+        else page.appendChild(h('ul', { class: 'gv-rows', id: 'gv-resv' }, r.reservations.map(function (x) {
+          return h('li', null, h('a', { class: 'gv-row', href: '#/giving/list/' + x.listId, 'data-resv': x.itemId },
+            h('strong', { text: x.title }), h('span', { class: 'muted', text: 'On ' + x.ownerName + '’s wishlist' }),
+            x.changedSinceReserved ? badge('Changed since you reserved', 'is-warn') : null));
+        })));
+      } else if (which === 'people') {
+        if (!r.canManageAges) return blocked({ error: 'not_available' });
+        page.appendChild(h('h1', { text: 'Who is an adult', 'data-focus': '' })); page.appendChild(membersPanel());
+      }
       return page;
     }
     function listRows(ls) {
@@ -540,6 +555,10 @@
       main.setAttribute('aria-busy', 'true');
       var fin = function (node) { if (mine !== token) return; main.removeAttribute('aria-busy'); put(node); };
       if (st.familyId === 'none') return fin(blocked({ error: 'not_available' }));
+      if (rt.name === 'section') return api('home').then(function (r) {
+        if (r.stale) return; if (!r.ok) return fin(r.error === 'network' || r.error === 'server' ? errorWithRetry(r) : blocked(r));
+        fin(renderSection(r, rt.which));
+      });
       if (rt.name === 'home') return api('home').then(function (r) {
         if (r.stale) return;
         if (!r.ok && real && r.error === 'not_available') return api('status').then(function (s) { if (s.stale) return; fin(s.ok && !s.enabled ? renderOff(s) : blocked(r)); });
@@ -749,7 +768,7 @@
     function errorWithRetry(r) { return h('section', { class: 'card' }, h('h1', { text: 'Giving Center', 'data-focus': '' }), errorBox(r), h('button', { type: 'button', class: 'btn', id: 'gv-retry', text: 'Try again', onclick: function () { render(); } })); }
     function refresh() {
       var y = window.scrollY; var rt = route(), mineToken = ++token;
-      if (/^(request|emergency)/.test(rt.name)) return render();
+      if (/^(request|emergency|section)/.test(rt.name)) return render();
       var redo = rt.name === 'home' ? api('home') : api('listGet', { listId: rt.id });
       return redo.then(function (r) {
         if (r.stale || mineToken !== token) return;
