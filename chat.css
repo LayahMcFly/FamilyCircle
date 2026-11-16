@@ -953,3 +953,8 @@ dialog.designer .pd-actions > .btn { margin: 0 !important; height: 42px; min-hei
 /* Saved looks: the button preview with "Aa" beside it, drawn in that look's font */
 .pd-mini .pd-row { display: flex; align-items: center; gap: 10px; }
 .pd-mini .pd-aa { font-family: var(--pg-font, inherit); font-size: 1.5rem; line-height: 1; font-weight: 600; color: var(--text, #222); }
+
+/* A customized profile background runs all the way down to the footer's top line (no gap, square bottom corners) */
+body .main:has(> .profile-page.pg-bg) { padding-bottom: 0; }
+body:has(.nav) .main:has(> .profile-page.pg-bg) { padding-bottom: 0; }
+.profile-page.pg-bg { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }

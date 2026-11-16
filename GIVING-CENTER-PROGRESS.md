@@ -169,3 +169,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.49: Gift exchanges real backend (givingExchanges + givingExchangePairs tables, 10 new function actions). Needs the new function build and GIVING-EXCHANGES-CONSOLE-COMMANDS.md. Removed-from-family people are dropped lazily (they disappear from member lists; a giver whose match is gone sees 'match left').
 - v1.51.99.50: Group gifts (Phase D1 tracker) in the PREVIEW ONLY. Real backend next (tables givingGifts + givingGiftParts). Honoree never reaches it; only the organiser sees who gave what; no money moves.
 - v1.51.99.51: Group gifts real backend (givingGifts + givingGiftParts, 10 actions). Needs new function build + GIVING-GIFTS-CONSOLE-COMMANDS.md.
+- v1.51.99.52: a customized profile page background now runs down to the footer's top line (no gap, square bottom corners).
