@@ -16,6 +16,7 @@
  *  - Anything the caller may not see (another family, nothing there, a hidden list, an adults-only list seen by a kid) answers the same way.
  */
 import { Query, ID } from 'node-appwrite';
+import { randomInt } from 'node:crypto';
 import * as R from './giving-rules.js';
 
 export const GIVING_TABLES = {
@@ -26,6 +27,8 @@ export const GIVING_TABLES = {
   notices: 'givingNotices',           // familyId, userId, data (JSON: text)
   requests: 'givingRequests',         // familyId, ownerId, status (open|closed), approval (pending|approved), audience, hiddenAt, data (JSON: title, details, kind, needed, amount, neededBy)
   pledges: 'givingPledges',           // familyId, requestId, userId, status (pledged|done), pledgeKey (UNIQUE: requestId_userId), data (JSON: note)
+  exchanges: 'givingExchanges',       // familyId, organiserId, status (open|drawn), round, data (JSON: name, date, limit, note, members, exclusions)
+  exchangePairs: 'givingExchangePairs', // row id = the exchange's id; familyId, data (JSON: pairs). Private: only exchangeView reads it, and only to find the caller's own match
   state: 'givingState'                // row id = familyId; enabled (bool), enabledBy, enabledAt
 };
 export const GIVING_LIMITS = { ...R.LIMITS, hideDays: 30, reportsPerPerson: 20, noticesShown: 20, perMinute: 60, thumbBytes: 10000, photoBytes: 250000, linkPicturesPer10Min: 10 };
@@ -103,6 +106,63 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
     return { it, list: await listRow(c, it.listId) };
   }
   const liveRes = (c, r) => (r && r.familyId === c.familyId && c.names.has(r.buyerId) ? r : null);
+
+
+  /* ---------- Gift exchanges (Phase C). The draw lives in its own table and is never returned to anyone but its giver, as one person. ---------- */
+  const EX = R.EXCHANGE;
+  const secureRand = () => randomInt(0, 2 ** 31) / 2 ** 31;
+  const exData = (x) => { const d = parse(x.data); return { name: d.name || '', date: d.date || '', limit: d.limit || '', note: d.note || '', members: Array.isArray(d.members) ? d.members : [], exclusions: Array.isArray(d.exclusions) ? d.exclusions : [] }; };
+  const exOk = (c, x) => !!(x && x.familyId === c.familyId && c.names.has(x.organiserId) && c.me.adult);
+  async function exRow(c, id) { const x = await getRowOrNull(T.exchanges, idOf(id, 'exchangeId')); if (!exOk(c, x)) throw NA(); return x; }
+  const exLive = (c, d) => d.members.filter((u) => c.byId.has(u) && c.byId.get(u).adult);
+  async function pairsOf(x) { const row = await getRowOrNull(T.exchangePairs, x.$id); return row ? (parse(row.data).pairs || {}) : {}; }
+  async function savePairs(x, familyId, pairs) {
+    const data = JSON.stringify({ pairs });
+    if (await getRowOrNull(T.exchangePairs, x.$id)) await updateRow(T.exchangePairs, x.$id, { data }); else await createRow(T.exchangePairs, x.$id, { familyId, data }, []);
+  }
+  function exRowView(c, x) {
+    const d = exData(x);
+    return { id: x.$id, name: d.name, date: d.date, limit: d.limit, status: x.status === 'drawn' ? 'drawn' : 'open', organiserName: nameOf(c, x.organiserId), mine: x.organiserId === c.me.userId, joined: d.members.includes(c.me.userId), count: exLive(c, d).length };
+  }
+  async function exView(c, x) {
+    const d = exData(x), v = { ...exRowView(c, x), note: d.note, round: x.round || 0 };
+    v.members = exLive(c, d).map((u) => ({ userId: u, name: nameOf(c, u), organiser: u === x.organiserId, me: u === c.me.userId }));
+    if (x.organiserId === c.me.userId) {
+      v.exclusions = d.exclusions.filter((p) => c.names.has(p[0]) && c.names.has(p[1])).map((p) => [{ userId: p[0], name: nameOf(c, p[0]) }, { userId: p[1], name: nameOf(c, p[1]) }]);
+      v.canAdd = x.status === 'drawn' ? [] : c.members.filter((m) => m.adult && !d.members.includes(m.userId)).map((m) => ({ userId: m.userId, name: m.name }));
+    }
+    if (x.status === 'drawn' && d.members.includes(c.me.userId)) {
+      const r = (await pairsOf(x))[c.me.userId];
+      if (r && c.byId.has(r) && c.byId.get(r).adult) {
+        const lists = (await inFamily(T.lists, c.familyId)).filter((l) => l.ownerId === r && listOk(c, l));
+        const out = [];
+        for (const l of lists) out.push({ id: l.$id, name: parse(l.data).name || '', count: (await all(T.items, [Query.equal('listId', [l.$id])], L.items + 20)).filter((i) => !i.received).length });
+        v.match = { name: nameOf(c, r), lists: out };
+      } else v.matchLeft = true;
+    }
+    return v;
+  }
+  async function exDrop(c, x, userId, why) {
+    const d = exData(x), wasDrawn = x.status === 'drawn';
+    d.members = d.members.filter((u) => u !== userId); d.exclusions = d.exclusions.filter((p) => p[0] !== userId && p[1] !== userId);
+    await updateRow(T.exchanges, x.$id, { data: JSON.stringify(d) });
+    if (!wasDrawn) return;
+    const pairs = await pairsOf(x), givers = Object.keys(pairs).filter((g) => pairs[g] === userId);
+    delete pairs[userId]; givers.forEach((g) => { delete pairs[g]; });
+    await savePairs(x, c.familyId, pairs);
+    for (const g of givers) await notify(c, g, 'Your match for ' + d.name + ' left the exchange. ' + nameOf(c, x.organiserId) + ' can draw again.');
+    if (userId !== x.organiserId) await notify(c, x.organiserId, nameOf(c, userId) + ' ' + why + ' ' + d.name + '. You can draw again for everyone, or leave it as it is.');
+  }
+  async function exDraw(c, x, again) {
+    const d = exData(x), ids = exLive(c, d);
+    if (ids.length < EX.min) throw new ApiError(400, 'too_few', 'You need at least ' + EX.min + ' people to draw names.');
+    const res = R.drawPairs(ids, d.exclusions, secureRand);
+    if (!res.ok) throw new ApiError(400, 'cannot_draw', R.EXCHANGE_NO_DRAW);
+    await savePairs(x, c.familyId, res.pairs);
+    const saved = await updateRow(T.exchanges, x.$id, { status: 'drawn', round: (x.round || 0) + 1 });
+    for (const u of ids) if (u !== c.me.userId) await notify(c, u, d.name + (again ? ' was drawn again. Tap to see who you have now.' : ' has been drawn. Tap to see who you have.'));
+    return saved;
+  }
 
   /* ---------- shapes ---------- */
   function itemView(c, it, list, res) {
@@ -294,6 +354,7 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       }).filter(Boolean);
       const out = { lists: summaries, reservations: mine, notices: notes.rows.map((n) => ({ id: n.$id, text: parse(n.data).text || '' })), canCreateList: summaries.filter((x) => x.mine).length < L.lists, me: { adult: c.me.adult }, canManageAges: c.manager, canModerate: c.moderator };
       { const rq = (await inFamily(T.requests, c.familyId, [], 600)).filter((q) => requestOk(c, q)); out.requests = { open: rq.filter((q) => q.approval === 'approved' && q.status !== 'closed' && q.audience !== 'chosen').length, urgent: rq.filter((q) => q.audience === 'chosen' && q.status !== 'closed' && q.ownerId !== user.$id && now() < (parse(q.data).expiresAt || 0)).length }; if (c.moderator) out.requests.waiting = rq.filter((q) => q.audience !== 'chosen' && q.approval !== 'approved' && q.ownerId !== user.$id).length; }
+      if (c.me.adult) out.exchanges = (await inFamily(T.exchanges, c.familyId, [], 200)).filter((x) => exOk(c, x) && exData(x).members.includes(user.$id)).length;
       if (c.moderator) out.openReports = (await inFamily(T.reports, c.familyId)).length;   // everyone else gets no report field at all
       return out;
     },
@@ -537,6 +598,77 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       if (r.audience !== 'chosen' || r.ownerId !== user.$id) throw NA();
       const saved = await updateRow(T.requests, r.$id, { status: 'open', data: JSON.stringify({ ...parse(r.data), expiresAt: now() + R.EMERGENCY.hours * HOUR }) });
       return { request: requestView(c, saved, await pledgesFor(r.$id), true) };
+    },
+
+    /* ----- Gift exchanges (Phase C). Adults only. ----- */
+    async givingExchangesHome({ user, body }) {
+      const c = await context(user, body.familyId); if (!c.me.adult) throw NA();
+      const rows = (await inFamily(T.exchanges, c.familyId, [], 200)).filter((x) => exOk(c, x)).sort((a, b) => String(b.$createdAt).localeCompare(String(a.$createdAt)));
+      return { exchanges: rows.map((x) => exRowView(c, x)) };
+    },
+    async givingExchangeGet({ user, body }) { const c = await context(user, body.familyId); return { exchange: await exView(c, await exRow(c, body.exchangeId)) }; },
+    async givingExchangeSave({ user, body }) {
+      const c = await context(user, body.familyId); if (!c.me.adult) throw NA();
+      let x = null;
+      if (body.exchangeId) { x = await exRow(c, body.exchangeId); if (x.organiserId !== user.$id || x.status === 'drawn') throw NA(); }
+      const d = x ? exData(x) : { members: [user.$id], exclusions: [] };
+      const v = R.validateExchange(body, d.members); if (!v.ok) throw invalid(v.errors);
+      const data = JSON.stringify({ name: v.value.name, date: v.value.date, limit: v.value.limit, note: v.value.note, members: d.members, exclusions: x ? v.value.exclusions : [] });
+      if (x) x = await updateRow(T.exchanges, x.$id, { data });
+      else {
+        const mine = (await inFamily(T.exchanges, c.familyId, [], 200)).filter((e) => e.organiserId === user.$id && exOk(c, e)).length;
+        if (mine >= 5) throw new ApiError(400, 'limit', 'You can organise up to 5 exchanges at a time. Delete one to add another.');
+        x = await createRow(T.exchanges, ID.unique(), { familyId: c.familyId, organiserId: user.$id, status: 'open', round: 0, data }, []);
+      }
+      return { exchange: await exView(c, x) };
+    },
+    async givingExchangeJoin({ user, body }) {
+      const c = await context(user, body.familyId); const x = await exRow(c, body.exchangeId);
+      if (x.status === 'drawn') throw new ApiError(409, 'already_drawn', 'Names were already drawn, so no one can join now. Ask the organiser.');
+      const d = exData(x); if (d.members.length >= EX.members) throw new ApiError(400, 'full', 'This exchange is full.');
+      if (!d.members.includes(user.$id)) { d.members.push(user.$id); x.data = JSON.stringify(d); await updateRow(T.exchanges, x.$id, { data: x.data }); }
+      return { exchange: await exView(c, x) };
+    },
+    async givingExchangeLeave({ user, body }) {
+      const c = await context(user, body.familyId); const x = await exRow(c, body.exchangeId);
+      if (!exData(x).members.includes(user.$id)) throw NA();
+      if (x.organiserId === user.$id) throw new ApiError(400, 'organiser', 'You organise this one. Delete it instead of leaving.');
+      await exDrop(c, x, user.$id, 'left'); return { exchange: await exView(c, await exRow(c, x.$id)) };
+    },
+    async givingExchangeAddMember({ user, body }) {
+      const c = await context(user, body.familyId); const x = await exRow(c, body.exchangeId);
+      if (x.organiserId !== user.$id || x.status === 'drawn') throw NA();
+      const t = c.byId.get(idOf(body.userId, 'userId')); if (!t || !t.adult) throw NA();
+      const d = exData(x); if (d.members.length >= EX.members) throw new ApiError(400, 'full', 'This exchange is full.');
+      if (!d.members.includes(t.userId)) { d.members.push(t.userId); x.data = JSON.stringify({ ...d }); await updateRow(T.exchanges, x.$id, { data: x.data }); await notify(c, t.userId, nameOf(c, user.$id) + ' added you to ' + d.name + '.'); }
+      return { exchange: await exView(c, x) };
+    },
+    async givingExchangeRemoveMember({ user, body }) {
+      const c = await context(user, body.familyId); const x = await exRow(c, body.exchangeId);
+      const uid = idOf(body.userId, 'userId');
+      if (x.organiserId !== user.$id || !exData(x).members.includes(uid)) throw NA();
+      if (uid === user.$id) throw new ApiError(400, 'organiser', 'You organise this one. Delete it instead.');
+      await exDrop(c, x, uid, 'was removed from'); await notify(c, uid, 'You were removed from ' + exData(x).name + '.');
+      return { exchange: await exView(c, await exRow(c, x.$id)) };
+    },
+    async givingExchangeDraw({ user, body }) {
+      const c = await context(user, body.familyId); const x = await exRow(c, body.exchangeId);
+      if (x.organiserId !== user.$id) throw NA();
+      if (x.status === 'drawn') throw new ApiError(409, 'already_drawn', 'Names were already drawn. Use Draw again to start over.');
+      return { exchange: await exView(c, await exDraw(c, x, false)) };
+    },
+    async givingExchangeRedraw({ user, body }) {
+      const c = await context(user, body.familyId); const x = await exRow(c, body.exchangeId);
+      if (x.organiserId !== user.$id || x.status !== 'drawn') throw NA();
+      return { exchange: await exView(c, await exDraw(c, x, true)) };
+    },
+    async givingExchangeDelete({ user, body }) {
+      const c = await context(user, body.familyId); const x = await exRow(c, body.exchangeId);
+      if (x.organiserId !== user.$id) throw NA();
+      const d = exData(x);
+      for (const u of d.members) if (u !== user.$id) await notify(c, u, d.name + ' was deleted by ' + nameOf(c, user.$id) + '.');
+      if (await getRowOrNull(T.exchangePairs, x.$id)) await deleteRow(T.exchangePairs, x.$id);
+      await deleteRow(T.exchanges, x.$id); return {};
     },
     async givingRequestsHome({ user, body }) {
       const c = await context(user, body.familyId);

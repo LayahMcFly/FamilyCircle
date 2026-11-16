@@ -211,6 +211,24 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   await as('bob'); check('5i real: the chosen adult sees the urgent banner', (await page.locator('#gv-urgentbanner').count()) === 1, await text());
   await as('owner', '#/giving/requests'); check('5i real: an owner who was not chosen sees nothing of it', !/Need a ride home/.test(await text()), await text());
 
+  // 5j gift exchanges work against the real server code
+  await as('owner', '#/giving'); check('5j real: an adult sees the Exchange icon, a kid does not', (await page.locator('#gv-exchangesbtn').count()) === 1, '');
+  await as('kid', '#/giving'); check('5j real: a kid has no Exchange icon', (await page.locator('#gv-exchangesbtn').count()) === 0, '');
+  await as('owner', '#/giving/exchanges/new'); await page.fill('#gv-xname', 'Holiday swap'); await page.fill('#gv-xlimit', 'about $20'); await page.click('#gv-xsave'); await page.waitForSelector('#gv-xtitle'); await settle();
+  check('5j real: the organiser created an exchange and sees Draw names off with one person', await page.locator('#gv-xdraw').isDisabled() && (await page.locator('#gv-xmembers li').count()) === 1, await text());
+  const exUrl = await page.evaluate(() => location.hash);
+  await page.selectOption('#gv-xaddsel', { label: 'ann' }); await page.click('#gv-xaddbtn'); await settle();
+  await as('bob', exUrl); await page.click('#gv-xjoin'); await settle();
+  check('5j real: bob joined', (await page.locator('#gv-xmembers li').count()) === 3, await text());
+  await as('owner', exUrl); await page.click('#gv-xdraw'); await dlgOk(); await page.waitForSelector('#gv-xhidden'); await settle();
+  const pairsRow = rowsOf('givingExchangePairs')[0], truth = JSON.parse(pairsRow.data).pairs;
+  check('5j real: the draw is stored in its own table with no client permissions and not in the exchange row', pairsRow.$permissions.length === 0 && rowsOf('givingExchanges')[0].$permissions.length === 0 && !/pairs/.test(rowsOf('givingExchanges')[0].data), '');
+  check('5j real: the organiser sees only her own match and that nobody can see the rest', (await page.locator('#gv-matchname').count()) === 1 && /Nobody can/.test(await text()) && (await page.locator('#gv-matchname').innerText()) === truth.owner, await text());
+  await as('ann', exUrl); check('5j real: ann sees exactly her own match and no organiser buttons', (await page.locator('#gv-matchname').innerText()) === truth.ann && (await page.locator('#gv-xdraw, #gv-xredraw, #gv-xdelete').count()) === 0, await text());
+  await as('kid', '#/giving/exchanges'); check('5j real: a kid who types the address gets "not available"', /not available/i.test(await text()), await text());
+  await as('owner', exUrl); await page.click('#gv-xdelete'); await dlgOk(); await page.waitForSelector('#gv-exchanges, #gv-noexch'); await settle();
+  check('5j real: deleting erases both rows', rowsOf('givingExchanges').length === 0 && rowsOf('givingExchangePairs').length === 0, '');
+
   await as('owner'); await page.locator('#gv-turnoff').click(); await dlgOk(); await page.waitForSelector('.gv-off'); await settle();
   check('10 Owner turns it off and sees the turn-on button again', await page.locator('#gv-turnon').isVisible(), await text());
   await as('ann'); check('10 Everyone else is told it is not turned on', /not turned on/.test(await text()), await text());

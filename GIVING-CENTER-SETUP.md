@@ -97,3 +97,19 @@ Create the two tables and five indexes above (all permissions empty, like the ot
 No new tables or columns. Emergencies are stored as rows in `givingRequests` (audience `chosen`, the chosen adults and the closing time kept inside `data`). Upload the new function build and you are done.
 
 v1.51.99.44 adds optional where/pickup/drop-off text, a one-time location, kinds of help, "on my way" times and an "All set" button to emergencies. Still no new tables or columns: it all fits in the existing `data` column of `givingRequests` (checked at the largest possible size). Upload the new function build.
+
+## Gift exchanges (Phase C): two more tables
+
+Nothing else changes. Turn nothing on: the Exchange icon appears for adults once the new function build is deployed and the tables exist.
+
+| Table | Columns |
+|---|---|
+| `givingExchanges` | `familyId` String 36 required; `organiserId` String 36 required; `status` String 10 required; `round` Integer optional; `data` String 3000 required |
+| `givingExchangePairs` | `familyId` String 36 required; `data` String 2500 required. Its row id is the exchange's id. This is the private draw. |
+
+| Table | Index key | Type | Attributes |
+|---|---|---|---|
+| `givingExchanges` | `idx_family` | Key | `familyId` |
+| `givingExchangePairs` | `idx_family` | Key | `familyId` |
+
+No client permissions on either table (leave Permissions empty, same as the others). Honest limit: the draw is stored so each person can be shown their match. Only someone with direct access to the Appwrite project can read it there. The app never shows it to anyone else, including the organiser.

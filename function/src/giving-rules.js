@@ -144,4 +144,49 @@
     return { ok: !Object.keys(errors).length, errors: errors, value: { title: title, details: details, helpers: hs, type: type, where: where, pickup: pickup, dropoff: dropoff, loc: loc } };
   }
 
-export { EMERGENCY_TYPES, ETA, EMERGENCY, EMERGENCY_911, EMERGENCY_PRIVACY, validateEmergency, REQ, REQUEST_KINDS, validateRequest, validatePledge, REPORT_REASONS, AUDIENCES, validateReport, LIMITS, PRIORITIES, PRIORITY_LABEL, CURRENCIES, cleanUrl, hostOf, parseAmount, fmtMoney, totalsByCurrency, validateList, validateItem, trim };
+  /* ---------- Gift exchanges (Phase C). Nobody in the app, the organiser included, ever sees who drew whom. ---------- */
+  var EXCHANGE = { name: 60, note: 300, limit: 30, members: 30, exclusions: 20, min: 3 };
+  var EXCHANGE_NO_DRAW = 'These names cannot be drawn with the rules you set. Remove an exclusion or add another person and try again.';
+  function validateExchange(b, memberIds) {
+    var errors = {}; b = b || {};
+    var name = trim(b.name), note = trim(b.note), limit = trim(b.limit), date = trim(b.date);
+    if (!name) errors.name = 'Give the exchange a name, for example "Holiday gift exchange".';
+    else if (name.length > EXCHANGE.name) errors.name = 'Names can be up to ' + EXCHANGE.name + ' characters.';
+    if (note.length > EXCHANGE.note) errors.note = 'Notes can be up to ' + EXCHANGE.note + ' characters.';
+    if (limit.length > EXCHANGE.limit) errors.limit = 'Keep the spending limit under ' + EXCHANGE.limit + ' characters, for example "about $25".';
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.date = 'Use a date like 2026-12-24, or leave it empty.';
+    var ex = [];
+    if (Array.isArray(b.exclusions)) b.exclusions.forEach(function (p) {
+      if (!Array.isArray(p) || p.length !== 2 || typeof p[0] !== 'string' || typeof p[1] !== 'string' || p[0] === p[1]) { errors.exclusions = 'Each exclusion needs two different people.'; return; }
+      if (memberIds && (memberIds.indexOf(p[0]) < 0 || memberIds.indexOf(p[1]) < 0)) { errors.exclusions = 'Exclusions can only name people who joined.'; return; }
+      if (!ex.some(function (q) { return (q[0] === p[0] && q[1] === p[1]) || (q[0] === p[1] && q[1] === p[0]); })) ex.push([p[0], p[1]]);
+    });
+    if (ex.length > EXCHANGE.exclusions) errors.exclusions = 'You can set up to ' + EXCHANGE.exclusions + ' exclusions.';
+    return { ok: !Object.keys(errors).length, errors: errors, value: { name: name, note: note, limit: limit, date: date, exclusions: ex } };
+  }
+  /** Gives each person exactly one other person: no one draws themselves or an excluded person (excluded pairs cannot draw each other in either direction).
+   *  rand is injectable so tests are repeatable. Returns { ok, pairs: { giverId: receiverId } }. A search with a step cap, so a bad set of rules fails fast instead of hanging. */
+  function drawPairs(ids, exclusions, rand) {
+    rand = rand || Math.random;
+    var list = (ids || []).filter(function (x, i, a) { return a.indexOf(x) === i; });
+    if (list.length < EXCHANGE.min) return { ok: false, pairs: null };
+    var bad = {}; (exclusions || []).forEach(function (p) { bad[p[0] + '>' + p[1]] = 1; bad[p[1] + '>' + p[0]] = 1; });
+    function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(rand() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+    var givers = shuffle(list), pairs = {}, used = {}, steps = 0, CAP = 50000;
+    function place(i) {
+      if (i === givers.length) return true;
+      if (++steps > CAP) return false;
+      var g = givers[i], cands = shuffle(list);
+      for (var k = 0; k < cands.length; k++) {
+        var r = cands[k];
+        if (r === g || used[r] || bad[g + '>' + r]) continue;
+        pairs[g] = r; used[r] = 1;
+        if (place(i + 1)) return true;
+        delete pairs[g]; delete used[r];
+      }
+      return false;
+    }
+    return place(0) ? { ok: true, pairs: pairs } : { ok: false, pairs: null };
+  }
+
+export { EXCHANGE, EXCHANGE_NO_DRAW, validateExchange, drawPairs, EMERGENCY_TYPES, ETA, EMERGENCY, EMERGENCY_911, EMERGENCY_PRIVACY, validateEmergency, REQ, REQUEST_KINDS, validateRequest, validatePledge, REPORT_REASONS, AUDIENCES, validateReport, LIMITS, PRIORITIES, PRIORITY_LABEL, CURRENCIES, cleanUrl, hostOf, parseAmount, fmtMoney, totalsByCurrency, validateList, validateItem, trim };

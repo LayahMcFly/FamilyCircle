@@ -727,3 +727,104 @@ test('emergency extras: place, one-time location, kind, "on my way", All set (re
   const big = JSON.stringify({ title: 'T'.repeat(120), details: 'D'.repeat(500), kind: 'time', needed: 8, amount: '', neededBy: '', helpers: Array.from({ length: 8 }, () => '6af8f13324b2263631c1'), etype: 'cost', where: longest, pickup: longest, dropoff: longest, loc: { lat: -33.12345, lng: -122.12345 }, expiresAt: 1800000000000 });
   assert.ok(big.length < 1500, 'size ' + big.length);
 });
+
+/* ---------- Gift exchanges (Phase C, real server) ---------- */
+const EXF = (extra = {}) => F(extra);
+test('exchange: rules match the preview', async () => {
+  const P = createRequire(import.meta.url)('../../giving-core.js');
+  const M = await import('../src/giving-rules.js');
+  for (const b of [{ name: 'x' }, { name: '' }, { name: 'x'.repeat(61) }, { name: 'x', date: '12/24' }, { name: 'x', date: '2026-12-24', limit: 'about $25' }, { name: 'x', exclusions: [['a', 'b'], ['b', 'a'], ['a', 'a']] }]) assert.deepEqual(M.validateExchange(b, ['a', 'b']), P.validateExchange(b, ['a', 'b']));
+  assert.deepEqual(M.EXCHANGE, P.EXCHANGE); assert.equal(M.EXCHANGE_NO_DRAW, P.EXCHANGE_NO_DRAW);
+  for (let i = 0; i < 300; i++) { const r = M.drawPairs(['a', 'b', 'c', 'd', 'e'], [['a', 'b']]); assert.ok(r.ok && new Set(Object.values(r.pairs)).size === 5 && Object.keys(r.pairs).every((g) => r.pairs[g] !== g) && r.pairs.a !== 'b' && r.pairs.b !== 'a'); }
+});
+test('exchange: the tables hold no client permissions, and the draw sits in its own table', async () => {
+  const w = await setup(); const x = (await w.ok('owner', 'givingExchangeSave', EXF({ name: 'Holiday' }))).exchange;
+  for (const u of ['ann', 'bob']) await w.ok(u, 'givingExchangeJoin', EXF({ exchangeId: x.id }));
+  await w.ok('owner', 'givingExchangeDraw', EXF({ exchangeId: x.id }));
+  assert.deepEqual(rows(w, 'givingExchanges')[0].$permissions, []); assert.deepEqual(rows(w, 'givingExchangePairs')[0].$permissions, []);
+  assert.equal(rows(w, 'givingExchangePairs')[0].$id, x.id); assert.ok(!/pairs/.test(rows(w, 'givingExchanges')[0].data));
+});
+test('exchange: only adults in the family reach it; kids, other families and off families get "not available"', async () => {
+  const w = await setup(); const x = (await w.ok('owner', 'givingExchangeSave', EXF({ name: 'Holiday' }))).exchange;
+  for (const a of ['givingExchangesHome']) { await w.fail('kid', a, F(), 404, 'not_available'); await w.fail('tia', a, F(), 404, 'not_available'); }   // tia is a kid until marked
+  await w.fail('kid', 'givingExchangeGet', EXF({ exchangeId: x.id }), 404); await w.fail('kid', 'givingExchangeJoin', EXF({ exchangeId: x.id }), 404);
+  await w.fail('zed', 'givingExchangeGet', { familyId: 'famB', exchangeId: x.id }, 404);
+  assert.equal((await w.ok('ann', 'givingExchangesHome', F())).exchanges.length, 1);
+  assert.equal((await w.ok('kid', 'givingHome', F())).exchanges, undefined); assert.equal((await w.ok('owner', 'givingHome', F())).exchanges, 1);
+});
+test('exchange: join, leave, add, remove, limits and organiser-only powers', async () => {
+  const w = await setup(); const x = (await w.ok('owner', 'givingExchangeSave', EXF({ name: 'Holiday', date: '2026-12-20', limit: 'about $25' }))).exchange;
+  assert.equal((await w.ok('ann', 'givingExchangeJoin', EXF({ exchangeId: x.id }))).exchange.members.length, 2);
+  for (const a of ['givingExchangeDraw', 'givingExchangeRedraw', 'givingExchangeDelete']) await w.fail('ann', a, EXF({ exchangeId: x.id }), 404);
+  await w.fail('ann', 'givingExchangeAddMember', EXF({ exchangeId: x.id, userId: 'bob' }), 404);
+  await w.fail('ann', 'givingExchangeRemoveMember', EXF({ exchangeId: x.id, userId: 'owner' }), 404);
+  await w.fail('ann', 'givingExchangeSave', EXF({ exchangeId: x.id, name: 'Mine now' }), 404);
+  await w.fail('owner', 'givingExchangeAddMember', EXF({ exchangeId: x.id, userId: 'kid' }), 404);   // a kid cannot be added
+  await w.fail('owner', 'givingExchangeDraw', EXF({ exchangeId: x.id }), 400, 'too_few');
+  await w.ok('owner', 'givingExchangeAddMember', EXF({ exchangeId: x.id, userId: 'bob' }));
+  assert.ok((await w.ok('bob', 'givingHome', F())).notices.some((n) => /added you to Holiday/.test(n.text)));
+  assert.equal((await w.ok('ann', 'givingExchangeLeave', EXF({ exchangeId: x.id }))).exchange.members.length, 2);
+  await w.fail('owner', 'givingExchangeLeave', EXF({ exchangeId: x.id }), 400, 'organiser');
+  await w.fail('owner', 'givingExchangeSave', EXF({ name: '' }), 400, 'invalid');
+  for (let i = 0; i < 4; i++) await w.ok('owner', 'givingExchangeSave', EXF({ name: 'More ' + i }));
+  await w.fail('owner', 'givingExchangeSave', EXF({ name: 'Too many' }), 400, 'limit');
+});
+test('exchange: after the draw each person sees only their own match and nothing carries the pairs', async () => {
+  const w = await setup(); await w.ok('owner', 'givingMemberSetAdult', F({ userId: 'tia', adult: true }));
+  const x = (await w.ok('owner', 'givingExchangeSave', EXF({ name: 'Holiday' }))).exchange;
+  for (const u of ['ann', 'bob', 'tia']) await w.ok(u, 'givingExchangeJoin', EXF({ exchangeId: x.id }));
+  await w.ok('owner', 'givingExchangeSave', EXF({ exchangeId: x.id, name: 'Holiday', exclusions: [['ann', 'bob']] }));
+  await w.fail('owner', 'givingExchangeSave', EXF({ exchangeId: x.id, name: 'Holiday', exclusions: [['ann', 'kid']] }), 400, 'invalid');
+  assert.equal((await w.ok('owner', 'givingExchangeDraw', EXF({ exchangeId: x.id }))).exchange.status, 'drawn');
+  const truth = JSON.parse(rows(w, 'givingExchangePairs')[0].data).pairs;
+  const ids = { owner: 'owner', ann: 'ann', bob: 'bob', tia: 'tia' };
+  for (const u of Object.keys(ids)) {
+    const got = await w.ok(u, 'givingExchangeGet', EXF({ exchangeId: x.id })), all = JSON.stringify([got, await w.ok(u, 'givingExchangesHome', F()), await w.ok(u, 'givingHome', F())]);
+    assert.equal(got.exchange.match.name, w.nameOf ? w.nameOf(truth[u]) : got.exchange.match.name);
+    assert.ok(!keysOf(JSON.parse(all)).some((k) => /^(pairs|giver|receiver)$/i.test(k)), 'no pairing field for ' + u);
+    assert.equal((all.match(/"match":/g) || []).length, 1, 'one match only, for ' + u);
+    assert.ok(truth[u] !== u);
+  }
+  assert.notEqual(truth.ann, 'bob'); assert.notEqual(truth.bob, 'ann');
+  assert.equal(new Set(Object.values(truth)).size, 4);
+  await w.fail('owner', 'givingExchangeDraw', EXF({ exchangeId: x.id }), 409, 'already_drawn');
+  await w.fail('owner', 'givingExchangeSave', EXF({ exchangeId: x.id, name: 'New' }), 404);
+  assert.ok((await w.ok('ann', 'givingHome', F())).notices.some((n) => /has been drawn/.test(n.text)));
+});
+test('exchange: the match sees the lists they could already see, including adults-only ones, but never a kid-hidden one for a kid', async () => {
+  const w = await setup(); const x = (await w.ok('owner', 'givingExchangeSave', EXF({ name: 'Holiday' }))).exchange;
+  for (const u of ['ann', 'bob']) await w.ok(u, 'givingExchangeJoin', EXF({ exchangeId: x.id }));
+  for (const u of ['owner', 'ann', 'bob']) { const l = await mkList(w, u, u + ' wishes'); await mkItem(w, u, l.id); await mkList(w, u, u + ' secret', 'adults'); }
+  await w.ok('owner', 'givingExchangeDraw', EXF({ exchangeId: x.id }));
+  const m = (await w.ok('owner', 'givingExchangeGet', EXF({ exchangeId: x.id }))).exchange.match;
+  assert.equal(m.lists.length, 2); assert.ok(m.lists.some((l) => /secret/.test(l.name)));
+  assert.equal(m.lists.find((l) => /wishes/.test(l.name)).count, 1);
+});
+test('exchange: leaving after the draw tells the organiser and the giver, redraw tells everyone, delete erases the draw', async () => {
+  const w = await setup(); await w.ok('owner', 'givingMemberSetAdult', F({ userId: 'tia', adult: true }));
+  const x = (await w.ok('owner', 'givingExchangeSave', EXF({ name: 'Holiday' }))).exchange;
+  for (const u of ['ann', 'bob', 'tia']) await w.ok(u, 'givingExchangeJoin', EXF({ exchangeId: x.id }));
+  await w.ok('owner', 'givingExchangeDraw', EXF({ exchangeId: x.id }));
+  const truth = JSON.parse(rows(w, 'givingExchangePairs')[0].data).pairs, giver = Object.keys(truth).find((g) => truth[g] === 'ann');
+  for (const row of rows(w, 'givingNotices')) w.world.tables.givingNotices.delete(row.$id);
+  await w.ok('ann', 'givingExchangeLeave', EXF({ exchangeId: x.id }));
+  const org = (await w.ok('owner', 'givingHome', F())).notices.map((n) => n.text).join('|');
+  assert.match(org, /left Holiday/); assert.ok(!/match for/i.test(org) || giver === 'owner');
+  if (giver !== 'owner') assert.equal((await w.ok(giver, 'givingExchangeGet', EXF({ exchangeId: x.id }))).exchange.matchLeft, true);
+  assert.ok(!(giver in JSON.parse(rows(w, 'givingExchangePairs')[0].data).pairs));
+  assert.equal((await w.ok('owner', 'givingExchangeRedraw', EXF({ exchangeId: x.id }))).exchange.round, 2);
+  for (const u of ['bob', 'tia']) assert.ok((await w.ok(u, 'givingHome', F())).notices.some((n) => /drawn again/.test(n.text)));
+  const again = JSON.parse(rows(w, 'givingExchangePairs')[0].data).pairs; assert.deepEqual(Object.keys(again).sort(), ['bob', 'owner', 'tia']);
+  await w.ok('owner', 'givingExchangeDelete', EXF({ exchangeId: x.id }));
+  assert.equal(rows(w, 'givingExchanges').length, 0); assert.equal(rows(w, 'givingExchangePairs').length, 0);
+  await w.fail('bob', 'givingExchangeGet', EXF({ exchangeId: x.id }), 404);
+});
+test('exchange: impossible rules are refused plainly; a member removed from the family shows as "match left"', async () => {
+  const w = await setup(); const x = (await w.ok('owner', 'givingExchangeSave', EXF({ name: 'Holiday' }))).exchange;
+  for (const u of ['ann', 'bob']) await w.ok(u, 'givingExchangeJoin', EXF({ exchangeId: x.id }));
+  await w.ok('owner', 'givingExchangeSave', EXF({ exchangeId: x.id, name: 'Holiday', exclusions: [['owner', 'ann'], ['owner', 'bob']] }));
+  const f = await w.fail('owner', 'givingExchangeDraw', EXF({ exchangeId: x.id }), 400, 'cannot_draw'); assert.match(JSON.stringify(f), /Remove an exclusion/);
+  await w.ok('owner', 'givingExchangeSave', EXF({ exchangeId: x.id, name: 'Holiday', exclusions: [] }));
+  await w.ok('owner', 'givingExchangeDraw', EXF({ exchangeId: x.id }));
+  assert.equal((await w.ok('owner', 'givingExchangeGet', EXF({ exchangeId: x.id }))).exchange.status, 'drawn');
+});
