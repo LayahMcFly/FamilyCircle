@@ -39,11 +39,7 @@ let PORT;
 
   // 1. Back to Hub shows exactly one arrow (the CSS chevron), not an icon plus the chevron
   { const { ctx, page } = await open(browser, world({ families: two }), '#/home'); await settle(page);
-    const a = page.locator('.hub-back a');
-    check('1 Back to Hub link exists', (await a.count()) === 1, '');
-    check('1 no extra icon inside the link', (await a.locator('svg').count()) === 0, '');
-    check('1 the chevron is drawn once by the link style', await a.evaluate(el => getComputedStyle(el, '::before').content !== 'none' && getComputedStyle(el, '::before').content !== 'normal'), '');
-    check('1 link text is exactly Back to Hub', (await a.innerText()).trim() === 'Back to Hub', await a.innerText());
+    check('1 no Back to Hub link (the navigation has the Hub button)', (await page.locator('.hub-back a').count()) === 0, '');
     await page.screenshot({ path: path.join(shots, 'back-to-hub-fixed.png'), clip: { x: 0, y: 40, width: 390, height: 140 } });
     await ctx.close(); }
 

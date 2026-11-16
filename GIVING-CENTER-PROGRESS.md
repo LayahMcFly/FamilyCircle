@@ -173,3 +173,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.53: every text box that does not declare itself as a login box is marked autocomplete off (and password-manager ignore hints), so browsers stop treating all inputs like password fields.
 - v1.51.99.54: on the Add item form, an Etsy listing link no longer runs the page-fetch picture button (Etsy blocks it with a 403); the button hides for Etsy links and the picture comes from Etsy's API after the item is saved.
 - v1.51.99.55: Etsy picture failures now say why (Etsy's answer code) on the wishlist tile instead of a generic line. Needs the new function package (giving-etsy-diag-function.tar.gz) for the specific wording.
+- v1.51.99.56: removed the 'Back to Hub' link from the top of Feed, Tree, Shop, Orders, Recipes, Calendar and Giving; the Hub button in the navigation does that job.

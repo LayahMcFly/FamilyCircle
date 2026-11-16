@@ -69,7 +69,7 @@ let PORT;
       const { ctx, page, errors } = await openAt(hash, width, null, shopApi);
       const found = (await audit(page)).filter(x => x.visible);
       if (name === 'Shop') { results.push('NOTE  Shop @' + width + ': ' + found.length + ' Back to Hub control(s) on the Shop landing screen (known gap, reported separately; not part of this approval)'); await ctx.close(); continue; }
-      check(name + ' @' + width + ': exactly one visible Back to Hub control', found.length === 1, JSON.stringify(found.map(tag)));
+      check(name + ' @' + width + ': no visible Back to Hub control (the navigation has the Hub button)', found.length === 0, JSON.stringify(found.map(tag)));
       if (found.length === 1) {
         const x = found[0];
         check(name + ' @' + width + ': exactly one arrow (' + 'svg ' + x.svgs + ', css ' + x.pseudo + ', text ' + x.glyphs + ')', x.arrows === 1, JSON.stringify(x));

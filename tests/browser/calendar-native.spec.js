@@ -77,7 +77,7 @@ async function newPage(ctx, mock, who, manager, errors) {
   check('14 the i icon sits at the top right beside the bell', await page.evaluate(() => { const i = document.querySelector('.bd-how').getBoundingClientRect(), b = document.querySelector('.bd-bell').getBoundingClientRect(); return i.right <= b.left + 1 && b.right > innerWidth - 40 && !!document.querySelector('.bd-how svg'); }), '');
   await page.click('.bd-how'); check('14 the i button brings it back', (await page.locator('.bd-help').count()) === 1, '');
   await page.click('.bd-how'); check('14 and hides it again without forgetting', (await page.locator('.bd-help').count()) === 0, '');
-  check('1 no iframe, Back to Hub link present', (await page.locator('iframe').count()) === 0 && (await page.locator('main .hub-back a[href="#/hub"]').count()) === 1, '');
+  check('1 no iframe, no Back to Hub link (navigation has the Hub button)', (await page.locator('iframe').count()) === 0 && (await page.locator('main .hub-back a[href="#/hub"]').count()) === 0, '');
   const today = await page.evaluate(() => { const d = new Date(), p = n => (n < 10 ? '0' : '') + n; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); });
   check('2 month grid with today picked', (await page.locator('.bd-cell.today.picked').count()) === 1, '');
   await page.screenshot({ path: path.join(shots, 'calendar-month-empty.png') });

@@ -52,7 +52,7 @@ async function newPage(ctx, mock, errors) {
   check('1 The Hub card for Giving Center is a real link to #/giving with no "Planned" label', (await card.evaluate(e => e.tagName)) === 'A' && (await card.getAttribute('href')) === '#/giving' && !/Planned/.test(await card.textContent()), await card.textContent());
   await card.click(); await page.waitForSelector('main[data-view="giving"] .gv-off');
   check('1 Tapping the card opens Giving Center', (await page.evaluate(() => location.hash)) === '#/giving', '');
-  check('2 Opening #/giving shows the off screen with a Back to Hub link', /not turned on/.test(await page.locator('main').innerText()) && (await page.locator('main .hub-back a[href="#/hub"]').count()) === 1, await page.locator('main').innerText());
+  check('2 Opening #/giving shows the off screen (the Hub button is in the navigation, no Back to Hub link)', /not turned on/.test(await page.locator('main').innerText()) && (await page.locator('main .hub-back a[href="#/hub"]').count()) === 0, await page.locator('main').innerText());
   check('2 The tab title says Giving Center', /^Giving Center/.test(await page.title()), await page.title());
   await page.locator('#gv-turnon').click(); await page.locator('#gv-d-ok').click(); await page.waitForSelector('#gv-minebtn');
   check('3 The owner turns it on and the home screen appears', await page.evaluate(() => window.__GV.on === true), '');

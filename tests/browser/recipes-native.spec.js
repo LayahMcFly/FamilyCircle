@@ -46,7 +46,7 @@ const go = async (p, hash) => { await p.evaluate(h => { location.hash = h; }, ha
   await page.click('a[data-hub="recipes"]'); await page.waitForSelector('main[data-view="recipes"] .rc-grid');
   check('1 opens inside the app (#/recipes), same tab', page.url().endsWith('#/recipes') && ctx.pages().length === pagesBefore, page.url());
   check('1 it is a real page of the site: no iframe, frame or embed anywhere', (await page.locator('iframe, frame, embed, object').count()) === 0, '');
-  check('1 Back to Hub link above the book', (await page.locator('main .hub-back a[href="#/hub"]').count()) === 1, '');
+  check('1 no Back to Hub link above the book', (await page.locator('main .hub-back a[href="#/hub"]').count()) === 0, '');
   check('1 four starter recipes', (await page.locator('.rc-grid li').count()) === 4, String(await page.locator('.rc-grid li').count()));
   check('1 original app sentinel not shown', !(await page.locator('main').innerText()).includes('SENTINEL'), '');
   await page.mouse.move(0, 0);
