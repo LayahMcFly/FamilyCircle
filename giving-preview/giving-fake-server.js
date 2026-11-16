@@ -100,11 +100,12 @@
         pledgedCount: active.length, doneCount: active.filter(function (p) { return p.status === 'done'; }).length };
       v.stillNeeded = Math.max(0, r.needed - active.length);
       if (r.urgent) {
-        v.urgent = true; v.hoursLeft = r.status === 'open' ? Math.max(0, Math.ceil((r.expiresAt - clockMs) / HOUR)) : 0;
+        v.urgent = true; v.etype = r.etype; v.etypeLabel = C.EMERGENCY_TYPES[r.etype] || ''; v.where = r.where; v.pickup = r.pickup; v.dropoff = r.dropoff; v.loc = r.loc || null;
+        v.hoursLeft = r.status === 'open' ? Math.max(0, Math.ceil((r.expiresAt - clockMs) / HOUR)) : 0;
         if (r.ownerId === m.userId) v.helperNames = r.helpers.map(function (id) { return nameOf(r.familyId, id); });
       }
       if (full) {
-        v.pledges = active.map(function (p) { return { id: p.id, userId: p.userId, name: nameOf(r.familyId, p.userId), note: p.note, status: p.status, mine: p.userId === m.userId }; });
+        v.pledges = active.map(function (p) { return { id: p.id, userId: p.userId, name: nameOf(r.familyId, p.userId), note: p.note, eta: p.eta || '', etaLabel: C.ETA[p.eta] || '', status: p.status, mine: p.userId === m.userId }; });
         var mineP = active.filter(function (p) { return p.userId === m.userId; })[0]; if (mineP) v.myPledgeId = mineP.id;
       }
       return v;
@@ -238,13 +239,18 @@
         if (bad) return fail('invalid', 'You can only ask other adults in your family.');
         var mineOpen = Object.keys(requests).map(function (k) { return settleUrgent(requests[k]); }).filter(function (x) { return x.urgent && x.familyId === m.familyId && x.ownerId === m.userId && x.status === 'open'; }).length;
         if (mineOpen >= 1) return fail('limit', 'You already have an emergency request open. Close it before sending another.');
-        var nr = { id: nid('q'), n: seq, familyId: m.familyId, ownerId: m.userId, status: 'open', archived: false, approval: 'approved', audience: 'chosen', urgent: true, kind: 'time', needed: v.value.helpers.length, amount: '', neededBy: '', title: v.value.title, details: v.value.details, helpers: v.value.helpers, expiresAt: clockMs + C.EMERGENCY.hours * HOUR };
+        var nr = { id: nid('q'), n: seq, familyId: m.familyId, ownerId: m.userId, status: 'open', archived: false, approval: 'approved', audience: 'chosen', urgent: true, kind: 'time', needed: v.value.helpers.length, amount: '', neededBy: '', title: v.value.title, details: v.value.details, helpers: v.value.helpers, etype: v.value.type, where: v.value.where, pickup: v.value.pickup, dropoff: v.value.dropoff, loc: v.value.loc, expiresAt: clockMs + C.EMERGENCY.hours * HOUR };
         requests[nr.id] = nr;
         v.value.helpers.forEach(function (id) { notify(id, nameOf(m.familyId, m.userId) + ' needs help. Tap to open.'); });
         return { ok: true, request: requestView(m, nr, true) };
       },
       emergencyHelpers: function (m) {
         return { ok: true, helpers: members.filter(function (x) { return x.familyId === m.familyId && x.active && x.adult && x.userId !== m.userId; }).map(function (x) { return { userId: x.userId, name: nameOf(m.familyId, x.userId) }; }), max: C.EMERGENCY.helpers };
+      },
+      emergencyAllSet: function (m, b) {
+        var r = requestFor(m, b.requestId); if (!r || !r.urgent || r.ownerId !== m.userId) return NA();
+        if (r.status === 'open') { r.status = 'closed'; r.helpers.forEach(function (id) { notify(id, 'No longer needed: "' + r.title + '". Thank you.'); }); }
+        return { ok: true, request: requestView(m, r, true) };
       },
       emergencyKeepOpen: function (m, b) {
         var r = requestFor(m, b.requestId); if (!r || !r.urgent || r.ownerId !== m.userId) return NA();
@@ -312,10 +318,10 @@
         if (r.status !== 'open') return fail('closed', 'This request is closed.');
         var v = C.validatePledge(b); if (!v.ok) return { ok: false, error: 'invalid', message: 'Check the highlighted field.', fields: v.errors };
         var mine = pledgesOf(r.id).filter(function (p) { return p.userId === m.userId && p.status !== 'withdrawn'; })[0];
-        if (mine) { if (mine.status === 'done') return fail('done', 'Your pledge is already marked done.'); mine.note = v.value.note; return { ok: true, request: requestView(m, r, true) }; }
+        if (mine) { if (mine.status === 'done') return fail('done', 'Your pledge is already marked done.'); mine.note = v.value.note; mine.eta = v.value.eta || ''; return { ok: true, request: requestView(m, r, true) }; }
         if (pledgesOf(r.id).filter(function (p) { return p.status !== 'withdrawn'; }).length >= RQ.pledges) return fail('limit', 'This request already has ' + RQ.pledges + ' pledges.');
-        var np = { id: nid('g'), n: seq, requestId: r.id, familyId: m.familyId, userId: m.userId, note: v.value.note, status: 'pledged' }; pledges[np.id] = np;
-        notify(r.ownerId, nameOf(m.familyId, m.userId) + ' pledged to help with "' + r.title + '".');
+        var np = { id: nid('g'), n: seq, requestId: r.id, familyId: m.familyId, userId: m.userId, note: v.value.note, eta: v.value.eta || '', status: 'pledged' }; pledges[np.id] = np;
+        notify(r.ownerId, nameOf(m.familyId, m.userId) + (r.urgent ? ' can help' + (np.eta ? ' (' + C.ETA[np.eta].toLowerCase() + ')' : '') + ' with "' : ' pledged to help with "') + r.title + '".');
         return { ok: true, request: requestView(m, r, true) };
       },
       pledgeWithdraw: function (m, b) {

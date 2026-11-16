@@ -210,3 +210,36 @@ test('emergency: the helper list holds only other adults in the family', () => {
   assert.deepEqual(h.helpers.map((x) => x.userId).sort(), ['ada', 'bob', 'gus', 'own']); assert.equal(h.max, 8);
   assert.equal(w.ok('kit', 'emergencyHelpers').helpers.length, 5);
 });
+
+/* ---------- Emergency extras: where, pickup, one-time location, kinds, "on my way", all set ---------- */
+test('emergency extras: place text and location are validated and kept private to the chosen adults', () => {
+  const w = world();
+  w.bad('ann', 'emergencySave', EM({ where: 'x'.repeat(101) }), 'invalid');
+  w.bad('ann', 'emergencySave', EM({ lat: 95, lng: 10 }), 'invalid');
+  w.bad('ann', 'emergencySave', EM({ lat: 'abc', lng: 10 }), 'invalid');
+  assert.equal(C.validateEmergency({ title: 'x', helpers: ['a'], type: 'nope' }).value.type, 'other');
+  assert.deepEqual(C.validateEmergency({ title: 'x', helpers: ['a'], lat: 33.123456789, lng: -84.987654321 }).value.loc, { lat: 33.12346, lng: -84.98765 });
+  const q = w.ok('ann', 'emergencySave', EM({ type: 'ride', where: 'Walmart lot', pickup: '12 Oak St', dropoff: 'Home', lat: 30.8327, lng: -83.2785 })).request;
+  const seen = w.ok('bob', 'requestGet', { requestId: q.id }).request;
+  assert.equal(seen.where, 'Walmart lot'); assert.equal(seen.pickup, '12 Oak St'); assert.deepEqual(seen.loc, { lat: 30.8327, lng: -83.2785 }); assert.equal(seen.etypeLabel, 'A ride');
+  for (const u of ['own', 'ada', 'kit']) w.bad(u, 'requestGet', { requestId: q.id }, 'not_available');
+});
+
+test('emergency extras: "on my way" times, and All set closes it and tells the helpers', () => {
+  const w = world();
+  const q = w.ok('ann', 'emergencySave', EM({ helpers: ['bob', 'gus'] })).request;
+  w.bad('bob', 'pledgeSave', { requestId: q.id, eta: 'next year' }, 'invalid');
+  w.ok('bob', 'pledgeSave', { requestId: q.id, eta: '10', note: 'Leaving now' });
+  const v = w.ok('ann', 'requestGet', { requestId: q.id }).request;
+  assert.equal(v.pledges[0].etaLabel, 'About 10 minutes'); assert.equal(v.pledges[0].note, 'Leaving now');
+  assert.ok(w.ok('ann', 'home').notices.some((n) => n.text === 'Bob can help (about 10 minutes) with "Car broke down, need a ride".'));
+  w.bad('bob', 'emergencyAllSet', { requestId: q.id }, 'not_available');
+  w.bad('own', 'emergencyAllSet', { requestId: q.id }, 'not_available');
+  const done = w.ok('ann', 'emergencyAllSet', { requestId: q.id }).request;
+  assert.equal(done.status, 'closed');
+  assert.deepEqual(w.ok('gus', 'home').notices.map((n) => n.text), ['Ann needs help. Tap to open.', 'No longer needed: "Car broke down, need a ride". Thank you.']);
+  w.ok('ann', 'emergencyAllSet', { requestId: q.id });                    // a second tap changes nothing
+  assert.equal(w.ok('gus', 'home').notices.length, 2);
+  w.bad('gus', 'pledgeSave', { requestId: q.id }, 'closed');
+  w.ok('ann', 'emergencySave', EM({ title: 'A new one', helpers: ['bob'] }));   // the closed one no longer blocks a new request
+});

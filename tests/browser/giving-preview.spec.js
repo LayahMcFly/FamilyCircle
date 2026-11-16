@@ -217,7 +217,7 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
 
   // R. requests and pledges (Phase A)
   { const { ctx, page, log } = await open(browser);
-    check('R home has a Family requests link with counts', /Family requests/.test(await text(page)) && /open request/.test(await page.locator('#gv-requestslink').innerText()), await page.locator('#gv-requestslink').innerText());
+    check('R home has a Requests icon with a count and a full accessible name', /open request/.test(await page.locator('#gv-requestslink').getAttribute('aria-label')) && /^\d+$/.test((await page.locator('#gv-requestslink .gv-circle-count').innerText()).trim()), await page.locator('#gv-requestslink').getAttribute('aria-label'));
     await page.click('#gv-requestslink'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
     let t = await text(page);
     check('R Rae sees the couch request and the adults-only coat request, not the kid\'s waiting one', /Help moving a couch/.test(t) && /Winter coat for Riley/.test(t) && !/Can someone take me to the library/.test(t), t);
@@ -324,7 +324,7 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
   { const { ctx, page } = await open(browser); await settle(page);
     const b = await page.locator('#gv-urgentbtn .gv-circle-dot').boundingBox();
     check('G the urgent button is a small circle with an icon', Math.abs(b.width - b.height) < 1 && b.width >= 44 && b.width <= 64 && (await page.locator('#gv-urgentbtn svg').count()) === 1, JSON.stringify(b));
-    check('G it has a text label and an accessible name', /Urgent help/.test(await page.locator('#gv-urgentbtn').innerText()) && (await page.locator('#gv-urgentbtn').getAttribute('aria-label')) === 'Urgent help', '');
+    check('G it has a short text label and a full accessible name', /Urgent/.test(await page.locator('#gv-urgentbtn').innerText()) && (await page.locator('#gv-urgentbtn').getAttribute('aria-label')) === 'Urgent help', '');
     check('G it does not glow when nobody needs help', !(await page.locator('#gv-urgentbtn').getAttribute('class')).includes('is-pulsing') && (await page.locator('#gv-urgentbanner').count()) === 0, '');
     await page.goto(PREVIEW() + '#/giving/emergency/new'); await page.waitForSelector('#gv-etitle'); await page.fill('#gv-etitle', 'Need help now'); await page.locator('#gv-ehelpers .gv-check', { hasText: 'Sam Sample' }).click(); await page.click('#gv-esave'); await page.waitForSelector('#main h1:has-text("Need help now")');
     await who(page, 'Sam Sample'); await settle(page);
@@ -335,6 +335,67 @@ const SECRETS = /Sam Sample|Tia Sample|u-sam|u-tia|Reserved by you|Reserved\b|Re
   { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' }); const page = await ctx.newPage(); await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('.gv-page');
     await page.evaluate(() => { document.querySelector('#gv-urgentbtn').classList.add('is-pulsing'); });
     check('G with reduced motion the glow does not animate', (await page.evaluate(() => getComputedStyle(document.querySelector('#gv-urgentbtn .gv-circle-dot')).animationName)) === 'none', ''); await ctx.close(); }
+
+  // X. emergency extras: kinds, where, pickup, one-time location, on my way, all set
+  { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['geolocation'], geolocation: { latitude: 30.8327, longitude: -83.2785 } });
+    const page = await ctx.newPage(); const errs = []; page.on('pageerror', e => errs.push(String(e)));
+    await page.goto(PREVIEW() + '#/giving/emergency/new'); await page.waitForSelector('#gv-etitle'); await settle(page);
+    check('X the form offers quick kinds of help', (await page.locator('#gv-etypes .gv-chip').count()) === 5, '');
+    const chipH = await page.evaluate(() => [...document.querySelectorAll('.gv-chip')].filter(e => e.getBoundingClientRect().height < 40).length);
+    check('X the kind buttons are big enough to tap', chipH === 0, '');
+    check('X pickup and drop-off are hidden until Ride is chosen', !(await page.locator('#gv-epickup').isVisible()), '');
+    await page.click('[data-type="ride"]'); await settle(page);
+    check('X choosing Ride fills in the title and shows pickup and drop-off', (await page.inputValue('#gv-etitle')) === 'I need a ride' && (await page.locator('#gv-epickup').isVisible()), '');
+    await page.fill('#gv-ewhere', 'Walmart on Ashley St'); await page.fill('#gv-epickup', '12 Oak St'); await page.fill('#gv-edropoff', 'Home');
+    await page.click('#gv-eloc'); await page.waitForFunction(() => /Location added once/.test(document.getElementById('gv-eloc-note').textContent));
+    check('X sharing the location is one time, says so, and can be removed', /not tracked/.test(await page.locator('#gv-eloc-note').innerText()) && (await page.locator('#gv-eloc-clear').isVisible()), '');
+    const plain = await page.evaluate(() => [...document.querySelectorAll('#main input[type=text], #main textarea')].filter(el => parseFloat(getComputedStyle(el).borderTopWidth) === 0).map(e => e.id));
+    check('X the new fields are themed', plain.length === 0, plain.join());
+    await page.locator('#gv-ehelpers .gv-check', { hasText: 'Sam Sample' }).click(); await page.click('#gv-esave'); await page.waitForSelector('#main h1:has-text("I need a ride")'); await settle(page);
+    check('X the sender sees the place with an Open in maps link', /Walmart on Ashley St/.test(await text(page)) && (await page.locator('#gv-ewhere .gv-maplink').count()) === 1, '');
+    await page.selectOption('#pv-who', { label: 'Sam Sample' }); await settle(page);
+    await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'I need a ride' }).click(); await page.waitForSelector('#gv-pledge'); await settle(page);
+    const href = await page.locator('#gv-ewhere .gv-maplink').getAttribute('href'), loc = await page.locator('#gv-eloc-shared .gv-maplink').getAttribute('href');
+    check('X the helper gets safe maps links for the place and the shared spot', href === 'https://www.google.com/maps/search/?api=1&query=Walmart%20on%20Ashley%20St' && /query=30\.8327%2C-83\.2785/.test(loc) && (await page.locator('.gv-maplink').first().getAttribute('rel')) === 'noopener noreferrer', href + ' ' + loc);
+    check('X the helper sees pickup and drop-off', /Pick up at: 12 Oak St/.test(await text(page)) && /Take to: Home/.test(await text(page)), '');
+    await page.selectOption('#gv-peta', '10'); await page.fill('#gv-pnote', 'Leaving now'); await page.click('#gv-pledge'); await page.waitForSelector('.gv-pledge:has-text("You")'); await settle(page);
+    check('X the helper\'s time shows on their answer', /About 10 minutes/.test(await page.locator('#gv-pledges').innerText()), '');
+    await page.selectOption('#pv-who', { label: 'Rae Sample' }); await settle(page);
+    await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('.gv-notice'); 
+    check('X the sender is told when the helper can come', /Sam Sample can help \(about 10 minutes\)/.test(await text(page)), await text(page));
+    await page.goto(PREVIEW() + '#/giving/requests'); await page.waitForSelector('#gv-urgent-h'); await page.locator('.gv-row', { hasText: 'I need a ride' }).click(); await page.waitForSelector('[data-act="close"]'); await settle(page);
+    check('X the sender\'s close button says All set', (await page.locator('[data-act="close"]').innerText()) === 'All set', '');
+    await page.click('[data-act="close"]'); await settle(page);
+    check('X after All set the request is closed', /has closed/.test(await text(page)), '');
+    await page.selectOption('#pv-who', { label: 'Sam Sample' }); await settle(page);
+    check('X the helper is told it is no longer needed', /No longer needed: "I need a ride"\. Thank you\./.test(await text(page)), await text(page));
+    check('X no page errors in the extras flow', errs.length === 0, errs.join()); await ctx.close(); }
+  { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: [] }); const page = await ctx.newPage();
+    await page.addInitScript(() => { navigator.geolocation.getCurrentPosition = (ok, bad) => bad({ code: 1 }); });
+    await page.goto(PREVIEW() + '#/giving/emergency/new'); await page.waitForSelector('#gv-eloc'); await page.click('#gv-eloc'); await settle(page);
+    check('X when the phone says no, the message is plain and the form still works', /did not allow location.*type the place/.test(await page.locator('#gv-eloc-note').innerText()), await page.locator('#gv-eloc-note').innerText()); await ctx.close(); }
+
+  // N. the home navigation is a row of small circular icon buttons, and only urgent help glows
+  { const { ctx, page } = await open(browser); await settle(page);
+    const ids = ['gv-minebtn', 'gv-familybtn', 'gv-requestslink', 'gv-newlist', 'gv-urgentbtn'];
+    for (const id of ids) { const b = await page.locator('#' + id + ' .gv-circle-dot').boundingBox(); check('N ' + id + ' is a small circle with an icon and a label', Math.abs(b.width - b.height) < 1 && b.width >= 44 && b.width <= 64 && (await page.locator('#' + id + ' svg').count()) === 1 && (await page.locator('#' + id + ' .gv-circle-label').innerText()).length > 0, id); }
+    check('N the old text buttons are gone from the home header', (await page.locator('.gv-head .btn').count()) === 0 && !(await page.locator('#gv-requestslink').evaluate(e => e.classList.contains('gv-row'))), '');
+    const glow = await page.evaluate(() => [...document.querySelectorAll('.gv-circle-dot, .gv-row, .gv-circle')].filter(e => getComputedStyle(e).animationName !== 'none').length);
+    check('N nothing glows when nobody needs help', glow === 0, String(glow));
+    await page.click('#gv-familybtn'); await settle(page); await page.waitForTimeout(400);
+    check('N the Family icon jumps to the family wishlists', await page.evaluate(() => { const r = document.getElementById('gv-sec-family').getBoundingClientRect(); return r.top >= 0 && r.top < 400; }) && (await page.evaluate(() => document.activeElement && document.activeElement.id)) === 'gv-sec-family', '');
+    await page.click('#gv-minebtn'); await page.waitForTimeout(400);
+    check('N the Mine icon jumps to your wishlists', (await page.evaluate(() => document.activeElement && document.activeElement.id)) === 'gv-sec-mine', '');
+    await page.click('#gv-requestslink'); await page.waitForSelector('#main h1:has-text("Family requests")'); await settle(page);
+    check('N the requests screen uses icons too: New request and Urgent', (await page.locator('#gv-newrequest svg').count()) === 1 && (await page.locator('#gv-urgentnew svg').count()) === 1 && (await page.locator('.gv-head .btn').count()) === 0, '');
+    await who(page, 'Una Sample'); await page.goto(PREVIEW() + '#/giving'); await page.waitForSelector('#gv-urgentbtn');
+    check('N a kid sees the same icons', (await page.locator('#gv-minebtn').count()) === 1 && (await page.locator('#gv-requestslink').count()) === 1, '');
+    await ctx.close(); }
+  for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {
+    const { ctx, page } = await open(browser, { w, h, hash: '#/giving' }); await settle(page);
+    await page.screenshot({ path: path.join(shots, 'giving-' + label + '-icons.png') });
+    check('N ' + label + ' icon row has no sideways scroll', !(await overflow(page)), '');
+    check('N ' + label + ' all five icons sit on one row', await page.evaluate(() => { const t = [...document.querySelectorAll('.gv-quick .gv-circle-dot')].map(e => Math.round(e.getBoundingClientRect().top)); return new Set(t).size === 1 && t.length === 5; }), ''); await ctx.close(); }
 
   // H. layout at phone and desktop widths, plus screenshots
   for (const [label, w, h] of [['phone', 390, 844], ['desktop', 1280, 900]]) {

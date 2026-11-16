@@ -159,12 +159,12 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       pledgedCount: live.length, doneCount: live.filter((p) => p.status === 'done').length };
     v.stillNeeded = Math.max(0, v.needed - live.length);
     if (r.audience === 'chosen') {
-      v.audience = 'chosen'; v.urgent = true;
+      v.audience = 'chosen'; v.urgent = true; v.etype = d.etype || 'other'; v.etypeLabel = R.EMERGENCY_TYPES[d.etype] || ''; v.where = d.where || ''; v.pickup = d.pickup || ''; v.dropoff = d.dropoff || ''; v.loc = d.loc || null;
       v.hoursLeft = v.status === 'open' ? Math.max(0, Math.ceil(((d.expiresAt || 0) - now()) / HOUR)) : 0;
       if (v.mine) v.helperNames = (d.helpers || []).map((id) => nameOf(c, id));
     }
     if (full) {
-      v.pledges = live.sort((a, b) => String(a.$createdAt).localeCompare(String(b.$createdAt))).map((p) => ({ id: p.$id, userId: p.userId, name: nameOf(c, p.userId), note: parse(p.data).note || '', status: p.status === 'done' ? 'done' : 'pledged', mine: p.userId === c.me.userId }));
+      v.pledges = live.sort((a, b) => String(a.$createdAt).localeCompare(String(b.$createdAt))).map((p) => ({ id: p.$id, userId: p.userId, name: nameOf(c, p.userId), note: parse(p.data).note || '', eta: parse(p.data).eta || '', etaLabel: R.ETA[parse(p.data).eta] || '', status: p.status === 'done' ? 'done' : 'pledged', mine: p.userId === c.me.userId }));
       const mine = live.find((p) => p.userId === c.me.userId); if (mine) v.myPledgeId = mine.$id;
     }
     return v;
@@ -516,10 +516,20 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
       if (v.value.helpers.some((id) => { const m = c.byId.get(id); return !m || !m.adult || id === user.$id; })) throw new ApiError(400, 'invalid', 'You can only ask other adults in your family.');
       const mine = (await all(T.requests, [Query.equal('familyId', [c.familyId]), Query.equal('ownerId', [user.$id])], RQ.open + 20)).filter((x) => x.audience === 'chosen' && !x.hiddenAt && x.status !== 'closed' && now() < (parse(x.data).expiresAt || 0));
       if (mine.length) throw new ApiError(400, 'limit', 'You already have an emergency request open. Close it before sending another.');
-      const data = JSON.stringify({ title: v.value.title, details: v.value.details, kind: 'time', needed: v.value.helpers.length, amount: '', neededBy: '', helpers: v.value.helpers, expiresAt: now() + R.EMERGENCY.hours * HOUR });
+      const data = JSON.stringify({ title: v.value.title, details: v.value.details, kind: 'time', needed: v.value.helpers.length, amount: '', neededBy: '', helpers: v.value.helpers, etype: v.value.type, where: v.value.where, pickup: v.value.pickup, dropoff: v.value.dropoff, loc: v.value.loc, expiresAt: now() + R.EMERGENCY.hours * HOUR });
       const row = await createRow(T.requests, ID.unique(), { familyId: c.familyId, ownerId: user.$id, status: 'open', approval: 'approved', audience: 'chosen', data }, []);
       for (const id of v.value.helpers) await notify(c, id, nameOf(c, user.$id) + ' needs help. Tap to open.');
       return { request: requestView(c, row, [], true) };
+    },
+    async givingEmergencyAllSet({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await requestRow(c, body.requestId);
+      if (r.audience !== 'chosen' || r.ownerId !== user.$id) throw NA();
+      if (r.status !== 'closed') {
+        await updateRow(T.requests, r.$id, { status: 'closed' }); r.status = 'closed';
+        for (const id of parse(r.data).helpers || []) await notify(c, id, 'No longer needed: "' + (parse(r.data).title || '') + '". Thank you.');
+      }
+      return { request: requestView(c, r, await pledgesFor(r.$id), true) };
     },
     async givingEmergencyKeepOpen({ user, body }) {
       const c = await context(user, body.familyId);
@@ -618,7 +628,8 @@ export function createGiving({ etsy, linkPicture, storage, photoBucket, teams, l
         if (rows.length >= RQ.pledges) throw new ApiError(400, 'limit', 'This request already has ' + RQ.pledges + ' pledges.');
         try { await createRow(T.pledges, ID.unique(), { familyId: c.familyId, requestId: r.$id, userId: user.$id, status: 'pledged', pledgeKey: r.$id + '_' + user.$id, data: JSON.stringify(v.value) }, []); }
         catch (e) { if (sdkCode(e) !== 409) throw e; /* two taps at once: the first one stands */ }
-        await notify(c, r.ownerId, nameOf(c, user.$id) + ' pledged to help with "' + (parse(r.data).title || '') + '".');
+        const urgent = r.audience === 'chosen', eta = v.value.eta ? R.ETA[v.value.eta].toLowerCase() : '';
+        await notify(c, r.ownerId, nameOf(c, user.$id) + (urgent ? ' can help' + (eta ? ' (' + eta + ')' : '') + ' with "' : ' pledged to help with "') + (parse(r.data).title || '') + '".');
       }
       return { request: requestView(c, r, await pledgesFor(r.$id), true) };
     },

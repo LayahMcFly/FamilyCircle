@@ -112,10 +112,15 @@
   function validatePledge(b) {
     var errors = {}, note = trim(b && b.note);
     if (note.length > REQ.note) errors.note = 'Notes can be up to ' + REQ.note + ' characters.';
-    return { ok: !Object.keys(errors).length, errors: errors, value: { note: note } };
+    var eta = trim(b && b.eta);
+    if (eta && !ETA[eta]) errors.eta = 'Choose one of the times shown.';
+    var val = { note: note }; if (eta) val.eta = eta;
+    return { ok: !Object.keys(errors).length, errors: errors, value: val };
   }
   /* ---------- Emergency requests (Phase B). Numbers are the recommended defaults. ---------- */
-  var EMERGENCY = { helpers: 8, hours: 48, title: 120, details: 500 };
+  var EMERGENCY = { helpers: 8, hours: 48, title: 120, details: 500, place: 100 };
+  var EMERGENCY_TYPES = { ride: 'A ride', stay: 'A place to stay', care: 'Childcare', cost: 'Help with a small cost', other: 'Something else' };
+  var ETA = { '10': 'About 10 minutes', '30': 'About 30 minutes', today: 'Later today', tomorrow: 'Tomorrow' };
   var EMERGENCY_911 = 'For a life-threatening emergency, call 911 (or your local emergency number) first. Family Circle is not an emergency service and nobody is watching it in real time.';
   var EMERGENCY_PRIVACY = 'Do not put medical details, account numbers or passwords here. Helpers are only told that you need help.';
   function validateEmergency(b) {
@@ -127,7 +132,16 @@
     var hs = Array.isArray(b.helpers) ? b.helpers.filter(function (x, i, a) { return typeof x === 'string' && x && a.indexOf(x) === i; }) : [];
     if (!hs.length) errors.helpers = 'Choose at least one adult to ask.';
     else if (hs.length > EMERGENCY.helpers) errors.helpers = 'You can ask up to ' + EMERGENCY.helpers + ' adults.';
-    return { ok: !Object.keys(errors).length, errors: errors, value: { title: title, details: details, helpers: hs } };
+    var type = EMERGENCY_TYPES[b.type] ? b.type : 'other';
+    var where = trim(b.where), pickup = trim(b.pickup), dropoff = trim(b.dropoff);
+    ['where', 'pickup', 'dropoff'].forEach(function (k) { if ({ where: where, pickup: pickup, dropoff: dropoff }[k].length > EMERGENCY.place) errors[k] = 'Keep it under ' + EMERGENCY.place + ' characters.'; });
+    var loc = null;
+    if (b.lat !== undefined && b.lat !== null && b.lat !== '') {
+      var la = Number(b.lat), lo = Number(b.lng);
+      if (!(la >= -90 && la <= 90 && lo >= -180 && lo <= 180)) errors.loc = 'That location could not be used.';
+      else loc = { lat: Math.round(la * 1e5) / 1e5, lng: Math.round(lo * 1e5) / 1e5 };
+    }
+    return { ok: !Object.keys(errors).length, errors: errors, value: { title: title, details: details, helpers: hs, type: type, where: where, pickup: pickup, dropoff: dropoff, loc: loc } };
   }
 
-export { EMERGENCY, EMERGENCY_911, EMERGENCY_PRIVACY, validateEmergency, REQ, REQUEST_KINDS, validateRequest, validatePledge, REPORT_REASONS, AUDIENCES, validateReport, LIMITS, PRIORITIES, PRIORITY_LABEL, CURRENCIES, cleanUrl, hostOf, parseAmount, fmtMoney, totalsByCurrency, validateList, validateItem, trim };
+export { EMERGENCY_TYPES, ETA, EMERGENCY, EMERGENCY_911, EMERGENCY_PRIVACY, validateEmergency, REQ, REQUEST_KINDS, validateRequest, validatePledge, REPORT_REASONS, AUDIENCES, validateReport, LIMITS, PRIORITIES, PRIORITY_LABEL, CURRENCIES, cleanUrl, hostOf, parseAmount, fmtMoney, totalsByCurrency, validateList, validateItem, trim };

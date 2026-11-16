@@ -95,3 +95,5 @@ Create the two tables and five indexes above (all permissions empty, like the ot
 ## Emergency requests (v1.51.99.42)
 
 No new tables or columns. Emergencies are stored as rows in `givingRequests` (audience `chosen`, the chosen adults and the closing time kept inside `data`). Upload the new function build and you are done.
+
+v1.51.99.44 adds optional where/pickup/drop-off text, a one-time location, kinds of help, "on my way" times and an "All set" button to emergencies. Still no new tables or columns: it all fits in the existing `data` column of `givingRequests` (checked at the largest possible size). Upload the new function build.

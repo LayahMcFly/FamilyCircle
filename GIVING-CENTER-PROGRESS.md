@@ -162,3 +162,4 @@ Later phases (requests and pledges, gift exchanges, emergency assistance, proces
 - v1.51.99.41: Phase B EMERGENCY requests, PREVIEW only (hidden test page; not in the real screens yet). Adults and kids can ask up to 8 chosen adults for urgent help; 911 notice; helpers see only 'X needs help'; closes after 48 h unless kept open; admins who were not chosen cannot see it. Next: real backend.
 - v1.51.99.42: Phase B emergency requests are REAL (no new tables). Needs the new function build only.
 - v1.51.99.43: Urgent help is a small red circular icon button (Giving home and Requests); it and the banner glow and dim while someone needs help (static glow with reduced motion).
+- v1.51.99.44/.45: emergency extras (where, pickup, drop-off, one-time location, kinds, on-my-way times, All set) in preview AND real; home navigation turned into small circular icon buttons (Mine, Family, Requests, New list, Urgent). Only urgent help glows.

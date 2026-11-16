@@ -109,3 +109,19 @@
 .gv-circle.is-pulsing .gv-circle-dot, .gv-urgentbanner { animation: gv-glow 1.8s ease-in-out infinite; }
 .gv-urgentbanner { background: color-mix(in srgb, #d92d20 10%, var(--bg)); }
 @media (prefers-reduced-motion: reduce) { .gv-circle.is-pulsing .gv-circle-dot, .gv-urgentbanner { animation: none; box-shadow: 0 0 0 4px rgba(217,45,32,.35), 0 0 18px 4px rgba(217,45,32,.5); } }
+
+.gv-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.gv-chip { min-height: 44px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.gv-chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.gv-chip:focus-visible { outline: 3px solid var(--accent-text); outline-offset: 2px; }
+.gv-place { margin: 6px 0; }
+.gv-maplink { font-weight: 600; white-space: nowrap; }
+.gv-badge.is-eta { border-color: var(--accent); color: var(--accent-text); }
+[hidden] { display: none !important; }
+
+.gv-circle { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.gv-circle-dot { position: relative; }
+.gv-circle-count { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--accent); color: #fff; font-size: .72rem; font-weight: 700; display: grid; place-items: center; }
+.gv-quick { flex-wrap: wrap; }
+.gv-quick { gap: 10px; justify-content: space-between; }
+.gv-circle { min-width: 56px; }

@@ -200,10 +200,12 @@ function check(name, ok, detail) { (ok ? pass++ : fail++); results.push((ok ? 'P
   // 5i emergency requests work against the real server code
   await as('ann', '#/giving/emergency/new'); await page.waitForSelector('#gv-etitle');
   check('5i real: the form shows the 911 notice', /call 911/.test(await page.locator('#gv-911').innerText()), '');
-  await page.fill('#gv-etitle', 'Need a ride home'); await page.locator('#gv-ehelpers .gv-check', { hasText: 'bob' }).click(); await page.click('#gv-esave');
+  await page.fill('#gv-etitle', 'Need a ride home'); await page.fill('#gv-ewhere', 'Main St and 5th'); await page.locator('#gv-ehelpers .gv-check', { hasText: 'bob' }).click(); await page.click('#gv-esave');
   await page.waitForSelector('#main h1:has-text("Need a ride home")'); await settle();
   check('5i real: the sender sees the time left and who was asked', /Closes automatically in about 48 hours/.test(await text()) && /You asked: bob/.test(await text()), await text());
   check('5i real: stored as a request with no client permissions, chosen audience', rowsOf('givingRequests').some(r => r.audience === 'chosen' && r.$permissions.length === 0), '');
+  check('5i real: the place is saved with the request and shows an Open in maps link', /Main St and 5th/.test(await text()) && (await page.locator('.gv-maplink').count()) === 1, await text());
+  check('5i real: the last chosen helpers are remembered on this device', await page.evaluate(() => Object.keys(localStorage).some(k => k.indexOf('gv-last-helpers-') === 0)), '');
   await as('bob'); check('5i real: the chosen adult sees the urgent banner', (await page.locator('#gv-urgentbanner').count()) === 1, await text());
   await as('owner', '#/giving/requests'); check('5i real: an owner who was not chosen sees nothing of it', !/Need a ride home/.test(await text()), await text());
 

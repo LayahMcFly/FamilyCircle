@@ -702,3 +702,28 @@ test('emergency: closes after 48 hours, keep open restarts, one at a time, no ed
   await w.ok('bob', 'givingRequestsHome', F());
   assert.equal(rows(w, 'givingRequests').length, 0);
 });
+
+test('emergency extras: place, one-time location, kind, "on my way", All set (real server)', async () => {
+  const w = await setup();
+  const longest = 'x'.repeat(100);
+  await w.fail('ann', 'givingEmergencySave', EMG({ helpers: ['bob'], where: 'y'.repeat(101) }), 400, 'invalid');
+  await w.fail('ann', 'givingEmergencySave', EMG({ helpers: ['bob'], lat: 120, lng: 5 }), 400, 'invalid');
+  const q = (await w.ok('ann', 'givingEmergencySave', EMG({ helpers: ['bob', 'owner'], type: 'ride', where: 'Walmart lot', pickup: '12 Oak St', dropoff: 'Home', lat: 30.8327, lng: -83.2785 }))).request;
+  const seen = (await w.ok('bob', 'givingRequestGet', F({ requestId: q.id }))).request;
+  assert.equal(seen.where, 'Walmart lot'); assert.deepEqual(seen.loc, { lat: 30.8327, lng: -83.2785 }); assert.equal(seen.etypeLabel, 'A ride');
+  await w.fail('tia', 'givingRequestGet', F({ requestId: q.id }), 404); await w.fail('kid', 'givingRequestGet', F({ requestId: q.id }), 404);
+  await w.fail('bob', 'givingPledgeSave', F({ requestId: q.id, eta: 'never' }), 400, 'invalid');
+  await w.ok('bob', 'givingPledgeSave', F({ requestId: q.id, eta: '30', note: 'Leaving soon' }));
+  assert.equal((await w.ok('ann', 'givingRequestGet', F({ requestId: q.id }))).request.pledges[0].etaLabel, 'About 30 minutes');
+  assert.ok((await w.ok('ann', 'givingHome', F())).notices.some((n) => /can help \(about 30 minutes\)/.test(n.text)));
+  await w.fail('bob', 'givingEmergencyAllSet', F({ requestId: q.id }), 404);
+  assert.equal((await w.ok('ann', 'givingEmergencyAllSet', F({ requestId: q.id }))).request.status, 'closed');
+  assert.ok((await w.ok('owner', 'givingHome', F())).notices.some((n) => /No longer needed/.test(n.text)));
+  const before = (await w.ok('owner', 'givingHome', F())).notices.length;
+  await w.ok('ann', 'givingEmergencyAllSet', F({ requestId: q.id }));
+  assert.equal((await w.ok('owner', 'givingHome', F())).notices.length, before);   // a second tap tells nobody again
+  // the biggest possible request still fits the data column (1500 characters)
+  const ids = ['owner', 'bob', 'tia', 'kid'];
+  const big = JSON.stringify({ title: 'T'.repeat(120), details: 'D'.repeat(500), kind: 'time', needed: 8, amount: '', neededBy: '', helpers: Array.from({ length: 8 }, () => '6af8f13324b2263631c1'), etype: 'cost', where: longest, pickup: longest, dropoff: longest, loc: { lat: -33.12345, lng: -122.12345 }, expiresAt: 1800000000000 });
+  assert.ok(big.length < 1500, 'size ' + big.length);
+});

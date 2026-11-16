@@ -23,7 +23,9 @@
   var ICONS = {
     alert: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/>',
     hands: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
-    plus: '<path d="M12 5v14M5 12h14"/>'
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/><path d="M12 8c-1-3-5-4-5-1.5C7 8 9 8 12 8zM12 8c1-3 5-4 5-1.5C17 8 15 8 12 8z"/>',
+    users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.8.2 4.5 2 4.5 4.9"/>'
   };
   /** A small circular button with an icon; the visible label sits under it and the whole thing is one link or button. */
   function iconSvg(name) {
@@ -35,8 +37,12 @@
     svg.appendChild(g); return svg;
   }
   function circleBtn(o) {
-    return h('a', { class: 'gv-circle' + (o.cls ? ' ' + o.cls : ''), id: o.id, href: o.href, 'aria-label': o.label }, h('span', { class: 'gv-circle-dot' }, iconSvg(o.icon)), h('span', { class: 'gv-circle-label', text: o.label }));
+    var kids = [h('span', { class: 'gv-circle-dot' }, iconSvg(o.icon), o.count ? h('span', { class: 'gv-circle-count', text: String(o.count), 'aria-hidden': 'true' }) : null), h('span', { class: 'gv-circle-label', text: o.label })];
+    var attrs = { class: 'gv-circle' + (o.cls ? ' ' + o.cls : ''), id: o.id, 'aria-label': o.aria || o.label };
+    if (o.onclick) { attrs.type = 'button'; attrs.onclick = o.onclick; return h('button', attrs, kids); }
+    attrs.href = o.href; return h('a', attrs, kids);
   }
+  function jumpTo(id) { return function () { var el = document.getElementById(id); if (!el) return; var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' }); el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); }; }
   function badge(text, cls) { return h('span', { class: 'gv-badge' + (cls ? ' ' + cls : ''), text: text }); }
   /* PREVIEW ONLY: stands in for the picture the live version would take from the item's link. Nothing is fetched. */
   function linkTile(url) {
@@ -203,10 +209,15 @@
     /* ---------- home ---------- */
     function renderHome(r) {
       var page = h('div', { class: 'gv-page' });
-      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Giving Center', 'data-focus': '' }),
-        r.canCreateList ? h('a', { class: 'btn small', href: '#/giving/list/new', id: 'gv-newlist', text: 'New wishlist' }) : null));
+      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Giving Center', 'data-focus': '' })));
       page.appendChild(h('p', { class: 'muted', text: 'Wishlists for the people in your family. Prices are estimates for reference only. Nothing here is bought or paid through Family Circle.' }));
-      page.appendChild(h('div', { class: 'gv-quick' }, circleBtn({ id: 'gv-urgentbtn', href: '#/giving/emergency/new', icon: 'alert', label: 'Urgent help', cls: 'is-urgent' + (r.requests && r.requests.urgent ? ' is-pulsing' : '') })));
+      var openReq = r.requests ? r.requests.open : 0, waitReq = r.requests && r.requests.waiting ? r.requests.waiting : 0;
+      page.appendChild(h('nav', { class: 'gv-quick', 'aria-label': 'Giving Center' },
+        circleBtn({ id: 'gv-minebtn', onclick: jumpTo('gv-sec-mine'), icon: 'gift', label: 'Mine', aria: 'Your wishlists' }),
+        circleBtn({ id: 'gv-familybtn', onclick: jumpTo('gv-sec-family'), icon: 'users', label: 'Family', aria: 'Family wishlists' }),
+        circleBtn({ id: 'gv-requestslink', href: '#/giving/requests', icon: 'hands', label: 'Requests', count: openReq + waitReq, aria: 'Family requests, ' + openReq + (openReq === 1 ? ' open request' : ' open requests') + (waitReq ? ', ' + waitReq + ' waiting for approval' : '') }),
+        r.canCreateList ? circleBtn({ id: 'gv-newlist', href: '#/giving/list/new', icon: 'plus', label: 'New list', aria: 'New wishlist' }) : null,
+        circleBtn({ id: 'gv-urgentbtn', href: '#/giving/emergency/new', icon: 'alert', label: 'Urgent', aria: 'Urgent help', cls: 'is-urgent' + (r.requests && r.requests.urgent ? ' is-pulsing' : '') })));
       if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidnote', text: 'You can make your own wishlist and see the family’s lists. Gift reservations are for adults.' }));
       if (r.canModerate) page.appendChild(reportsPanel(r.openReports));
       (r.notices || []).forEach(function (n) {
@@ -214,13 +225,11 @@
           h('button', { type: 'button', class: 'btn ghost small', 'data-notice': n.id, text: 'Dismiss', onclick: function () { api('noticeDismiss', { noticeId: n.id }).then(function (x) { if (x.stale) return; refresh(); }); } })));
       });
       if (r.requests && r.requests.urgent) page.appendChild(h('a', { class: 'gv-row gv-urgentbanner', id: 'gv-urgentbanner', href: '#/giving/requests' }, h('strong', { text: r.requests.urgent === 1 ? 'Someone needs urgent help' : r.requests.urgent + ' people need urgent help' }), h('span', { class: 'muted', text: 'Tap to open' })));
-      page.appendChild(h('a', { class: 'gv-row gv-requestslink', id: 'gv-requestslink', href: '#/giving/requests' },
-        h('strong', { text: 'Family requests' }), h('span', { class: 'muted', text: r.requests ? (r.requests.open + (r.requests.open === 1 ? ' open request' : ' open requests') + (r.requests.waiting ? ', ' + r.requests.waiting + ' waiting for approval' : '')) : 'Ask for help and pledge to help' })));
       var mine = r.lists.filter(function (l) { return l.mine; }), others = r.lists.filter(function (l) { return !l.mine; });
-      page.appendChild(h('h2', { class: 'gv-sub', text: 'Your wishlists' }));
+      page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-sec-mine', text: 'Your wishlists' }));
       if (!mine.length) page.appendChild(h('p', { class: 'muted', text: 'You have no wishlists yet.' }));
       else page.appendChild(listRows(mine));
-      page.appendChild(h('h2', { class: 'gv-sub', text: 'Family wishlists' }));
+      page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-sec-family', text: 'Family wishlists' }));
       if (!others.length) page.appendChild(h('p', { class: 'muted', text: 'No one else has shared a wishlist yet.' })); else page.appendChild(listRows(others));
       if (r.canManageAges) page.appendChild(membersPanel());
       if (r.me.adult) page.appendChild(h('h2', { class: 'gv-sub', text: 'Items you reserved' }));
@@ -574,10 +583,10 @@
     }
     function renderRequests(r) {
       var page = h('div', { class: 'gv-page' }, backLink('#/giving', 'Back to Giving Center'));
-      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Family requests', 'data-focus': '' }), r.canCreate ? h('a', { class: 'btn small', href: '#/giving/requests/new', id: 'gv-newrequest', text: 'New request' }) : null));
+      page.appendChild(h('div', { class: 'gv-head' }, h('h1', { text: 'Family requests', 'data-focus': '' })));
       page.appendChild(h('p', { class: 'muted', text: 'Ask for something specific and let family members pledge to help. Nothing is paid or bought through Family Circle. If money is involved, people sort it out themselves and you confirm.' }));
       if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidreq', text: 'You can ask for help. An adult looks at your request before the family sees it. Pledging to help is for adults.' }));
-      page.appendChild(h('div', { class: 'gv-quick' }, circleBtn({ id: 'gv-urgentnew', href: '#/giving/emergency/new', icon: 'alert', label: 'Urgent help', cls: 'is-urgent' + ((r.urgent || []).length ? ' is-pulsing' : '') })));
+      page.appendChild(h('nav', { class: 'gv-quick', 'aria-label': 'Requests' }, r.canCreate ? circleBtn({ id: 'gv-newrequest', href: '#/giving/requests/new', icon: 'plus', label: 'New request' }) : null, circleBtn({ id: 'gv-urgentnew', href: '#/giving/emergency/new', icon: 'alert', label: 'Urgent', aria: 'Urgent help', cls: 'is-urgent' + ((r.urgent || []).length ? ' is-pulsing' : '') })));
       if ((r.urgent || []).length) { page.appendChild(h('h2', { class: 'gv-sub', id: 'gv-urgent-h', text: 'Urgent' })); page.appendChild(requestRows(r.urgent)); }
       if (r.canModerate && r.waiting.length) { page.appendChild(h('h2', { class: 'gv-sub', text: 'Waiting for your approval' })); page.appendChild(requestRows(r.waiting)); }
       page.appendChild(h('h2', { class: 'gv-sub', text: 'Open requests' }));
@@ -586,30 +595,62 @@
       return page;
     }
     function requestLimitMsg() { return h('section', { class: 'card' }, h('h1', { text: 'New request', 'data-focus': '' }), h('p', { text: 'You have ' + C.REQ.open + ' open requests, which is the limit. Close one to add another.' }), h('a', { class: 'btn secondary', href: '#/giving/requests', text: 'Back to requests' })); }
+    var TYPE_TITLE = { ride: 'I need a ride', stay: 'I need a place to stay tonight', care: 'I need someone to watch the kids', cost: 'I need help with a small cost', other: '' };
+    function mapsUrl(q) { return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q); }
+    function mapLink(label, q, id) { return h('a', { class: 'gv-maplink', href: mapsUrl(q), target: '_blank', rel: 'noopener noreferrer', id: id, text: 'Open in maps', 'aria-label': 'Open in maps: ' + label }); }
+    function lastHelpers(famKey, valid) { try { var v = JSON.parse(localStorage.getItem('gv-last-helpers-' + famKey) || '[]'); return v.filter(function (x) { return valid.indexOf(x) >= 0; }); } catch (e) { return []; } }
     function renderEmergencyForm(r) {
-      var f = {};
+      var f = {}, type = 'other', loc = null, lastAuto = '';
       f.title = h('input', { type: 'text', id: 'gv-etitle', autocomplete: 'off', placeholder: 'For example: Car broke down, need a ride' });
-      f.details = h('textarea', { id: 'gv-edetails', rows: 3, placeholder: 'Where you are and what would help. Keep it short.' });
+      f.details = h('textarea', { id: 'gv-edetails', rows: 3, placeholder: 'What would help. Keep it short.' });
+      f.where = h('input', { type: 'text', id: 'gv-ewhere', autocomplete: 'off', placeholder: 'For example: Walmart on Ashley St, parking lot' });
+      f.pickup = h('input', { type: 'text', id: 'gv-epickup', autocomplete: 'off', placeholder: 'Address or place' });
+      f.dropoff = h('input', { type: 'text', id: 'gv-edropoff', autocomplete: 'off', placeholder: 'Address or place' });
+      var rideFields = h('div', { id: 'gv-eride', hidden: '' }, field('gv-epickup', 'Pick me up at (optional)', f.pickup), field('gv-edropoff', 'Take me to (optional)', f.dropoff));
+      var chips = Object.keys(C.EMERGENCY_TYPES).map(function (k) {
+        return h('button', { type: 'button', class: 'gv-chip', 'data-type': k, 'aria-pressed': k === type ? 'true' : 'false', text: C.EMERGENCY_TYPES[k], onclick: function () {
+          type = k; chips.forEach(function (c) { c.setAttribute('aria-pressed', c.getAttribute('data-type') === k ? 'true' : 'false'); });
+          if (!f.title.value || f.title.value === lastAuto) { lastAuto = TYPE_TITLE[k]; f.title.value = lastAuto; }
+          rideFields.hidden = k !== 'ride';
+        } });
+      });
+      var locNote = h('p', { class: 'hint', id: 'gv-eloc-note', role: 'status' });
+      var locBtn = h('button', { type: 'button', class: 'btn secondary small', id: 'gv-eloc', text: 'Share my current location (one time)', onclick: function () {
+        locNote.textContent = '';
+        if (!navigator.geolocation) { locNote.textContent = 'This phone or browser cannot share a location. You can type the place instead.'; return; }
+        locNote.textContent = 'Asking your phone for your location…';
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          locNote.textContent = 'Location added once. The adults you choose will see a map link. It is not tracked and it is deleted with this request.'; locBtn.textContent = 'Update my location'; clearLoc.hidden = false;
+        }, function (err) { locNote.textContent = err && err.code === 1 ? 'Your phone did not allow location. You can type the place instead.' : 'Could not find your location. You can type the place instead.'; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+      } });
+      var clearLoc = h('button', { type: 'button', class: 'btn ghost small', id: 'gv-eloc-clear', hidden: '', text: 'Remove location', onclick: function () { loc = null; clearLoc.hidden = true; locBtn.textContent = 'Share my current location (one time)'; locNote.textContent = 'Location removed.'; } });
+      var famKey = (real && o.famId ? o.famId() : st.familyId) || '', pre = real ? lastHelpers(famKey, r.helpers.map(function (x) { return x.userId; })) : [];
       var boxes = r.helpers.map(function (x) {
-        var cb = h('input', { type: 'checkbox', value: x.userId, class: 'gv-cb' });
+        var cb = h('input', { type: 'checkbox', value: x.userId, class: 'gv-cb' }); if (pre.indexOf(x.userId) >= 0) cb.checked = true;
         return h('label', { class: 'gv-check' }, cb, h('span', { text: x.name }));
       });
       var group = h('div', { class: 'gv-checks', id: 'gv-ehelpers', role: 'group', 'aria-label': 'Who to ask' }, boxes);
       var msg = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
       var form = h('form', { class: 'card gv-form', novalidate: '', onsubmit: function (e) {
-        e.preventDefault(); msg.textContent = ''; ['gv-etitle', 'gv-edetails', 'gv-ehelpers'].forEach(function (i) { setErr(i, ''); });
+        e.preventDefault(); msg.textContent = ''; ['gv-etitle', 'gv-edetails', 'gv-ehelpers', 'gv-ewhere', 'gv-epickup', 'gv-edropoff'].forEach(function (i) { setErr(i, ''); });
         var chosen = boxes.map(function (l) { return l.firstChild; }).filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
-        api('emergencySave', { title: f.title.value, details: f.details.value, helpers: chosen }).then(function (x) {
+        api('emergencySave', { title: f.title.value, details: f.details.value, helpers: chosen, type: type, where: f.where.value, pickup: type === 'ride' ? f.pickup.value : '', dropoff: type === 'ride' ? f.dropoff.value : '', lat: loc ? loc.lat : undefined, lng: loc ? loc.lng : undefined }).then(function (x) {
           if (x.stale) return;
-          if (!x.ok) { var ids = { title: 'gv-etitle', details: 'gv-edetails', helpers: 'gv-ehelpers' }; Object.keys(x.fields || {}).forEach(function (k) { setErr(ids[k], x.fields[k]); }); msg.textContent = x.message; return; }
+          if (!x.ok) { var ids = { title: 'gv-etitle', details: 'gv-edetails', helpers: 'gv-ehelpers', where: 'gv-ewhere', pickup: 'gv-epickup', dropoff: 'gv-edropoff' }; Object.keys(x.fields || {}).forEach(function (k) { setErr(ids[k], x.fields[k]); }); msg.textContent = x.message; return; }
+          if (real) { try { localStorage.setItem('gv-last-helpers-' + famKey, JSON.stringify(chosen)); } catch (e2) { /* a remembered list is a convenience only */ } }
           toast('Sent. The adults you chose have been told.'); go('#/giving/requests/' + x.request.id);
         });
       } }, h('h1', { text: 'Ask for urgent help', 'data-focus': '' }),
         h('p', { class: 'gv-911', id: 'gv-911', role: 'note', text: C.EMERGENCY_911 }),
+        h('div', { class: 'gv-field' }, h('span', { class: 'gv-checklabel', text: 'What kind of help?' }), h('div', { class: 'gv-chips', id: 'gv-etypes', role: 'group', 'aria-label': 'What kind of help' }, chips)),
         field('gv-etitle', 'What do you need?', f.title, '', 'A short line, up to ' + C.EMERGENCY.title + ' characters.'),
         field('gv-edetails', 'Details (optional)', f.details, '', C.EMERGENCY_PRIVACY),
+        field('gv-ewhere', 'Where are you? (optional)', f.where, '', 'Helpers get an Open in maps link for this.'),
+        rideFields,
+        h('div', { class: 'gv-field' }, locBtn, clearLoc, locNote),
         h('div', { class: 'gv-field' }, h('span', { class: 'gv-checklabel', id: 'gv-ehelpers-l', text: 'Who should we ask? (up to ' + r.max + ' adults)' }), group, h('p', { class: 'gv-fielderr', id: 'gv-ehelpers-err', role: 'alert', text: '' })),
-        h('p', { class: 'hint gv-who', id: 'gv-ewhosees', text: 'Only the adults you tick can see this request. Other family members and admins cannot. Each one gets a notice that says you need help. It closes by itself after ' + C.EMERGENCY.hours + ' hours unless you keep it open.' }), msg,
+        h('p', { class: 'hint gv-who', id: 'gv-ewhosees', text: 'Only the adults you tick can see this request, including any place or location. Other family members and admins cannot. Each one gets a notice that says you need help. It closes by itself after ' + C.EMERGENCY.hours + ' hours unless you keep it open.' }), msg,
         h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn danger', id: 'gv-esave', text: 'Send request' }), h('a', { class: 'btn secondary', href: '#/giving/requests', text: 'Cancel' })));
       return h('div', { class: 'gv-page' }, backLink('#/giving/requests', 'Back'), form);
     }
@@ -651,6 +692,11 @@
         page.insertBefore(h('p', { class: 'gv-911', id: 'gv-911', role: 'note', text: C.EMERGENCY_911 }), page.childNodes[1]);
         page.appendChild(h('p', { id: 'gv-eleft', class: 'hint', text: q.status === 'closed' ? 'This request has closed.' : 'Closes automatically in about ' + q.hoursLeft + ' hours.' }));
         if (q.mine && q.helperNames) page.appendChild(h('p', { class: 'muted', id: 'gv-easked', text: 'You asked: ' + q.helperNames.join(', ') }));
+        if (q.etypeLabel && q.etype !== 'other') page.appendChild(h('p', { class: 'gv-badges' }, badge(q.etypeLabel, '')));
+        [['where', 'Where', q.where], ['pickup', 'Pick up at', q.pickup], ['dropoff', 'Take to', q.dropoff]].forEach(function (x) {
+          if (x[2]) page.appendChild(h('p', { class: 'gv-place', id: 'gv-e' + x[0] }, h('strong', { text: x[1] + ': ' }), h('span', { text: x[2] }), ' ', mapLink(x[2], x[2])));
+        });
+        if (q.loc) page.appendChild(h('p', { class: 'gv-place', id: 'gv-eloc-shared' }, h('strong', { text: 'Shared location: ' }), h('span', { text: 'one-time spot from their phone' }), ' ', mapLink('shared location', q.loc.lat + ',' + q.loc.lng)));
       }
       if (q.details) page.appendChild(h('p', { class: 'gv-notes', text: q.details }));
       if (q.amount) page.appendChild(h('p', { class: 'muted', id: 'gv-ramounttext', text: 'Money: ' + q.amount + ' (for reference; handled outside Family Circle)' }));
@@ -667,7 +713,7 @@
       if (!q.pledges.length) page.appendChild(h('p', { class: 'muted', id: 'gv-nopledge', text: q.urgent ? 'No one has answered yet.' : 'No one has pledged yet.' }));
       else page.appendChild(h('ul', { class: 'gv-rows', id: 'gv-pledges' }, q.pledges.map(function (p) {
         return h('li', { class: 'gv-pledge', 'data-pledge': p.id }, h('strong', { text: p.mine ? 'You' : p.name }), p.status === 'done' ? badge('Done', 'is-done') : null,
-          p.note ? h('span', { class: 'muted', text: p.note }) : null,
+          p.etaLabel ? badge(p.etaLabel, 'is-eta') : null, p.note ? h('span', { class: 'muted', text: p.note }) : null,
           q.mine ? h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'done', text: p.status === 'done' ? 'Mark as not done' : 'Mark as done', 'aria-label': (p.status === 'done' ? 'Mark as not done: ' : 'Mark as done: ') + p.name,
             onclick: function () { api('pledgeDone', { pledgeId: p.id, done: p.status !== 'done' }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); render(); }); } }) : null,
           p.mine && p.status !== 'done' ? h('button', { type: 'button', class: 'btn ghost small', 'data-act': 'withdraw', text: 'Withdraw', 'aria-label': 'Withdraw your pledge',
@@ -676,13 +722,14 @@
       if (!q.mine && q.approval === 'approved' && q.status === 'open') {
         if (!r.me.adult) page.appendChild(h('p', { class: 'hint', id: 'gv-kidpledge', text: 'Pledging to help is for adults.' }));
         else {
-          var note = h('textarea', { id: 'gv-pnote', rows: 2, placeholder: 'For example: I can come after 10, or I will bring the van' });
-          var mineP = q.pledges.filter(function (p) { return p.mine; })[0]; if (mineP) note.value = mineP.note;
+          var note = h('textarea', { id: 'gv-pnote', rows: 2, placeholder: q.urgent ? 'For example: I am leaving now' : 'For example: I can come after 10, or I will bring the van' });
+          var eta = q.urgent ? h('select', { id: 'gv-peta' }, [h('option', { value: '', text: 'No time given' })].concat(Object.keys(C.ETA).map(function (k) { return h('option', { value: k, text: C.ETA[k] }); }))) : null;
+          var mineP = q.pledges.filter(function (p) { return p.mine; })[0]; if (mineP) { note.value = mineP.note; if (eta) eta.value = mineP.eta || ''; }
           var pm = h('p', { class: 'ev-formmsg gv-formmsg', role: 'alert' });
           page.appendChild(h('form', { class: 'card gv-form', id: 'gv-pledgeform', novalidate: '', onsubmit: function (e) {
             e.preventDefault(); pm.textContent = ''; setErr('gv-pnote', '');
-            api('pledgeSave', { requestId: q.id, note: note.value }).then(function (x) { if (x.stale) return; if (!x.ok) { if (x.fields && x.fields.note) setErr('gv-pnote', x.fields.note); pm.textContent = x.message; return; } toast(mineP ? 'Pledge updated.' : 'Thank you for pledging.'); render(); });
-          } }, h('h2', { class: 'gv-sub', text: q.urgent ? (mineP ? 'Your answer' : 'Can you help?') : (mineP ? 'Your pledge' : 'Pledge to help') }), field('gv-pnote', 'A short note (optional)', note), pm,
+            api('pledgeSave', { requestId: q.id, note: note.value, eta: eta ? eta.value : undefined }).then(function (x) { if (x.stale) return; if (!x.ok) { if (x.fields && x.fields.note) setErr('gv-pnote', x.fields.note); pm.textContent = x.message; return; } toast(mineP ? 'Pledge updated.' : 'Thank you for pledging.'); render(); });
+          } }, h('h2', { class: 'gv-sub', text: q.urgent ? (mineP ? 'Your answer' : 'Can you help?') : (mineP ? 'Your pledge' : 'Pledge to help') }), eta ? field('gv-peta', 'When can you get there? (optional)', eta) : null, field('gv-pnote', 'A short note (optional)', note), pm,
             h('div', { class: 'gv-actions' }, h('button', { type: 'submit', class: 'btn', id: 'gv-pledge', text: q.urgent ? (mineP ? 'Update answer' : 'I can help') : (mineP ? 'Update pledge' : 'I will help') }))));
         }
       }
@@ -690,8 +737,8 @@
       if (q.mine && q.urgent) acts.appendChild(h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'keep', text: 'Keep open another ' + C.EMERGENCY.hours + ' hours', onclick: function () { api('emergencyKeepOpen', { requestId: q.id }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); toast('Kept open.'); render(); }); } }));
       if (q.mine) {
         if (!q.urgent) acts.appendChild(h('a', { class: 'btn secondary small', href: '#/giving/requests/' + q.id + '/edit', 'data-act': 'edit', text: 'Edit' }));
-        if (q.approval === 'approved' && !(q.urgent && q.status !== 'open')) acts.appendChild(h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'close', text: q.status === 'open' ? 'Close request' : 'Reopen request',
-          onclick: function () { api('requestClose', { requestId: q.id, reopen: q.status !== 'open' }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); toast(q.status === 'open' ? 'Closed.' : 'Reopened.'); render(); }); } }));
+        if (q.approval === 'approved' && !(q.urgent && q.status !== 'open')) acts.appendChild(h('button', { type: 'button', class: 'btn secondary small', 'data-act': 'close', text: q.urgent ? 'All set' : (q.status === 'open' ? 'Close request' : 'Reopen request'),
+          onclick: function () { (q.urgent ? api('emergencyAllSet', { requestId: q.id }) : api('requestClose', { requestId: q.id, reopen: q.status !== 'open' })).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); toast(q.urgent ? 'Marked all set. The adults you asked were told.' : (q.status === 'open' ? 'Closed.' : 'Reopened.')); render(); }); } }));
         acts.appendChild(h('button', { type: 'button', class: 'btn danger small', 'data-act': 'delete', text: 'Delete', 'aria-label': 'Delete ' + q.title,
           onclick: function () { confirmDialog('Delete this request?', '“' + q.title + '” will be removed and anyone who pledged is told.', 'Delete request', function () { api('requestDelete', { requestId: q.id }).then(function (x) { if (x.stale) return; if (!x.ok) return showErr(x); toast('Request deleted.'); go('#/giving/requests'); }); }); } }));
       } else if (q.approval === 'approved') acts.appendChild(h('button', { type: 'button', class: 'btn ghost small', 'data-act': 'report', text: 'Report', 'aria-label': 'Report: ' + q.title, onclick: function () { reportDialog('request', q.id, q.title); } }));
