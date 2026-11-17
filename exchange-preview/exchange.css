@@ -198,3 +198,72 @@ body.ex-skin .ex-form { background-color: var(--paper); }
 @media (prefers-reduced-motion: reduce) { .ex-skin .ex-card { transition: none; } }
 .ex-skin .btn.ghost { background: var(--plank); color: #fff3d6; text-decoration: none; border: 1px solid #4a2d14; box-shadow: 0 2px 0 rgba(0,0,0,.3); }
 .ex-skin .badge:not(.ex-badge) { padding: 3px 10px; font-size: .78rem; }
+
+/* ===== Arts-and-crafts project board, round 2: buttons are cut-paper cards, cards are construction paper with stitching ===== */
+body.ex-skin { --c1: #fffdf5; --c2: #e4f4e1; --c3: #ffe5d3; --c4: #dff0fb; --stitch: rgba(60,35,10,.4); --cut: rgba(60,35,10,.38); }
+:root[data-theme="dark"] body.ex-skin { --c1: #2a2d31; --c2: #243329; --c3: #382c26; --c4: #232f3a; --stitch: rgba(255,240,215,.4); --cut: rgba(0,0,0,.55); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body.ex-skin { --c1: #2a2d31; --c2: #243329; --c3: #382c26; --c4: #232f3a; --stitch: rgba(255,240,215,.4); --cut: rgba(0,0,0,.55); } }
+
+/* construction-paper colours and stitched edges on every card */
+body.ex-skin .ex-grid .ex-freeitem:nth-child(4n+1) { background-color: var(--c1); }
+body.ex-skin .ex-grid .ex-freeitem:nth-child(4n+2) { background-color: var(--c2); }
+body.ex-skin .ex-grid .ex-freeitem:nth-child(4n+3) { background-color: var(--c3); }
+body.ex-skin .ex-grid .ex-freeitem:nth-child(4n) { background-color: var(--c4); }
+body.ex-skin .card:not(article), body.ex-skin article.card { outline: 2px dashed var(--stitch); outline-offset: -7px; border-radius: 3px 14px 3px 14px; }
+body.ex-skin .card.ex-wanted:not(article) { border-radius: 3px 3px 16px 3px; }
+body.ex-skin .pv-controls.card { outline: none; border-radius: 10px; }
+body.ex-skin .ex-req.card { outline-offset: -5px; }
+
+/* the sign becomes a stitched paper banner with tape corners */
+body.ex-skin .ex-sign { background: var(--accent); background-image: none; border: 0; border-radius: 4px 16px 4px 16px; outline: 2px dashed rgba(255,255,255,.7); outline-offset: -7px; box-shadow: 5px 5px 0 var(--accent-text), 0 14px 20px -10px rgba(0,0,0,.5); padding: 16px 20px; }
+body.ex-skin .ex-sign::before, body.ex-skin .ex-sign::after { top: -9px; width: 58px; height: 20px; border-radius: 0; background: rgba(240,222,170,.88); border: 1px solid rgba(180,150,70,.45); box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+body.ex-skin .ex-sign::before { left: 14px; transform: rotate(-5deg); } body.ex-skin .ex-sign::after { right: 14px; left: auto; transform: rotate(4deg); }
+body.ex-skin .ex-head h1 { text-shadow: 2px 2px 0 var(--accent-text); }
+body.ex-skin .ex-sub { color: #e6fbf9; }
+
+/* every button: cut paper with a hard shadow and a stitched line */
+body.ex-skin .btn { background-image: none; border: 0; border-radius: 3px 12px 3px 12px; padding: 9px 18px; position: relative; transition: transform .1s, box-shadow .1s;
+  background-color: var(--accent); color: #fff; box-shadow: 3px 3px 0 var(--accent-text); outline: 2px dashed rgba(255,255,255,.75); outline-offset: -5px; transform: rotate(-.6deg); text-shadow: none; filter: none; }
+body.ex-skin .btn:nth-child(even) { transform: rotate(.5deg); }
+body.ex-skin .btn:hover { filter: none; transform: translate(-1px, -2px) rotate(0); box-shadow: 5px 5px 0 var(--accent-text); }
+body.ex-skin .btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--accent-text); }
+body.ex-skin .btn.small { padding: 5px 14px; box-shadow: 2px 2px 0 var(--accent-text); outline-offset: -4px; }
+body.ex-skin .btn.secondary { background-color: var(--c1); color: var(--ink); box-shadow: 3px 3px 0 var(--cut); outline: 2px dashed var(--stitch); outline-offset: -5px; border: 0; }
+body.ex-skin .btn.secondary:hover { box-shadow: 5px 5px 0 var(--cut); }
+body.ex-skin .btn.secondary:active { box-shadow: 1px 1px 0 var(--cut); }
+body.ex-skin .ex-sign .btn { background-color: #fff3d6; color: #3b2410; box-shadow: 3px 3px 0 #0a4d54; outline: 2px dashed rgba(60,35,10,.45); outline-offset: -5px; border: 0; }
+body.ex-skin .ex-sign .btn:hover { background-color: #fff; box-shadow: 5px 5px 0 #0a4d54; }
+body.ex-skin .btn[disabled] { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; outline-style: dotted; }
+body.ex-skin .btn[disabled]:hover { transform: none; box-shadow: none; }
+/* "Back" buttons are kraft-paper tags with a punched hole */
+body.ex-skin .btn.ghost { background-color: #d9b27a; color: #3b2410; box-shadow: 3px 3px 0 rgba(60,35,10,.45); outline: 2px dashed rgba(60,35,10,.5); outline-offset: -5px; border: 0; padding-left: 36px; border-radius: 14px 3px 3px 14px; text-decoration: none; }
+body.ex-skin .btn.ghost::before { content: ""; position: absolute; left: 12px; top: 50%; width: 11px; height: 11px; margin-top: -6px; border-radius: 50%; background: var(--cork); box-shadow: inset 1px 1px 2px rgba(0,0,0,.5); }
+:root[data-theme="dark"] body.ex-skin .btn.ghost { background-color: #8a6a3a; color: #fff3d6; }
+
+/* tabs and chips match: little cards */
+body.ex-skin .tab, body.ex-skin .chip { border: 0; border-radius: 3px 12px 3px 12px; background-color: var(--c1); color: var(--ink); box-shadow: 3px 3px 0 var(--cut); outline: 2px dashed var(--stitch); outline-offset: -5px; padding: 8px 20px; }
+body.ex-skin .tab[aria-pressed="true"], body.ex-skin .chip[aria-pressed="true"] { background-color: var(--accent); color: #fff; box-shadow: 3px 3px 0 var(--accent-text); outline-color: rgba(255,255,255,.75); transform: rotate(-1deg); border: 0; }
+body.ex-skin .ex-tab[aria-pressed="true"] { color: #fff; }
+
+/* photo pickers, dialogs and report cards are paper too */
+body.ex-skin dialog.ex-dlg { border: 0; border-radius: 4px 16px 4px 16px; outline: 2px dashed var(--stitch); outline-offset: -8px; box-shadow: 6px 6px 0 var(--cut), 0 24px 50px -14px rgba(0,0,0,.6); padding: 26px 24px 20px; background-color: var(--c1); }
+body.ex-skin dialog.ex-dlg::before { content: ""; position: absolute; top: -11px; left: 50%; width: 84px; height: 22px; margin-left: -42px; background: rgba(240,222,170,.9); border: 1px solid rgba(180,150,70,.45); transform: rotate(-2deg); }
+body.ex-skin .ex-state { background-color: var(--c4); }
+body.ex-skin .ex-filters { background-color: var(--c3); }
+body.ex-skin .ex-form { background-color: var(--c1); }
+body.ex-skin .ex-report { border-left: 0; background-color: var(--c2); }
+body.ex-skin .ex-prevcol .ex-card { transform: rotate(-1deg); }
+@media (prefers-reduced-motion: reduce) { body.ex-skin .btn { transition: none; } }
+/* the app theme paints buttons with a gradient at higher priority; the Exchange buttons are flat paper */
+body.ex-skin .btn { background-image: none !important; background-color: var(--accent) !important; }
+body.ex-skin .btn.secondary { background-color: var(--c1) !important; }
+body.ex-skin .ex-sign .btn { background-color: #fff3d6 !important; }
+body.ex-skin .ex-sign .btn:hover { background-color: #fff !important; }
+body.ex-skin .btn.ghost { background-color: #d9b27a !important; }
+:root[data-theme="dark"] body.ex-skin .btn.ghost { background-color: #8a6a3a !important; }
+body.ex-skin .tab, body.ex-skin .chip { background-image: none !important; background-color: var(--c1) !important; }
+body.ex-skin .tab[aria-pressed="true"], body.ex-skin .chip[aria-pressed="true"] { background-color: var(--accent) !important; }
+body.ex-skin .ex-sign .btn, body.ex-skin .ex-sign a.btn { color: #3b2410 !important; text-shadow: none !important; }
+body.ex-skin .btn.ghost, body.ex-skin a.btn.ghost { color: #3b2410 !important; }
+:root[data-theme="dark"] body.ex-skin .btn.ghost { color: #fff3d6 !important; }
+body.ex-skin .btn.secondary, body.ex-skin a.btn.secondary { color: var(--ink) !important; }
