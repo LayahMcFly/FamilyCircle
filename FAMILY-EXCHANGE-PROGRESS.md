@@ -4,7 +4,7 @@ Update this file at every step. Continue by step number. Nothing here enables Ex
 
 ## Steps
 - [x] Step 0: inspection (see "Step 0 findings" below). Waiting on answers to the batched questions.
-- [ ] Step 1: browse and listing UI preview (synthetic, unlisted preview path)
+- [x] Step 1: browse and listing UI preview built on branch `exchange-preview` (not merged; waiting for your approval of the exact commit). Path when deployed: /FamilyCircle/exchange-preview/
 - [ ] Step 2: listing lifecycle (sample data)
 - [ ] Step 3: interest and reservations (sample accounts)
 - [ ] Step 4: safety and access simulation
@@ -25,3 +25,12 @@ Lending, due dates, deposits, returns; optional priced listings; priced family-s
 - Reporting: Giving Center has its own report table and moderators (owner or tree admin who is an adult). Chat has no report feature.
 - Media: Giving photos use a client-side convert/compress step, one square JPEG in the private media bucket plus a text thumbnail.
 - Licence: file headers say GPL v3 or later; the `LICENSE` file at the root is MPL 2.0 text, with a GPL v3 text beside it. I will not change either. Reused code is my own from this repo.
+
+## Step 1 decisions from you (2026-11-16), preview only, none are production policy
+- Eligibility: synthetic eligible/ineligible accounts only. No Exchange adult flag. Production eligibility blocked pending a proposal.
+- Moderation: one simulated designated moderator. Tree admin does not imply moderator. Real assignment undecided.
+- Reports about the owner: routed to an independent handler or an honest "escalation unavailable" state. Never back to the accused. Real escalation design comes separately.
+- Retention: no automatic deletion. 30/90 days NOT approved. Separate proposal for retention, author deletion, moderation evidence, removed members.
+- Photos (preview only): up to 3 bundled JPEGs, 600px longest edge, about 110 KB; square thumbnails, original ratio in detail.
+- Licence: LICENSE and headers untouched. New preview files carry a "licence not yet marked" line.
+- Pages: before merge, show deployment uncertainty and the smallest check; verify the deployed page carries the build marker.
