@@ -51,7 +51,7 @@
       if (famId() && st.enabled !== true) return st.enabled === false && st.canTurnOn ? turnOnCard() : null;
       var set = function (sec, sub) { st.section = sec; if (sub) st.sub = sub; st.q = ''; o.reroute(); };
       var group = h('div', { class: 'rc-chips rc-sections', role: 'group', 'aria-label': 'Recipes sections' }, [['mine', T.mine], ['cookbooks', T.cookbooks], ['library', T.library]].map(function (t) {
-        return h('button', { type: 'button', class: 'chip', 'data-section': t[0], 'aria-pressed': String(st.section === t[0]), onclick: function () { set(t[0]); } }, t[1]);
+        return h('button', { type: 'button', class: 'chip', 'data-section': t[0], 'aria-pressed': String(st.section === t[0]), onclick: function () { if (t[0] === 'cookbooks') { location.hash = '#/recipes/cookbook'; return; } set(t[0]); } }, t[1]);   // the cookbook maker lists your saved cookbooks itself
       }));
       var filt = st.section === 'mine' ? h('div', { class: 'rc-chips', role: 'group', 'aria-label': 'Show recipes' }, [['all', 'All'], ['private', 'Private'], ['published', 'Published']].map(function (t) {
         return h('button', { type: 'button', class: 'chip', 'data-show': t[0], 'aria-pressed': String(st.show === t[0]), onclick: function () { st.show = t[0]; o.reroute(); } }, t[1]); })) : null;

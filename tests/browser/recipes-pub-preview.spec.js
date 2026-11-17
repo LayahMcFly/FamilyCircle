@@ -133,8 +133,9 @@ const overflow = p => p.evaluate(() => document.documentElement.scrollWidth > do
     check('H empty search has its own message', /No shared recipe has that title/.test(await text(page)), '');
     await page.click('[data-sub="cookbooks"]'); await pause(page);
     check('H Shared Cookbooks shows an empty state for now', /No shared cookbooks yet/.test(await text(page)), '');
-    await sec(page, 'cookbooks');
-    check('H My Cookbooks shows an empty state and keeps the printable book maker link', /No cookbooks yet/.test(await text(page)) && (await page.locator('a[href="#/recipes/cookbook"]').count()) === 1, '');
+    await page.click('[data-section="cookbooks"]'); await pause(page);
+    check('H My Cookbooks opens the cookbook maker (which lists saved cookbooks itself), not an empty placeholder', /#\/recipes\/cookbook$/.test(page.url()) && !/No cookbooks yet/.test(await text(page)), page.url());
+    await page.evaluate(() => { location.hash = '#/recipes'; }); await pause(page);
     await sec(page, 'mine'); await openCard(page, 'Wide Photo Toast');
     await panel(page).getByRole('button', { name: 'Publish to family' }).click(); await dlgBtn(page, 'Publish to family').click(); await pause(page);
     check('H a photo that is not square is refused with a plain message', /square JPEG/.test(await page.locator('#toasts').innerText()), await page.locator('#toasts').innerText());
