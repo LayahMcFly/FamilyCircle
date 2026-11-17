@@ -133,9 +133,8 @@ const overflow = p => p.evaluate(() => document.documentElement.scrollWidth > do
     check('H empty search has its own message', /No shared recipe has that title/.test(await text(page)), '');
     await page.click('[data-sub="cookbooks"]'); await pause(page);
     check('H Shared Cookbooks shows an empty state for now', /No shared cookbooks yet/.test(await text(page)), '');
-    await page.click('[data-section="cookbooks"]'); await pause(page);
-    check('H My Cookbooks opens the cookbook maker (which lists saved cookbooks itself), not an empty placeholder', /#\/recipes\/cookbook$/.test(page.url()) && !/No cookbooks yet/.test(await text(page)), page.url());
-    await page.evaluate(() => { location.hash = '#/recipes'; }); await pause(page);
+    await sec(page, 'cookbooks');
+    check('H My Cookbooks shows an empty state for a person with none, and a way to start one', /No cookbooks yet/.test(await text(page)) && (await page.locator('#rc-newbook').count()) === 1, await text(page));
     await sec(page, 'mine'); await openCard(page, 'Wide Photo Toast');
     await panel(page).getByRole('button', { name: 'Publish to family' }).click(); await dlgBtn(page, 'Publish to family').click(); await pause(page);
     check('H a photo that is not square is refused with a plain message', /square JPEG/.test(await page.locator('#toasts').innerText()), await page.locator('#toasts').innerText());
@@ -146,6 +145,36 @@ const overflow = p => p.evaluate(() => document.documentElement.scrollWidth > do
       await sec(page, 'library'); await sec(page, 'mine'); await openCard(page, "Gran's Sourdough");
       check('I @' + w + ' no horizontal scroll and no page errors', !(await overflow(page)) && log.errors.length === 0, JSON.stringify(log.errors));
       await ctx.close(); } }
+
+  { const { ctx, page } = await open(browser);   // L. cookbooks: publish, read, update state, unpublish
+    await sec(page, 'cookbooks');
+    const card0 = page.locator('.rc-bookcard').first();
+    check('L My Cookbooks lists the saved cookbook as private with a Publish button', /Rae Family Cookbook/.test(await card0.innerText()) && /Private to you/.test(await card0.innerText()) && (await card0.getByRole('button', { name: 'Publish to family' }).count()) === 1, await card0.innerText());
+    await card0.getByRole('button', { name: 'Publish to family' }).click(); await page.waitForSelector('dialog');
+    const bt = await page.locator('dialog').innerText();
+    check('L the publish box says the recipes will be readable and printable by the family', /readable and printable by Happy Family as part of this cookbook/.test(bt), bt);
+    await dlgBtn(page, 'Publish to family').click(); await pause(page); await pause(page);
+    check('L after publishing the badge says Published to Happy Family with Unpublish offered', /Published to Happy Family/.test(await page.locator('.rc-bookcard').first().innerText()) && (await page.locator('.rc-bookcard').first().getByRole('button', { name: 'Unpublish' }).count()) === 1, await page.locator('.rc-bookcard').first().innerText());
+    await who(page, 'Sam Sample'); await sec(page, 'library'); await page.click('[data-sub="cookbooks"]'); await pause(page); await pause(page);
+    check('L a family member sees it in Shared Cookbooks', /Rae Family Cookbook/.test(await text(page)) && /By Rae Sample/.test(await text(page)), await text(page));
+    await page.locator('#rc-grid a').first().click(); await page.waitForSelector('#rc-book'); await pause(page);
+    const bk = await page.locator('#rc-book').innerText();
+    check('L reading it shows the author words, sections and recipes, and a Print button, no edit controls', /Recipes we love\./.test(bk) && /Breads/.test(bk) && /Gran's Sourdough/.test(bk) && /Sunday Pancakes/.test(bk) && /Print/.test(bk) && !/Unpublish|Publish to family/.test(bk), bk);
+    await page.locator('.rc-crumb a').first().click(); await pause(page);
+    await sec(page, 'cookbooks');
+    check('L Sam has no Publish control on someone else\'s cookbook (his own list is empty)', (await page.getByRole('button', { name: 'Unpublish' }).count()) === 0 && /No cookbooks yet/.test(await text(page)), await text(page));
+    await who(page, 'Rae Sample'); await sec(page, 'cookbooks'); await pause(page);
+    await page.locator('.rc-bookcard').first().getByRole('button', { name: 'Unpublish' }).click(); await dlgBtn(page, 'Unpublish').click(); await pause(page); await pause(page);
+    await who(page, 'Sam Sample'); await sec(page, 'library'); await page.click('[data-sub="cookbooks"]'); await pause(page); await pause(page);
+    check('L after Unpublish it is gone from Shared Cookbooks', /No shared cookbooks yet/.test(await text(page)), await text(page));
+    await ctx.close(); }
+
+  { const { ctx, page } = await open(browser);   // K. a meal with private dishes says so before publishing
+    await openCard(page, 'Brunch Plate');
+    await panel(page).getByRole('button', { name: 'Publish to family' }).click(); await page.waitForSelector('dialog');
+    const dt = await page.locator('dialog').innerText();
+    check('K the publish box says the private dish will be public too, naming it', /private dish \(Sunday Pancakes\)/.test(dt) && /public to Happy Family too/.test(dt), dt);
+    await dlgBtn(page, 'Cancel').click(); await ctx.close(); }
 
   { const ctx = await browser.newContext({ viewport: { width: 1000, height: 900 } }), page = await ctx.newPage();   // J. sharing off for the family (the default): the Recipe Book looks as it did before
     await page.goto(URL_() + '?sharing=off'); await page.waitForSelector('.rc-card'); await pause(page); await pause(page);

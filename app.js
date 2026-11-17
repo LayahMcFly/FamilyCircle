@@ -6042,7 +6042,23 @@
         img.src = src;
       });
     }
-    return window.RecipesPubUI.create({ h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, call: call, pictures: pictures, reroute: function () { route(false); },
+    // The cookbooks saved on this device by the cookbook maker (read-only here: nothing is created or changed in that store).
+    function books() {
+      return new Promise(function (resolve) {
+        var uid = S.user && S.user.$id; if (!uid || !window.indexedDB) return resolve([]);
+        var req; try { req = indexedDB.open('fcrb_cookbooks_' + uid); } catch (e) { return resolve([]); }
+        req.onupgradeneeded = function () { try { req.transaction.abort(); } catch (e) { /* it did not exist: leave it alone */ } };
+        req.onerror = function () { resolve([]); };
+        req.onsuccess = function () {
+          var db = req.result;
+          if (!db.objectStoreNames.contains('books')) { db.close(); return resolve([]); }
+          var g = db.transaction('books').objectStore('books').getAll();
+          g.onsuccess = function () { db.close(); resolve((g.result || []).sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); })); };
+          g.onerror = function () { db.close(); resolve([]); };
+        };
+      });
+    }
+    return window.RecipesPubUI.create({ h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, call: call, pictures: pictures, books: books, reroute: function () { route(false); },
       family: function () { var f = currentFamily(); return f ? { id: f.id, name: f.name } : null; } });
   }
 

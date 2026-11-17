@@ -22,6 +22,7 @@ import * as R from './recipes-rules.js';
 
 export const RECIPE_TABLES = {
   pubs: 'recipePubs',     // familyId, authorId, authorMembershipId, sourceId, pubKey (UNIQUE: familyId_authorId_sourceId), hash, imageKey, photoId, status, hiddenAt, version, publishedAt, thumb (text), data (text: JSON snapshot)
+  books: 'recipeBooks',   // cookbooks: same columns as recipePubs minus the photo ones, plus count (integer); data (text) = JSON cookbook snapshot
   state: 'recipeState'    // row id = familyId; enabled (bool), enabledBy, enabledAt
 };
 export const RECIPE_LIMITS = { ...R.LIMITS, perMinute: 60, libraryMax: 500 };
@@ -84,7 +85,7 @@ export function createRecipes({ storage, photoBucket, teams, listRows, createRow
     if (!fileId || !storage) return;
     try { await storage.deleteFile({ bucketId: photoBucket, fileId }); } catch (e) { /* already gone, or storage not set up: nothing to delete */ }
   }
-  async function removeRow(r) { await dropPhoto(r.photoId); await deleteRow(T.pubs, r.$id); }
+  async function removeRow(r, table = T.pubs) { await dropPhoto(r.photoId); await deleteRow(table, r.$id); }
 
   /** A picture sent as a data address. Only JPEG, checked by its first bytes, and only up to the size limit. */
   const JPEG_URL = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/;
@@ -112,29 +113,33 @@ export function createRecipes({ storage, photoBucket, teams, listRows, createRow
   };
 
   /** Hide rows whose author's membership is gone (or is not the one that published them); delete them after 30 days. Runs when the library loads. */
-  async function tidy(c) {
-    const rows = await all(T.pubs, [Query.equal('familyId', [c.familyId])], L.libraryMax * 4);
+  async function tidy(c, table = T.pubs) {
+    const rows = await all(table, [Query.equal('familyId', [c.familyId])], L.libraryMax * 4);
     for (const r of rows) {
       const am = c.byUser.get(r.authorId);
       const stale = !am || am.membershipId !== r.authorMembershipId;
-      if (stale && !r.hiddenAt) { r.hiddenAt = iso(); await updateRow(T.pubs, r.$id, { hiddenAt: r.hiddenAt }); }
-      else if (stale && Date.parse(r.hiddenAt) < now() - R.HIDDEN_DAYS * DAY) await removeRow(r);
+      if (stale && !r.hiddenAt) { r.hiddenAt = iso(); await updateRow(table, r.$id, { hiddenAt: r.hiddenAt }); }
+      else if (stale && Date.parse(r.hiddenAt) < now() - R.HIDDEN_DAYS * DAY) await removeRow(r, table);
     }
   }
   /** Scheduled cleanup in every family: delete rows hidden for 30 days. */
   async function sweepRecipes(deadline) {
     const cutoff = iso(now() - R.HIDDEN_DAYS * DAY);
     let purged = 0;
-    while (now() < deadline) {
-      const page = await listRows(T.pubs, [Query.lessThan('hiddenAt', cutoff), Query.limit(25)]);
-      if (!page.rows.length) break;
-      for (const r of page.rows) { await removeRow(r); purged += 1; }
+    for (const table of [T.pubs, T.books]) {
+      while (now() < deadline) {
+        let page;
+        try { page = await listRows(table, [Query.lessThan('hiddenAt', cutoff), Query.limit(25)]); } catch (e) { if (table === T.books) break; throw e; }   // the cookbook table may not be set up yet
+        if (!page.rows.length) break;
+        for (const r of page.rows) { await removeRow(r, table); purged += 1; }
+      }
     }
     return { purged };
   }
   /** When a family is deleted. */
   async function purgeFamily(familyId, deleteWhere, deadline) {
     if (!(await deleteWhere(T.pubs, [Query.equal('familyId', [familyId])], deadline, (r) => dropPhoto(r.photoId)))) return false;
+    try { await deleteWhere(T.books, [Query.equal('familyId', [familyId])], deadline); } catch (e) { /* cookbook table not set up */ }
     try { await deleteRow(T.state, familyId); } catch (e) { /* none */ }
     return true;
   }
@@ -227,6 +232,66 @@ export function createRecipes({ storage, photoBucket, teams, listRows, createRow
       const r = await rowFor(c, body.id);
       if (!mineRow(c, r)) throw NA();
       await removeRow(r);
+      return {};
+    },
+
+    /* ----- cookbooks: the author's saved cookbook (from the cookbook maker on their device) is copied as a text snapshot ----- */
+    async recipesBookMine({ user, body }) {
+      const c = await context(user, body.familyId);
+      const rows = await all(T.books, [Query.equal('familyId', [c.familyId]), Query.equal('authorId', [user.$id])], L.publishedPerAuthor + 20);
+      return { pubs: rows.filter((r) => mineRow(c, r) && !r.hiddenAt).map((r) => ({ id: r.$id, sourceSlug: r.sourceId, hash: r.hash, version: r.version || 1 })) };
+    },
+    async recipesBookLibrary({ user, body }) {
+      const c = await context(user, body.familyId);
+      await tidy(c, T.books);
+      const q = R.snapshotOf({ name: body.q || '' }).name.toLowerCase().slice(0, L.search);
+      const rows = await all(T.books, [Query.equal('familyId', [c.familyId])], L.libraryMax * 4);
+      const out = rows.filter((r) => readable(c, r)).map((r) => { const d = parse(r.data); return { id: r.$id, name: d.name || '', author: d.author || '', count: r.count || 0, authorName: nameOf(c, r.authorId), mine: r.authorId === c.me.userId, version: r.version || 1 }; })
+        .filter((s) => !q || s.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, L.libraryMax);
+      return { family: (c.family && (c.family.name || c.family.familyName)) || 'your family', books: out };
+    },
+    async recipesBookGet({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await getRowOrNull(T.books, idOf(body.id, 'id'));
+      if (!r || r.familyId !== c.familyId || !readable(c, r)) throw NA();
+      return { book: { ...parse(r.data), id: r.$id, authorName: nameOf(c, r.authorId), mine: r.authorId === c.me.userId, version: r.version || 1 } };
+    },
+    async recipesBookPublish({ user, body }) {
+      const c = await context(user, body.familyId);
+      const book = body && typeof body.book === 'object' && body.book ? body.book : {};
+      const sourceId = String(book.id || '').slice(0, 80);
+      if (!sourceId) throw bad('That cookbook has no id.');
+      const v = R.validateBook(book);
+      if (!v.ok) throw invalid(v);
+      const pubKey = (c.familyId + '_' + user.$id + '_' + sourceId).slice(0, 190);
+      const mine = await all(T.books, [Query.equal('familyId', [c.familyId]), Query.equal('authorId', [user.$id])], L.publishedPerAuthor + 20);
+      if (mine.some((r) => r.sourceId === sourceId && mineRow(c, r) && !r.hiddenAt)) throw new ApiError(409, 'exists', 'This cookbook is already published. Use "Update published version".');
+      if (mine.filter((r) => mineRow(c, r) && !r.hiddenAt).length >= 50) throw new ApiError(409, 'limit', 'You have reached the limit of published cookbooks.');
+      for (const r of mine) if (r.sourceId === sourceId && !mineRow(c, r)) await removeRow(r, T.books);
+      const id = ID.unique();
+      try { await createRow(T.books, id, { familyId: c.familyId, authorId: user.$id, authorMembershipId: c.me.membershipId, sourceId, pubKey, hash: v.hash, status: 'published', version: 1, count: v.count, publishedAt: iso(), data: JSON.stringify(v.snapshot) }, []); }
+      catch (e) {
+        if (sdkCode(e) === 409) throw new ApiError(409, 'exists', 'This cookbook is already published. Use "Update published version".');
+        if (sdkCode(e) === 400 || sdkCode(e) === 404) throw bad('Cookbook sharing needs one more setup step: add the recipeBooks table (see RECIPES-SHARING-CONSOLE-COMMANDS.md).');
+        throw e;
+      }
+      return { id, version: 1, hash: v.hash };
+    },
+    async recipesBookUpdate({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await getRowOrNull(T.books, idOf(body.id, 'id'));
+      if (!r || r.familyId !== c.familyId || !mineRow(c, r) || r.hiddenAt) throw NA();
+      const v = R.validateBook(body && typeof body.book === 'object' && body.book ? body.book : {});
+      if (!v.ok) throw invalid(v);
+      const version = (r.version || 1) + 1;
+      await updateRow(T.books, r.$id, { hash: v.hash, count: v.count, version, data: JSON.stringify(v.snapshot) });
+      return { id: r.$id, version, hash: v.hash };
+    },
+    async recipesBookUnpublish({ user, body }) {
+      const c = await context(user, body.familyId);
+      const r = await getRowOrNull(T.books, idOf(body.id, 'id'));
+      if (!r || r.familyId !== c.familyId || !mineRow(c, r)) throw NA();
+      await removeRow(r, T.books);
       return {};
     }
   };

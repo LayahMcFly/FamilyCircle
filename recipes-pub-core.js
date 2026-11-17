@@ -8,7 +8,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api; else root.RecipesPubCore = api;
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var LIMITS = { title: 80, description: 300, line: 160, step: 700, notes: 1500, ingredients: 60, steps: 40, tags: 10, tag: 30, categories: 5, parts: 5, search: 60, photoBytes: 120000, thumbBytes: 10000, publishedPerAuthor: 200, snapshotChars: 60000 };
+  var LIMITS = { title: 80, description: 300, line: 160, step: 700, notes: 1500, ingredients: 60, steps: 40, tags: 10, tag: 30, categories: 5, parts: 5, search: 60, photoBytes: 120000, thumbBytes: 10000, publishedPerAuthor: 200, snapshotChars: 60000, bookRecipes: 25, bookSections: 12, bookSection: 60, bookText: 1500, bookChars: 62000 };
   var HIDDEN_DAYS = 30;   // an author who left: their published recipes stay hidden this long, then are deleted
   var TEXT = {
     mine: 'My Recipes', cookbooks: 'My Cookbooks', library: 'Family Library', shared: 'Shared Recipes', sharedCookbooks: 'Shared Cookbooks',
@@ -16,6 +16,7 @@
     publishedLabel: function (family) { return 'Published to ' + family; },
     publishBtn: 'Publish to family', unpublishBtn: 'Unpublish', updateBtn: 'Update published version',
     publishConfirm: function (family) { return 'This recipe will be visible to members of ' + family + '. They can print it or save a copy using their device.'; },
+    bookConfirm: function (family) { return 'The selected recipes will be readable and printable by ' + family + ' as part of this cookbook.'; },
     unpublishNote: 'Unpublishing removes it from the library and blocks opening it. It cannot recall pages already printed, files already downloaded, screenshots or copies people saved.',
     changedLabel: 'Changes not published yet'
   };
@@ -72,6 +73,30 @@
     var key = hasPhoto ? String(imageKey === undefined ? imageKeyOf(draft) : imageKey) : '';
     return { ok: true, snapshot: s, imageKey: key, hash: hashOf(s, key), hasPhoto: hasPhoto };
   }
+  /** A cookbook as published: the text of each chosen recipe (copied in, with its sub-recipes), grouped in the author's sections. No photos in this first version. `b` is a saved cookbook from the cookbook maker. */
+  function bookSnapshotOf(b) {
+    b = b || {}; var st = b.settings || {}, snap = b.snap || {}, extras = b.extras || {};
+    var secs = (Array.isArray(b.sections) ? b.sections : []).slice(0, LIMITS.bookSections).map(function (sec) {
+      var recs = (sec && Array.isArray(sec.items) ? sec.items : []).map(function (slug) {
+        var r = snap[slug]; if (!r || typeof r !== 'object') return null;
+        var parts = (Array.isArray(r.parts) ? r.parts : []).map(function (ps) { return typeof ps === 'string' ? (extras[ps] || snap[ps] || null) : ps; }).filter(Boolean);
+        return snapshotOf(Object.assign({}, r, { parts: parts }));
+      }).filter(function (r) { return r && r.name; });
+      return { title: str(sec && sec.title, LIMITS.bookSection), recipes: recs };
+    }).filter(function (sec) { return sec.recipes.length; });
+    return { name: str(st.title || b.name, LIMITS.title), author: str(st.author, 80), dedication: str(st.dedication, LIMITS.bookText), intro: str(st.intro, LIMITS.bookText), sections: secs };
+  }
+  var bookCount = function (s) { return s.sections.reduce(function (n, x) { return n + x.recipes.length; }, 0); };
+  /** { ok:true, snapshot, hash, count } or { ok:false, message }. */
+  function validateBook(b) {
+    var s = bookSnapshotOf(b), n = bookCount(s);
+    if (!s.name) return { ok: false, message: 'Give the cookbook a title.' };
+    if (!n) return { ok: false, message: 'Add at least one recipe to the cookbook.' };
+    if (n > LIMITS.bookRecipes) return { ok: false, message: 'A published cookbook can hold up to ' + LIMITS.bookRecipes + ' recipes.' };
+    if (JSON.stringify(s).length > LIMITS.bookChars) return { ok: false, message: 'This cookbook is too long to publish. Take out a few recipes or shorten the introduction.' };
+    return { ok: true, snapshot: s, hash: hashOf(s, ''), count: n };
+  }
+  function bookStateOf(b, pub) { return !pub ? 'private' : hashOf(bookSnapshotOf(b), '') === pub.hash ? 'published' : 'changed'; }
   /** 'private' (never published), 'published' (same as the draft), 'changed' (draft differs from what the family sees). */
   function stateOf(draft, pub) { return !pub ? 'private' : hashOf(snapshotOf(draft), imageKeyOf(draft)) === pub.hash ? 'published' : 'changed'; }
   /** Reading: a current, confirmed membership of THAT family, and the author's own membership must still be the one that published it. Roles add nothing. */
@@ -82,5 +107,5 @@
   function canAuthor(member, row) {
     return !!(member && member.active && row && row.familyId === member.familyId && row.authorId === member.userId && row.authorMembershipId === member.membershipId);
   }
-  return { LIMITS: LIMITS, HIDDEN_DAYS: HIDDEN_DAYS, TEXT: TEXT, snapshotOf: snapshotOf, validate: validate, hashOf: hashOf, imageKeyOf: imageKeyOf, stateOf: stateOf, canRead: canRead, canAuthor: canAuthor, jpegDims: jpegDims, squareJpeg: squareJpeg };
+  return { LIMITS: LIMITS, HIDDEN_DAYS: HIDDEN_DAYS, TEXT: TEXT, snapshotOf: snapshotOf, bookSnapshotOf: bookSnapshotOf, validateBook: validateBook, bookStateOf: bookStateOf, validate: validate, hashOf: hashOf, imageKeyOf: imageKeyOf, stateOf: stateOf, canRead: canRead, canAuthor: canAuthor, jpegDims: jpegDims, squareJpeg: squareJpeg };
 });

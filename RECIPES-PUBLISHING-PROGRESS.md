@@ -24,3 +24,9 @@ The first preview had its own look. This version loads the real `recipes.js` and
 - Off means off: until the owner turns it on, or if the function does not know the actions yet, every new control hides and the Recipe Book looks as it did before.
 - Tests: function 189 pass (11 new in test/recipes.test.js), rules 14, preview 47, recipes-native 59, hub 56, ui-followups 35.
 - Not claimed: PDF export of published recipes, cookbooks publishing (placeholders only), real-device checks of the 20-item list.
+
+## v1.51.99.60: cookbook publishing and the meal note
+
+- A meal with private dishes now says, before publishing, which dishes will become public to the family too (they are included inside the meal's published copy).
+- My Cookbooks lists the cookbooks saved on this device (read from the cookbook maker's own store, read-only) with Private / Published badges and Publish, Update published version and Unpublish. Shared Cookbooks lists the family's published cookbooks; opening one shows the author's words, sections and recipes, and a Print button (the browser's own print, not a PDF).
+- Server actions `recipesBookMine/Library/Get/Publish/Update/Unpublish`, table `recipeBooks`, same hiding, 30-day sweep and membership rules as recipes. First version: own recipes only, up to 25 recipes, text only (no photos), cookbook look settings are not published.

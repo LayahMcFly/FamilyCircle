@@ -645,6 +645,7 @@
         main.appendChild(h('p', { class: 'muted', text: 'Opening the recipe…' }));
         return P.get(arg).then(function (rec) { if (!main.isConnected) return; main.replaceChildren(); if (rec) viewRecipe(main, null, rec); else { main.appendChild(P.libraryLink()); main.appendChild(h('div', { class: 'alert error', role: 'alert', text: 'That recipe is no longer available.' })); } });
       }
+      if (a === 'sharedbook' && arg && P && P.viewBook) return P.viewBook(main, arg);
       if (a === 'cookbook') return viewCookbook(main, String(uid), token);
       if (a === 'new') return viewEditor(main, null);
       if (a === 'edit' && arg) return viewEditor(main, arg);

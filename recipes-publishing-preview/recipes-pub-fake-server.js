@@ -17,11 +17,21 @@
     { userId: 'u-rae', name: 'Rae Sample' }, { userId: 'u-sam', name: 'Sam Sample' }, { userId: 'u-tia', name: 'Tia Sample' }, { userId: 'u-una', name: 'Una Sample' }
   ];
   /* The recipes each person has on THEIR OWN device (private drafts). The real app keeps these in the browser, so they are not on the server. */
+  /** Each person's saved cookbooks as the cookbook maker keeps them on their own device. */
+  function sampleBooks() {
+    var rec = function (slug, name, extra) { return Object.assign({ slug: slug, name: name, ingredients: ['2 cups flour'], steps: ['Mix.', 'Bake.'] }, extra || {}); };
+    return {
+      'u-rae': [{ id: 'bk-rae', name: 'Rae Cookbook', settings: { title: 'Rae Family Cookbook', author: 'Rae', intro: 'Recipes we love.' }, sections: [{ id: 's1', title: 'Breads', items: ['grans-sourdough'] }, { id: 's2', title: '', items: ['sunday-pancakes'] }],
+        snap: { 'grans-sourdough': rec('grans-sourdough', "Gran's Sourdough"), 'sunday-pancakes': rec('sunday-pancakes', 'Sunday Pancakes') }, extras: {} }],
+      'u-sam': [], 'u-tia': [], 'u-una': []
+    };
+  }
   function sampleDrafts() {
     var r = function (slug, name, o) { return Object.assign({ slug: slug, id: 'book-' + slug, name: name, description: '', yield: '4 servings', total: '30 minutes', ingredients: ['2 cups flour', '1 cup water', '1 teaspoon salt'], steps: ['Mix everything.', 'Cook until done.'], categories: [], tags: [], notes: '', parts: [], image: '', imageW: 0, imageH: 0 }, o || {}); };
     return {
       'u-rae': [r('grans-sourdough', "Gran's Sourdough", { description: 'Slow, chewy, worth the wait.', total: '1 day', categories: ['Bread'], ingredients: ['500 g bread flour', '350 g water', '100 g active starter', '10 g salt'], steps: ['Mix and rest 30 minutes.', 'Fold every 30 minutes, four times.', 'Shape, proof overnight in the fridge.', 'Bake at 450°F in a covered pot, 20 minutes lidded, 20 minutes open.'] }),
         r('sunday-pancakes', 'Sunday Pancakes', { categories: ['Breakfast'], ingredients: ['2 cups flour', '2 eggs', '1 3/4 cups milk'], steps: ['Whisk.', 'Cook on a hot griddle.'] }),
+        r('brunch-plate', 'Brunch Plate', { parts: ['sunday-pancakes'], ingredients: ['Fresh fruit'], steps: ['Serve together.'] }),
         r('secret-spice-rub', 'Secret Spice Rub', { notes: 'Only for me.', ingredients: ['1 tablespoon paprika', '1 teaspoon cumin'], steps: ['Mix.'] })],
       'u-sam': [r('sams-chili', "Sam's Chili", { categories: ['Soups'], ingredients: ['1 pound ground beef', '2 cans beans', '1 can tomatoes'], steps: ['Brown the beef.', 'Add the rest and simmer 1 hour.'] }),
         r('wide-photo-toast', 'Wide Photo Toast', { image: WIDE_PIC, ingredients: ['2 slices bread'], steps: ['Toast it.'] })],
@@ -33,7 +43,7 @@
 
   function create(options) {
     options = options || {};
-    var families = {}, members = [], rows = {}, seq = 0, nowDay = 0;
+    var families = {}, members = [], rows = {}, brows = {}, seq = 0, nowDay = 0;
     var nid = function (p) { return p + (++seq); };
     var famName = function (id) { return families[id] ? families[id].name : ''; };
     var mem = function (userId, familyId) { return members.filter(function (m) { return m.userId === userId && m.familyId === familyId && m.active; })[0] || null; };
@@ -66,6 +76,18 @@
 
     var enabledFor = { }; var isOwner = function (userId, familyId) { return !!members.filter(function (m) { return m.userId === userId && m.familyId === familyId && m.active && m.role === 'owner'; })[0]; };
     var actions = {
+      /* cookbooks */
+      bookMine: function (userId, b) { var g = gate(userId, b.familyId); if (g.err) return g.err; return { ok: true, pubs: Object.keys(brows).map(function (k) { return brows[k]; }).filter(function (r) { return C.canAuthor(g.m, r) && r.familyId === g.m.familyId; }).map(function (r) { return { id: r.id, sourceSlug: r.sourceId, hash: r.hash, version: r.version }; }) }; },
+      bookLibrary: function (userId, b) { var g = gate(userId, b.familyId); if (g.err) return g.err;
+        return { ok: true, family: famName(b.familyId), books: Object.keys(brows).map(function (k) { return brows[k]; }).filter(function (r) { return C.canRead(g.m, r, mem(r.authorId, r.familyId)); }).map(function (r) { return { id: r.id, name: r.snapshot.name, authorName: nameOf(r.authorId), mine: r.authorId === g.m.userId, count: r.count, version: r.version }; }) }; },
+      bookGet: function (userId, b) { var g = gate(userId, b.familyId); if (g.err) return g.err; var r = brows[String(b.id || '')]; if (!r || r.familyId !== g.m.familyId || !C.canRead(g.m, r, mem(r.authorId, r.familyId))) return NA();
+        return { ok: true, book: Object.assign({}, r.snapshot, { id: r.id, authorName: nameOf(r.authorId), mine: r.authorId === g.m.userId, version: r.version }) }; },
+      bookPublish: function (userId, b) { var g = gate(userId, b.familyId); if (g.err) return g.err; var v = C.validateBook(b.book); if (!v.ok) return fail('invalid', v.message);
+        var sid = String((b.book && b.book.id) || ''); if (Object.keys(brows).some(function (k) { return brows[k].authorId === userId && brows[k].familyId === b.familyId && brows[k].sourceId === sid && C.canAuthor(g.m, brows[k]); })) return fail('exists', 'This cookbook is already published. Use "Update published version".');
+        var id = nid('bp-'); brows[id] = { id: id, familyId: g.m.familyId, authorId: userId, authorMembershipId: g.m.membershipId, sourceId: sid, snapshot: v.snapshot, hash: v.hash, count: v.count, version: 1, status: 'published', hiddenAt: null }; return { ok: true, id: id, version: 1, hash: v.hash }; },
+      bookUpdate: function (userId, b) { var g = gate(userId, b.familyId); if (g.err) return g.err; var r = brows[String(b.id || '')]; if (!r || !C.canAuthor(g.m, r)) return NA(); var v = C.validateBook(b.book); if (!v.ok) return fail('invalid', v.message);
+        r.snapshot = v.snapshot; r.hash = v.hash; r.count = v.count; r.version += 1; return { ok: true, id: r.id, version: r.version, hash: r.hash }; },
+      bookUnpublish: function (userId, b) { var g = gate(userId, b.familyId); if (g.err) return g.err; var r = brows[String(b.id || '')]; if (!r || !C.canAuthor(g.m, r)) return NA(); delete brows[r.id]; return { ok: true }; },
       status: function (userId, b) { var g = gate(userId, b.familyId); if (g.err) return g.err; return { ok: true, enabled: enabledFor[b.familyId] !== false, canTurnOn: isOwner(userId, b.familyId) }; },
       setEnabled: function (userId, b) { var g = gate(userId, b.familyId); if (g.err) return g.err; if (!isOwner(userId, b.familyId)) return fail('not_owner', 'Only the family owner can do that.'); enabledFor[b.familyId] = !!b.enabled; return { ok: true, enabled: !!b.enabled }; },
       families: function (userId) { return { ok: true, families: members.filter(function (m) { return m.userId === userId && m.active; }).map(function (m) { return { id: m.familyId, name: famName(m.familyId) }; }) }; },
@@ -124,5 +146,5 @@
     if (options.seed !== false) seed(); else { families.fHappy = { id: 'fHappy', name: 'Happy Family' }; families.fBeta = { id: 'fBeta', name: 'Beta Family' }; }
     return { setSharing: function (familyId, on) { enabledFor[familyId] = !!on; }, call: function (userId, action, body) { if (!Object.prototype.hasOwnProperty.call(actions, action)) return fail('bad_action', 'Unknown action.'); try { return actions[action](userId, body || {}); } catch (e) { return fail('server', 'Something went wrong.'); } }, admin: admin, addMember: addMember, publish: function (userId, familyId, draft) { return publish(mem(userId, familyId), draft, picsOf(draft), C.imageKeyOf(draft)); } };
   }
-  return { create: create, VIEWERS: VIEWERS, sampleDrafts: sampleDrafts, SQUARE_PIC: SQUARE_PIC, WIDE_PIC: WIDE_PIC };
+  return { create: create, VIEWERS: VIEWERS, sampleDrafts: sampleDrafts, sampleBooks: sampleBooks, SQUARE_PIC: SQUARE_PIC, WIDE_PIC: WIDE_PIC };
 });

@@ -1,7 +1,7 @@
 /* Recipes family publishing rules for the real backend. Copied from recipes-pub-core.js (the version the preview and its tests use) and
  * converted to a module. function/test/recipes.test.js checks both copies give the same answers, so they cannot drift apart.
  * Copyright (C) 2026 Leia. GNU GPL v3 or later (see LICENSE-GPL-3.0.txt). */
-var LIMITS = { title: 80, description: 300, line: 160, step: 700, notes: 1500, ingredients: 60, steps: 40, tags: 10, tag: 30, categories: 5, parts: 5, search: 60, photoBytes: 120000, thumbBytes: 10000, publishedPerAuthor: 200, snapshotChars: 60000 };
+var LIMITS = { title: 80, description: 300, line: 160, step: 700, notes: 1500, ingredients: 60, steps: 40, tags: 10, tag: 30, categories: 5, parts: 5, search: 60, photoBytes: 120000, thumbBytes: 10000, publishedPerAuthor: 200, snapshotChars: 60000, bookRecipes: 25, bookSections: 12, bookSection: 60, bookText: 1500, bookChars: 62000 };
 var HIDDEN_DAYS = 30;   // an author who left: their published recipes stay hidden this long, then are deleted
 var str = function (v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, max); };
 var list = function (v, maxItems, maxLen) { return (Array.isArray(v) ? v : []).map(function (x) { return str(x, maxLen); }).filter(Boolean).slice(0, maxItems); };
@@ -56,6 +56,30 @@ function validate(draft, pics, imageKey) {
   var key = hasPhoto ? String(imageKey === undefined ? imageKeyOf(draft) : imageKey) : '';
   return { ok: true, snapshot: s, imageKey: key, hash: hashOf(s, key), hasPhoto: hasPhoto };
 }
+/** A cookbook as published: the text of each chosen recipe (copied in, with its sub-recipes), grouped in the author's sections. No photos in this first version. `b` is a saved cookbook from the cookbook maker. */
+function bookSnapshotOf(b) {
+  b = b || {}; var st = b.settings || {}, snap = b.snap || {}, extras = b.extras || {};
+  var secs = (Array.isArray(b.sections) ? b.sections : []).slice(0, LIMITS.bookSections).map(function (sec) {
+    var recs = (sec && Array.isArray(sec.items) ? sec.items : []).map(function (slug) {
+      var r = snap[slug]; if (!r || typeof r !== 'object') return null;
+      var parts = (Array.isArray(r.parts) ? r.parts : []).map(function (ps) { return typeof ps === 'string' ? (extras[ps] || snap[ps] || null) : ps; }).filter(Boolean);
+      return snapshotOf(Object.assign({}, r, { parts: parts }));
+    }).filter(function (r) { return r && r.name; });
+    return { title: str(sec && sec.title, LIMITS.bookSection), recipes: recs };
+  }).filter(function (sec) { return sec.recipes.length; });
+  return { name: str(st.title || b.name, LIMITS.title), author: str(st.author, 80), dedication: str(st.dedication, LIMITS.bookText), intro: str(st.intro, LIMITS.bookText), sections: secs };
+}
+var bookCount = function (s) { return s.sections.reduce(function (n, x) { return n + x.recipes.length; }, 0); };
+/** { ok:true, snapshot, hash, count } or { ok:false, message }. */
+function validateBook(b) {
+  var s = bookSnapshotOf(b), n = bookCount(s);
+  if (!s.name) return { ok: false, message: 'Give the cookbook a title.' };
+  if (!n) return { ok: false, message: 'Add at least one recipe to the cookbook.' };
+  if (n > LIMITS.bookRecipes) return { ok: false, message: 'A published cookbook can hold up to ' + LIMITS.bookRecipes + ' recipes.' };
+  if (JSON.stringify(s).length > LIMITS.bookChars) return { ok: false, message: 'This cookbook is too long to publish. Take out a few recipes or shorten the introduction.' };
+  return { ok: true, snapshot: s, hash: hashOf(s, ''), count: n };
+}
+function bookStateOf(b, pub) { return !pub ? 'private' : hashOf(bookSnapshotOf(b), '') === pub.hash ? 'published' : 'changed'; }
 /** 'private' (never published), 'published' (same as the draft), 'changed' (draft differs from what the family sees). */
 function stateOf(draft, pub) { return !pub ? 'private' : hashOf(snapshotOf(draft), imageKeyOf(draft)) === pub.hash ? 'published' : 'changed'; }
 /** Reading: a current, confirmed membership of THAT family, and the author's own membership must still be the one that published it. Roles add nothing. */
@@ -67,4 +91,4 @@ function canAuthor(member, row) {
   return !!(member && member.active && row && row.familyId === member.familyId && row.authorId === member.userId && row.authorMembershipId === member.membershipId);
 }
 
-export { LIMITS, HIDDEN_DAYS, snapshotOf, validate, hashOf, imageKeyOf, stateOf, canRead, canAuthor, jpegDims, squareJpeg };
+export { LIMITS, HIDDEN_DAYS, snapshotOf, bookSnapshotOf, validateBook, bookStateOf, validate, hashOf, imageKeyOf, stateOf, canRead, canAuthor, jpegDims, squareJpeg };

@@ -269,3 +269,68 @@ test('the rules match the preview: same answers for snapshots, hashes, validatio
     assert.equal(M.canRead(m, r, a), C.canRead(m, r, a)); assert.equal(M.canAuthor(m, r), C.canAuthor(m, r));
   }
 });
+
+const book = (o = {}) => ({ id: 'bk-1', name: 'Family Favourites', settings: { title: 'Family Favourites', author: 'Ann', intro: 'Our best.', dedication: 'For Gran.' },
+  sections: [{ id: 's1', title: 'Breads', items: ['gran'] }, { id: 's2', title: '', items: ['stew'] }],
+  snap: { gran: { slug: 'gran', name: 'Gran Bread', ingredients: ['500 g flour'], steps: ['Bake.'], image: 'data:x', fav: true }, stew: { slug: 'stew', name: 'Stew', ingredients: ['beef'], steps: ['Simmer.'], parts: ['gravy'] } },
+  extras: { gravy: { slug: 'gravy', name: 'Gravy', ingredients: ['stock'], steps: ['Whisk.'] } }, ...o });
+const bpub = (b, o = {}) => F({ book: b, ...o });
+
+test('cookbooks: off until sharing is on; then publish stores a text snapshot with sub-recipes copied in and no photo or private fields', async () => {
+  const w = await setup({ on: false });
+  await call404(w, 'ann', 'recipesBookPublish', bpub(book()));
+  await w.ok('owner', 'recipesSetEnabled', F({ enabled: true }));
+  const out = await w.ok('ann', 'recipesBookPublish', bpub(book()));
+  const row = rows(w, 'recipeBooks')[0];
+  assert.deepEqual(row.$permissions, []); assert.equal(row.count, 2);
+  const d = JSON.parse(row.data);
+  assert.equal(d.name, 'Family Favourites'); assert.equal(d.sections.length, 2); assert.equal(d.sections[1].recipes[0].parts[0].name, 'Gravy');
+  assert.equal(JSON.stringify(d).includes('data:x'), false); assert.equal('fav' in d.sections[0].recipes[0], false);
+  const lib = await w.ok('sam', 'recipesBookLibrary', F());
+  assert.equal(lib.books.length, 1); assert.equal(lib.books[0].count, 2); assert.equal(lib.books[0].mine, false);
+  const got = await w.ok('sam', 'recipesBookGet', F({ id: out.id }));
+  assert.equal(got.book.sections[0].recipes[0].name, 'Gran Bread'); assert.equal(got.book.authorName, 'Name ann');
+  assert.deepEqual((await w.ok('ann', 'recipesBookMine', F())).pubs.map((p) => p.sourceSlug), ['bk-1']);
+  assert.deepEqual((await w.ok('sam', 'recipesBookMine', F())).pubs, []);
+  await w.fail('zed', 'recipesBookLibrary', F(), 403);
+});
+
+test('cookbooks: only the author updates or unpublishes; update bumps the version; duplicates and bad books are refused', async () => {
+  const w = await setup();
+  const a = await w.ok('ann', 'recipesBookPublish', bpub(book()));
+  for (const u of ['owner', 'tia', 'sam']) { await call404(w, u, 'recipesBookUpdate', F({ id: a.id, book: book({ name: 'Hijack', settings: { title: 'Hijack' } }) })); await call404(w, u, 'recipesBookUnpublish', F({ id: a.id })); }
+  await w.fail('ann', 'recipesBookPublish', bpub(book()), 409, 'exists');
+  await w.fail('ann', 'recipesBookPublish', bpub(book({ id: 'b2', settings: {}, name: '' })), 400, 'invalid');
+  await w.fail('ann', 'recipesBookPublish', bpub(book({ id: 'b3', sections: [{ items: [] }] })), 400, 'invalid');
+  const many = {}; const items = []; for (let i = 0; i < 26; i++) { many['r' + i] = { name: 'R' + i, ingredients: ['x'], steps: ['y'] }; items.push('r' + i); }
+  await w.fail('ann', 'recipesBookPublish', bpub(book({ id: 'b4', sections: [{ items }], snap: many })), 400, 'invalid');
+  const b = await w.ok('ann', 'recipesBookUpdate', F({ id: a.id, book: book({ settings: { title: 'Family Favourites 2', author: 'Ann' } }) }));
+  assert.equal(b.version, 2); assert.notEqual(b.hash, a.hash);
+  assert.equal((await w.ok('sam', 'recipesBookLibrary', F())).books[0].name, 'Family Favourites 2');
+  await w.ok('ann', 'recipesBookUnpublish', F({ id: a.id }));
+  assert.equal(rows(w, 'recipeBooks').length, 0); await call404(w, 'sam', 'recipesBookGet', F({ id: a.id }));
+});
+
+test('cookbooks: a removed author is hidden at once, stays hidden after re-invite, is swept after 30 days; deleting the family removes them', async () => {
+  const w = await setup();
+  const { id } = await w.ok('ann', 'recipesBookPublish', bpub(book()));
+  w.removeMember('famA', 'ann');
+  assert.equal((await w.ok('sam', 'recipesBookLibrary', F())).books.length, 0);
+  await call404(w, 'sam', 'recipesBookGet', F({ id }));
+  w.reinvite('famA', 'ann');
+  await call404(w, 'sam', 'recipesBookGet', F({ id })); assert.deepEqual((await w.ok('ann', 'recipesBookMine', F())).pubs, []);
+  w.world.bump(31 * DAY); const out = await sweep(w);
+  assert.equal(out.json.recipesPurged, 1); assert.equal(rows(w, 'recipeBooks').length, 0);
+  await w.ok('ann', 'recipesBookPublish', bpub(book()));
+  let r; do { r = await w.ok('owner', 'deleteFamily', F()); } while (!r.done);
+  assert.equal(rows(w, 'recipeBooks').length, 0);
+});
+
+test('the cookbook rules match the preview', async () => {
+  const M = await import('../src/recipes-rules.js');
+  const C = createRequire(import.meta.url)('../../recipes-pub-core.js');
+  for (const b of [book(), book({ settings: {} , name: '' }), book({ sections: [] }), book({ sections: [{ title: 'x'.repeat(200), items: ['gran', 'missing'] }] })]) {
+    assert.deepEqual(M.bookSnapshotOf(b), C.bookSnapshotOf(b)); assert.deepEqual(M.validateBook(b), C.validateBook(b));
+    assert.equal(M.bookStateOf(b, { hash: 'x' }), C.bookStateOf(b, { hash: 'x' })); assert.equal(M.bookStateOf(b, null), 'private');
+  }
+});

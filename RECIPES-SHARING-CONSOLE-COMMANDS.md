@@ -40,3 +40,33 @@ appwrite tablesdb create-index --database-id family --table-id recipePubs --key 
 **Step 4. Turn it on for a family.** Open Recipes as the family owner. A card "Share recipes with [family]" appears. Tap "Turn on sharing". Other members see nothing new until it is on. Turning it on does not publish anything: every recipe stays private until its author publishes it.
 
 Rollback: upload the previous function package (the app hides every sharing control when the server does not know the actions), or delete the `recipeState` row for a family to switch it off. Deleting the two tables removes all published copies; private recipes on people's devices are never touched.
+
+---
+
+## Cookbook publishing: one more table (paste after the steps above)
+
+First block. Wait about 30 seconds, then the second block. If a line is cut off in the paste, paste that line again (I check the result afterwards).
+
+```
+appwrite tablesdb create-table --database-id family --table-id recipeBooks --name recipeBooks --row-security false
+appwrite tablesdb create-string-column --database-id family --table-id recipeBooks --key familyId --size 36 --required true
+appwrite tablesdb create-string-column --database-id family --table-id recipeBooks --key authorId --size 36 --required true
+appwrite tablesdb create-string-column --database-id family --table-id recipeBooks --key authorMembershipId --size 36 --required true
+appwrite tablesdb create-string-column --database-id family --table-id recipeBooks --key sourceId --size 80 --required true
+appwrite tablesdb create-string-column --database-id family --table-id recipeBooks --key pubKey --size 190 --required true
+appwrite tablesdb create-string-column --database-id family --table-id recipeBooks --key hash --size 40 --required true
+appwrite tablesdb create-string-column --database-id family --table-id recipeBooks --key status --size 12 --required true
+appwrite tablesdb create-integer-column --database-id family --table-id recipeBooks --key version --required false
+appwrite tablesdb create-integer-column --database-id family --table-id recipeBooks --key count --required false
+appwrite tablesdb create-datetime-column --database-id family --table-id recipeBooks --key hiddenAt --required false
+appwrite tablesdb create-datetime-column --database-id family --table-id recipeBooks --key publishedAt --required false
+appwrite tablesdb create-text-column --database-id family --table-id recipeBooks --key data --required true
+```
+
+```
+appwrite tablesdb create-index --database-id family --table-id recipeBooks --key idx_family --type key --columns familyId
+appwrite tablesdb create-index --database-id family --table-id recipeBooks --key idx_hidden --type key --columns hiddenAt
+appwrite tablesdb create-index --database-id family --table-id recipeBooks --key uniq_pubKey --type unique --columns pubKey
+```
+
+Then upload the new `recipes-sharing-function.tar.gz` (it replaces the earlier one). Until both are done, My Cookbooks shows your saved cookbooks without Publish buttons.

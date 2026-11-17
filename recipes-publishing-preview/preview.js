@@ -11,7 +11,7 @@
   if (/[?&]sharing=off/.test(location.search)) server.setSharing('fHappy', false);
 
   /* each person's own private book (what the real app keeps in that browser) */
-  var drafts = F.sampleDrafts();
+  var drafts = F.sampleDrafts(), books = F.sampleBooks();
   F.VIEWERS.forEach(function (v) { mem['fcrb:' + v.userId + ':rb_recipes'] = JSON.stringify(drafts[v.userId]); });
 
   function h(tag, attrs) {
@@ -43,7 +43,7 @@
     return Promise.resolve().then(function () { return gen !== st.gen ? { ok: false, stale: true } : r; });
   }
   var X = { S: { user: { $id: st.userId } }, VIEWS: {}, h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, reroute: function () { render(); } };
-  var P = window.RecipesPubUI.create({ h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, call: call, pictures: function (img) { return Promise.resolve({ photo: img, thumb: img }); }, family: family, reroute: function () { render(); } });
+  var P = window.RecipesPubUI.create({ h: h, icon: icon, toast: toast, confirmDialog: confirmDialog, call: call, books: function () { return Promise.resolve((books[st.userId] || []).map(function (b) { return JSON.parse(JSON.stringify(b)); })); }, pictures: function (img) { return Promise.resolve({ photo: img, thumb: img }); }, family: family, reroute: function () { render(); } });
   X.publish = P;
   window.FCRecipes.install(X);
 
