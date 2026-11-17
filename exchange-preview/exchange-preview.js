@@ -50,7 +50,7 @@
   }
   function header(active) {
     var v = viewer(), tabs = [['#/browse', 'Browse', 'browse'], ['#/mine', 'My listings', 'mine']]; if (v.moderator) tabs.push(['#/reports', 'Reports', 'reports']);
-    return h('header', { class: 'ex-head' }, h('div', { class: 'row between' }, h('div', null, h('h1', { text: 'Family Exchange' }), h('p', { class: 'muted ex-sub', text: 'Free items and wanted posts for the ' + S.FAMILY })),
+    return h('header', { class: 'ex-head' }, h('div', { class: 'row between ex-sign' }, h('div', null, h('h1', { text: 'Family Exchange' }), h('p', { class: 'muted ex-sub', text: 'Free items and wanted posts for the ' + S.FAMILY })),
       h('a', { class: 'btn', href: '#/new', id: 'ex-new', text: 'New listing' })),
       h('nav', { class: 'tabs', 'aria-label': 'Exchange sections' }, tabs.map(function (t) { return h('a', { class: 'tab ex-tab', href: t[0], 'aria-current': active === t[2] ? 'page' : null, 'aria-pressed': active === t[2] ? 'true' : 'false', text: t[1] }); })));
   }
@@ -99,7 +99,7 @@
 
   function card(l) {
     var p = l.photos.length ? photo(l.photos[0]) : null, o = person(l.owner), done = l.status === 'gone' || l.status === 'fulfilled';
-    return h('a', { class: 'card ex-card' + (done ? ' ex-done' : ''), href: '#/listing/' + l.id, 'data-id': l.id },
+    return h('a', { class: 'card ex-card' + (l.kind === 'wanted' ? ' ex-wanted' : ' ex-freeitem') + (done ? ' ex-done' : ''), href: '#/listing/' + l.id, 'data-id': l.id },
       h('div', { class: 'ex-thumb' + (p ? '' : ' ex-nophoto') }, p ? h('img', { src: p.src, alt: p.alt, loading: 'lazy', width: 160, height: 160 }) : h('span', { text: l.kind === 'wanted' ? 'Wanted' : 'No photo' })),
       h('div', { class: 'ex-card-body' }, h('h3', { text: l.title }), h('p', { class: 'muted ex-meta', text: l.category + (l.kind === 'free' && l.condition ? ' · ' + l.condition : '') }),
         h('div', { class: 'row ex-row' }, h('span', { class: 'badge ex-badge ex-' + l.status, text: label[l.status].split(',')[0] }), h('span', { class: 'muted ex-meta', text: o.name + ' · ' + l.ago }))));
