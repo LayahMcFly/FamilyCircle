@@ -424,7 +424,7 @@
       });
       main.appendChild(h('div', { class: 'rc-controls' }, q,
         h('div', { class: 'row' }, heartBtn, h('a', { class: 'btn small', href: '#/recipes/new' }, icon('plus'), h('span', { text: 'Add a recipe' }))),
-        h('a', { class: 'btn secondary rc-bookbtn', href: '#/recipes/cookbook' }, icon('book'), h('span', { text: 'Make printable recipe book' }))));
+        P && P.sharing() ? null : h('a', { class: 'btn secondary rc-bookbtn', href: '#/recipes/cookbook' }, icon('book'), h('span', { text: 'Make printable recipe book' }))));   // with sharing on, My Cookbooks is the one way in
       main.appendChild(h('div', { class: 'rc-chips', role: 'group', 'aria-label': 'Show' }, typeBtns));
       var cats = [['', 'All']].concat(categories());
       cats.forEach(function (c) { var b = h('button', { type: 'button', class: 'chip', 'aria-pressed': String(R.cat === c[0]), onclick: function () { R.cat = c[0]; Array.prototype.forEach.call(chipsBox.children, function (x) { x.setAttribute('aria-pressed', String(x === b)); }); paint(false); } }, c[1]); chipsBox.appendChild(b); });
