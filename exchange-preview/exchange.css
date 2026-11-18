@@ -271,3 +271,6 @@ body.ex-skin .btn.secondary, body.ex-skin a.btn.secondary { color: var(--ink) !i
 .ex-chips { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 14px; }
 /* dialog titles sit on paper, so they use ink, not the cream used on the cork board */
 body.ex-skin dialog.ex-dlg h2 { color: var(--ink) !important; text-shadow: none !important; font-family: "Patrick Hand", sans-serif; font-size: 1.5rem; }
+
+/* visible step/build marker under the sample-data banner */
+.pv-step { max-width: 980px; margin: 10px auto 0; padding: 0 16px; font-weight: 700; text-align: center; font-family: "Patrick Hand", sans-serif; font-size: 1.15rem; color: #fff3d6; text-shadow: 0 2px 0 rgba(0,0,0,.4); }

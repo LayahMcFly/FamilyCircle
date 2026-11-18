@@ -39,6 +39,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('A3 no external requests', log.external.length === 0 && log.requests.every(u => u.startsWith('http://127.0.0.1')), JSON.stringify(log.external));
     check('A4 no page or console errors', log.errors.length === 0 && log.console.length === 0, JSON.stringify([log.errors, log.console]));
     check('A5 build marker shown', /exchange-preview-step2 · file hash [0-9a-f]{16}/.test(await page.textContent('#pv-build')), await page.textContent('#pv-build'));
+    check('A5b visible Step 2 marker under the banner matches the footer hash', /^Step 2 preview · build [0-9a-f]{8}$/.test((await page.textContent('#pv-step')).trim()) && (await page.textContent('#pv-build')).includes((await page.textContent('#pv-step')).trim().slice(-8)), await page.textContent('#pv-step'));
     check('A6 no Hub link, no Appwrite script', !(await page.$('a[href*="index.html"], a[href="../"]')) && !(await page.$('script[src*="appwrite"], script[src*="config.js"]')), 'links');
     check('A7 no native checkbox/radio/file inputs', !(await page.$('input[type=checkbox], input[type=radio], input[type=file], input[type=date]')), 'native');
     await ctx.close(); }
@@ -46,7 +47,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
   /* B. browse */
   { const { ctx, page } = await open(browser);
     let t = await titles(page);
-    check('B1 free items show available + reserved, not finished/draft/withdrawn', t.length === 5 && t.includes('Oak bookshelf') && t.includes('20-inch kids bike') && !t.includes('Floor lamp') && !t.includes('Mixing bowls') && !t.includes('Board games'), t.join('|'));
+    check('B1 free items show available + reserved, not finished/draft/withdrawn', t.length === 6 && t.includes('Oak bookshelf') && t.includes('20-inch kids bike') && !t.includes('Floor lamp') && !t.includes('Mixing bowls') && !t.includes('Board games'), t.join('|'));
     check('B2 card thumbnails are square', await page.$$eval('.ex-thumb', n => n.every(x => Math.abs(x.getBoundingClientRect().width - x.getBoundingClientRect().height) < 1.5)), 'square');
     await page.click('#ex-finished'); await settle(page); t = await titles(page);
     check('B3 show finished adds Floor lamp', t.includes('Floor lamp'), t.join('|')); await page.click('#ex-finished');
@@ -278,14 +279,46 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     await who(page, 'dana'); await page.goto(URL_() + '#/edit/l3'); await page.waitForSelector('.ex-form'); check('I22 once released, the editor shows the continue notice and plain Save changes', !!(await page.$('#ex-pending-note')) && (await page.textContent('#ex-publish')) === 'Save changes', 'continue');
     await page.click('#ex-publish'); await page.waitForSelector('.ex-detail'); check('I23 publishing after release applies the edit and clears the private copy', (await page.textContent('.ex-title')) === '20-inch kids bike, red' && !(await page.$('#ex-pending')), await page.textContent('.ex-title')); await ctx.close(); }
   { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/edit/l3'); await page.waitForSelector('.ex-form');
-    await page.fill('#ex-description', '  Red bike,   tires need air.   Training wheels not included. '); await page.click('#ex-publish'); await settle(page);
-    check('I24 a spacing-only change is not material: no block, just "No changes to publish"', !(await page.$('dialog[open]')) && (await page.textContent('#toasts')).includes('No changes to publish'), await page.textContent('#toasts'));
+    const typed = '  Red bike,   tires need air.\n\nTraining wheels not included. ';
+    await page.fill('#ex-description', typed); await page.click('#ex-publish'); await page.waitForSelector('dialog[open]');
+    check('I24 a spacing-only edit is still blocked while reserved, and the dialog says the text is kept exactly', (await page.textContent('dialog')).includes('Cannot publish while reserved') && (await page.textContent('dialog')).includes('exactly as you typed'), await page.textContent('dialog'));
+    const st24 = await page.evaluate(() => { const l = window.ExchangePreview.state().db.listings.filter(x => x.id === 'l3')[0]; return { pend: l.pending && l.pending.description, pub: l.description }; });
+    check('I24b the private copy is stored exactly as typed (spacing and line breaks kept), the public text is untouched', st24.pend === typed && st24.pub === 'Red bike, tires need air. Training wheels not included.', JSON.stringify(st24));
+    await dlgBtn(page); await page.waitForSelector('.ex-detail'); await page.goto(URL_() + '#/edit/l3'); await page.waitForSelector('.ex-form');
     await page.fill('#ex-title', ''); await page.click('#ex-private'); await settle(page); check('I25 private edits are still validated (empty title refused)', !!(await page.$('.ex-err:not(:empty)')), 'validate');
     await page.fill('#ex-title', '20-inch kids bike'); await page.fill('#ex-area', '9 Oak Street'); await page.click('#ex-private'); await settle(page); check('I26 a street address is refused even in private edits', (await page.textContent('#ex-area-e')).includes('Street addresses'), 'address');
     await ctx.close(); }
   { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/edit/l3'); await page.waitForSelector('.ex-form'); await page.fill('#ex-title', 'Changed elsewhere');
     await page.evaluate(() => { const l = window.ExchangePreview.state().db.listings.filter(x => x.id === 'l3')[0]; l.status = 'available'; });
     await page.click('#ex-private'); await settle(page); check('I27 stale: saving private edits after the status changed elsewhere is refused cleanly', (await page.textContent('#toasts')).includes('already changed') && !(await page.evaluate(() => !!window.ExchangePreview.state().db.listings.filter(x => x.id === 'l3')[0].pending)), await page.textContent('#toasts')); await ctx.close(); }
+
+  /* J. Pre-reserved sample listing (l7) for the release and private-edit tests; release never publishes private edits */
+  { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/listing/l7'); await page.waitForSelector('.ex-detail');
+    check('J1 the pre-reserved sample is clearly labelled and reserved for Ben', (await page.textContent('.ex-title')).startsWith('SAMPLE FOR TESTING') && (await status(page)).toLowerCase() === 'reserved' && !!(await page.$('#ex-release')), await page.textContent('.ex-title'));
+    await page.goto(URL_() + '#/edit/l7'); await page.waitForSelector('.ex-form'); const typed = 'Brass lantern.  Two   spaces stay.\n\nSecond paragraph stays. ';
+    await page.fill('#ex-description', typed); await page.click('#ex-private'); await page.waitForSelector('.ex-detail');
+    await who(page, 'ben'); await page.goto(URL_() + '#/listing/l7'); await settle(page);
+    check('J2 the reserved person still sees the original description while private edits exist', (await page.textContent('.ex-desc')).includes('pre-reserved sample') && !(await page.textContent('.ex-detail')).includes('Brass lantern'), 'recipient');
+    await who(page, 'dana'); await page.goto(URL_() + '#/listing/l7'); await page.waitForSelector('.ex-detail');
+    await page.click('#ex-release'); await page.waitForSelector('dialog[open]'); const dt = await page.textContent('dialog');
+    check('J3 release confirmation says the item becomes available again, requests stay waiting, private edits stay private', dt.includes('The item will become available again') && dt.includes('Other waiting requests stay waiting') && dt.includes('private edits stay private until you publish them yourself'), dt);
+    await shot(page, 'phone-step2-release-confirm'); await dlgBtn(page); await settle(page);
+    const st = await page.evaluate(() => { const db = window.ExchangePreview.state().db, l = db.listings.filter(x => x.id === 'l7')[0], rq = id => db.requests.filter(r => r.id === id)[0].status; return { status: l.status, reservedFor: l.reservedFor || null, desc: l.description, pend: !!l.pending, ben: rq('r5'), ava: rq('r6') }; });
+    check('J4 release: Available, recipient cleared, former request Released, other waiting request stays Waiting', st.status === 'available' && !st.reservedFor && st.ben === 'released' && st.ava === 'waiting', JSON.stringify(st));
+    check('J5 release did NOT publish the private edits (public text unchanged, private copy still there)', st.desc.includes('pre-reserved sample') && st.pend === true, JSON.stringify(st));
+    await who(page, 'ben'); await page.goto(URL_() + '#/listing/l7'); await settle(page);
+    check('J6 other viewers still see the old public text after release', (await page.textContent('.ex-desc')).includes('pre-reserved sample') && !(await page.textContent('.ex-detail')).includes('Brass lantern'), 'public');
+    await page.click('#ex-interest'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page); await page.waitForTimeout(150);
+    const st2 = await page.evaluate(() => { const db = window.ExchangePreview.state().db; return { s: db.listings.filter(x => x.id === 'l7')[0].status, ben: db.requests.filter(r => r.id === 'r5')[0].status }; });
+    check('J7 Ask again makes a waiting request and never reserves automatically', st2.s === 'available' && st2.ben === 'waiting', JSON.stringify(st2));
+    await who(page, 'dana'); await page.goto(URL_() + '#/edit/l7'); await page.waitForSelector('.ex-form'); check('J8 owner reopens the editor and finds the private text exactly as typed', (await page.inputValue('#ex-description')) === typed, JSON.stringify(await page.inputValue('#ex-description')));
+    await page.click('#ex-publish'); await page.waitForSelector('.ex-detail');
+    check('J9 only the owner\'s explicit Save changes publishes it, text kept exactly', (await page.evaluate(() => { const l = window.ExchangePreview.state().db.listings.filter(x => x.id === 'l7')[0]; return l.description; })) === typed, 'published');
+    await who(page, 'ben'); await page.goto(URL_() + '#/listing/l7'); await settle(page); check('J10 now other viewers see the published text, with the author\'s line breaks', (await page.textContent('.ex-desc')).includes('Second paragraph stays.') && (await page.$eval('.ex-desc', e => getComputedStyle(e).whiteSpace)) === 'pre-wrap', 'shown'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/edit/l5'); await page.waitForSelector('.ex-form'); const raw = '  Keep  these\n\nspaces and lines ';
+    await page.fill('#ex-description', raw); await page.fill('#ex-title', 'Desk  chair,  adjustable'); await page.click('#ex-publish'); await page.waitForSelector('.ex-detail');
+    const r = await page.evaluate(() => { const l = window.ExchangePreview.state().db.listings.filter(x => x.id === 'l5')[0]; return [l.description, l.title]; });
+    check('J11 saving a normal edit never rewrites the author\'s spacing or line breaks', r[0] === raw && r[1] === 'Desk  chair,  adjustable', JSON.stringify(r)); await ctx.close(); }
 
   /* G. layout + themes + keyboard */
   { const { ctx, page } = await open(browser, { w: 320, h: 700, hash: '#/listing/l2' });

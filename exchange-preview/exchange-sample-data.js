@@ -33,6 +33,8 @@
       description: 'Blue fabric chair. The height lever works. The seat has a small stain, shown in the base photo.', photos: ['chair-front', 'chair-side', 'chair-base'] },
     { id: 'l6', kind: 'free', status: 'available', owner: 'ava', title: 'Baby blankets, set of four', category: 'Kids and baby', condition: 'Like new', area: '', ago: '6 days ago',
       description: 'Washed and folded. Cotton, in pastel colours.', photos: ['blanket-set'] },
+    { id: 'l7', kind: 'free', status: 'reserved', owner: 'dana', reservedFor: 'ben', title: 'SAMPLE FOR TESTING: reserved lantern', category: 'Kitchen and home', condition: 'Good', area: 'Near the park', ago: 'Sample',
+      description: 'A pre-reserved sample so you can test private edits and releasing. It is reserved for Ben Rowan, and Ava Rowan has a waiting request. View it as Dana Rowan to edit or release it.', photos: ['lamp-full'] },
     { id: 'w1', kind: 'wanted', status: 'open', owner: 'ben', title: 'Tomato cages', category: 'Garden and outdoor', area: 'North side', ago: '1 day ago',
       description: 'Looking for four or five cages for this spring. Any size is fine, and rust is no problem.', photos: [] },
     { id: 'w2', kind: 'wanted', status: 'open', owner: 'dana', title: 'Folding table for Saturday', category: 'Kitchen and home', area: 'Near the park', ago: '4 days ago',
@@ -48,6 +50,8 @@
     { id: 'r1', listing: 'l1', from: 'ben', note: 'I can pick it up Saturday morning.', status: 'waiting', ago: '1 day ago' },
     { id: 'r2', listing: 'l1', from: 'dana', note: '', status: 'waiting', ago: '12 hours ago' },
     { id: 'r3', listing: 'l3', from: 'ben', note: 'My nephew would love this.', status: 'reserved', ago: '4 days ago' },
+    { id: 'r5', listing: 'l7', from: 'ben', note: 'I can pick it up Sunday.', status: 'reserved', ago: '3 days ago' },
+    { id: 'r6', listing: 'l7', from: 'ava', note: 'Still interested if it frees up.', status: 'waiting', ago: '2 days ago' },
     { id: 'r4', listing: 'w1', from: 'ava', note: 'I have six cages in the shed.', status: 'waiting', ago: '20 hours ago', offer: true }
   ];
   var REPORTS = [

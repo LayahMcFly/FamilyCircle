@@ -40,5 +40,10 @@
     });
     return out;
   }
-  return { materialChanges: materialChanges, LIMITS: LIMITS, CATEGORIES: CATEGORIES, CONDITIONS: CONDITIONS, validate: validate, looksLikeAddress: looksLikeAddress, looksLikeContact: looksLikeContact, clean: clean };
+  /* Exact comparison, used to decide whether anything at all differs (spacing included). Saved text is never altered: the author's own spacing and line breaks are kept. */
+  function anyChanges(before, after) {
+    var same = ['title', 'category', 'condition', 'description', 'area'].every(function (k) { return String(before[k] == null ? '' : before[k]) === String(after[k] == null ? '' : after[k]); });
+    return !same || (before.photos || []).join('|') !== (after.photos || []).join('|');
+  }
+  return { anyChanges: anyChanges, materialChanges: materialChanges, LIMITS: LIMITS, CATEGORIES: CATEGORIES, CONDITIONS: CONDITIONS, validate: validate, looksLikeAddress: looksLikeAddress, looksLikeContact: looksLikeContact, clean: clean };
 });

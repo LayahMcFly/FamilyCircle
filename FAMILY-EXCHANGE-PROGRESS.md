@@ -41,3 +41,11 @@ Lending, due dates, deposits, returns; optional priced listings; priced family-s
 - Editing while reserved: private draft edits are allowed and invisible to others. Publishing material changes is blocked until the owner releases the reservation.
 - Material change (preview definition, awaiting her review): any change to title (including capitals), category, condition, description text, pickup area, or photos (added, removed, reordered). Not material: extra spaces and line breaks only.
 - Preview assumption to confirm: releasing returns the listing to Available; the previously reserved person's request shows "Released" and they may ask again. Other waiting requests stay waiting.
+
+## Step 2 policy directions, round 2 (2026-11-17), preview only, not production approval
+- Material changes: conservative definition accepted. Typo corrections also wait until release. While reserved, ANY text difference (even spacing) is blocked from publishing and kept as a private edit.
+- Saved text is never altered: titles, descriptions and areas are stored exactly as typed. Whitespace is ignored only when deciding what counts as "material", never when saving.
+- Release reservation accepted as proposed. Release never publishes private edits. The confirmation says the item becomes available again.
+- Pre-reserved sample for her tests: "SAMPLE FOR TESTING: reserved lantern" (view as Dana Rowan).
+- Visible build marker under the banner: "Step 2 preview · build <8 characters>", and the full hash in the footer.
+- Step 3 on hold until this candidate is settled.

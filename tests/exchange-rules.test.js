@@ -9,3 +9,8 @@ test('category, condition, description and pickup area are material', () => { as
 test('photos: add, remove and reorder are all material', () => { assert.deepStrictEqual(mc({ photos: ['a', 'b', 'c'] }), ['photos']); assert.deepStrictEqual(mc({ photos: ['a'] }), ['photos']); assert.deepStrictEqual(mc({ photos: ['b', 'a'] }), ['photos']); });
 test('several changes are all reported', () => assert.deepStrictEqual(mc({ title: 'X', photos: [] }), ['title', 'photos']));
 test('missing fields do not crash', () => assert.deepStrictEqual(R.materialChanges({}, {}), []));
+test('anyChanges sees spacing-only differences even though they are not material', () => {
+  const sp = Object.assign({}, base, { description: 'Three  shelves.' });
+  assert.deepStrictEqual(R.materialChanges(base, sp), []); assert.strictEqual(R.anyChanges(base, sp), true); assert.strictEqual(R.anyChanges(base, Object.assign({}, base)), false);
+  assert.strictEqual(R.anyChanges(base, Object.assign({}, base, { photos: ['b', 'a'] })), true);
+});
