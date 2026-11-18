@@ -216,7 +216,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
   { const { ctx, page } = await open(browser, { hash: '#/listing/l1' }); await page.waitForSelector('.ex-detail');
     await page.click('#ex-withdraw'); await page.waitForSelector('dialog[open]'); check('H16 withdraw dialog says it leaves Browse and cannot be put back here', (await page.textContent('dialog')).includes('leaves Browse') && (await page.textContent('dialog')).includes('cannot be put back'), 'text'); await dlgBtn(page); await settle(page);
     check('H17 withdrawn badge shown to owner', (await status(page)).toLowerCase() === 'withdrawn', await status(page));
-    await who(page, 'ben'); await settle(page); check('H18 someone who asked still sees it, read-only, with the reason', (await page.textContent('.ex-mine')).includes('withdrawn') && !(await page.$('#ex-interest')), await page.textContent('.ex-mine'));
+    await who(page, 'ben'); await settle(page); check('H18 someone who asked sees a minimal closed record with the reason', (await page.textContent('.ex-mine')).includes('withdrew') && !(await page.$('#ex-interest')), await page.textContent('.ex-mine'));
     await page.goto(URL_() + '#/browse'); await settle(page); check('H19 withdrawn is not in Browse for anyone', !(await titles(page)).includes('Oak bookshelf'), 'browse');
     await who(page, 'dana'); await who(page, 'ava'); await ctx.close(); }
   { const { ctx, page } = await open(browser, { hash: '#/listing/l2' }); await who(page, 'ava'); await page.waitForSelector('.ex-detail'); await page.goto(URL_() + '#/listing/l1'); await settle(page);
@@ -240,6 +240,52 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('H29 "start a new listing" prefills a fresh draft with the note', (await page.inputValue('#ex-title')) === 'Rain boots, kids size 2' && !!(await page.$('#ex-tpl-note')) && !!(await page.$('#ex-publish')) && (await page.textContent('#ex-publish')) === 'Publish to the family', 'tpl');
     await who(page, 'ben'); await page.goto(URL_() + '#/new/l1'); await settle(page); check('H30 cannot start from someone else\'s listing', !(await page.$('#ex-tpl-note')) && (await page.inputValue('#ex-title')) === '', 'foreign'); await ctx.close(); }
   { const { ctx, page } = await open(browser, { w: 320, h: 700, hash: '#/listing/l1' }); await page.waitForSelector('.ex-detail'); check('H31 owner action row has no horizontal scroll at 320px', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'overflow'); await ctx.close(); }
+
+  /* I. Step 2 decisions: relisting, minimal withdrawn record, edits while reserved */
+  { const { ctx, page } = await open(browser, { hash: '#/listing/l3' }); await who(page, 'dana'); await page.waitForSelector('.ex-detail');
+    await page.click('#ex-gone'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    await page.click('#ex-again'); await page.waitForSelector('.ex-form');
+    check('I1 relist copies item details (title, photos) and says nothing carries over', (await page.inputValue('#ex-title')) === '20-inch kids bike' && (await page.$$('.ex-pickbtn[aria-pressed=true]')).length === 2 && (await page.textContent('#ex-tpl-note')).includes('requests and status do not carry over'), 'copy');
+    await page.click('#ex-publish'); await page.waitForSelector('dialog[open]'); await page.click('#ex-ack'); await dlgBtn(page); await page.waitForSelector('dialog[open] h2:has-text("Publish to")'); await dlgBtn(page); await page.waitForSelector('.ex-detail');
+    const st = await page.evaluate(() => { const db = window.ExchangePreview.state().db, id = location.hash.split('/').pop(), l = db.listings.filter(x => x.id === id)[0]; return { status: l.status, reservedFor: l.reservedFor || null, pending: !!l.pending, reqs: db.requests.filter(r => r.listing === id).length, same: l.id !== 'l3' }; });
+    check('I2 the relisted item is a fresh Available listing: no requests, no recipient, no reservation', st.status === 'available' && !st.reservedFor && !st.pending && st.reqs === 0 && st.same, JSON.stringify(st));
+    check('I3 owner sees "No one has asked yet" and no reserved/pickup controls on it', (await page.textContent('.ex-requests')).includes('No one has asked yet') && !(await page.$('#ex-release')) && !(await page.$('#ex-pickup')), 'fresh');
+    await who(page, 'ben'); await settle(page); check('I4 Ben (who held the old reservation) sees no trace of it on the new listing', !(await page.$('.ex-mine')) && !!(await page.$('#ex-interest')), 'trace'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/listing/l1' }); await page.waitForSelector('.ex-detail');
+    await page.click('#ex-withdraw'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    check('I5 owner still sees the full withdrawn listing', !!(await page.$('.ex-desc')) && !!(await page.$('.ex-gallery')), 'owner');
+    await who(page, 'ben'); await settle(page); const txt = await page.textContent('.ex-detail'), html = await page.$eval('.ex-detail', e => e.innerHTML);
+    check('I6 applicant sees only a minimal record: title, status, own request', txt.includes('Oak bookshelf') && txt.includes('Withdrawn') && txt.includes('Your request is closed'), txt);
+    check('I7 no photos, description, pickup area, facts or other applicants for the applicant', !html.includes('<img') && !txt.includes('Allen key') && !txt.includes('Near the library') && !txt.includes('Dana Rowan') && !(await page.$('.ex-gallery, .ex-desc, .ex-facts, .ex-requests, #ex-report')), txt);
+    check('I8 photo files are not even requested from the page for the applicant', !(await page.$$eval('img', n => n.some(i => /shelf/.test(i.src)))), 'img');
+    await page.goto(URL_() + '#/browse'); await settle(page); check('I9 and it never appears in Browse', !(await titles(page)).includes('Oak bookshelf'), 'browse'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/edit/l3'); await page.waitForSelector('.ex-form');
+    check('I10 editing a reserved item says edits stay private until release', (await page.textContent('#ex-reserved-note')).includes('stay private until you release'), 'note');
+    check('I11 reserved edit form offers Save private edits and Publish changes', (await page.textContent('#ex-private')) === 'Save private edits' && (await page.textContent('#ex-publish')) === 'Publish changes', 'buttons'); await shot(page, 'phone-step2-reserved-edit');
+    await page.fill('#ex-title', '20-inch kids bike, red'); await page.click('#ex-private'); await page.waitForSelector('.ex-detail');
+    check('I12 private edits saved: owner sees a notice, the public title is unchanged', (await page.textContent('#ex-pending')).includes('Other members still see the item as agreed') && (await page.textContent('.ex-title')) === '20-inch kids bike', await page.textContent('.ex-title'));
+    await who(page, 'ben'); await page.goto(URL_() + '#/listing/l3'); await settle(page); check('I13 the reserved person still sees the agreed item', (await page.textContent('.ex-title')) === '20-inch kids bike' && (await page.textContent('.ex-mine')).includes('reserved for you'), 'agreed');
+    await page.goto(URL_() + '#/browse'); await settle(page); check('I14 Browse still shows the agreed title', (await titles(page)).includes('20-inch kids bike') && !(await titles(page)).includes('20-inch kids bike, red'), 'browse');
+    await who(page, 'dana'); await page.goto(URL_() + '#/edit/l3'); await page.waitForSelector('.ex-form'); check('I15 reopening the editor continues the private edit', (await page.inputValue('#ex-title')) === '20-inch kids bike, red', 'continue');
+    await page.click('#ex-publish'); await page.waitForSelector('dialog[open]');
+    check('I16 Publish changes while reserved is blocked, names what changed, points to Release', (await page.textContent('dialog')).includes('Cannot publish while reserved') && (await page.textContent('dialog')).includes('title') && (await page.textContent('dialog')).includes('release the reservation first'), await page.textContent('dialog')); await shot(page, 'phone-step2-publish-blocked'); await dlgBtn(page); await page.waitForSelector('.ex-detail');
+    check('I17 nothing public changed by the blocked attempt', (await page.evaluate(() => window.ExchangePreview.state().db.listings.filter(l => l.id === 'l3')[0].title)) === '20-inch kids bike', 'public');
+    await page.click('#ex-release'); await page.waitForSelector('dialog[open]'); check('I18 release dialog says the person can ask again', (await page.textContent('dialog')).includes('can ask again'), 'dlg'); await dlgBtn(page); await settle(page);
+    check('I19 after release: Available, private edit notice now offers publishing', (await status(page)).toLowerCase() === 'available' && (await page.textContent('#ex-pending')).includes('not published yet') && !(await page.$('#ex-release')), await status(page));
+    await who(page, 'ben'); await settle(page); check('I20 the previously reserved person is told and can ask again', (await page.textContent('.ex-mine')).includes('released the reservation') && (await page.textContent('#ex-interest')) === 'Ask again', 'released');
+    await page.click('#ex-interest'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page); await page.waitForTimeout(150);
+    check('I21 asking again makes it a waiting request, not a reservation', (await page.textContent('.ex-mine')).includes('Waiting for Dana Rowan'), await page.textContent('.ex-mine'));
+    await who(page, 'dana'); await page.goto(URL_() + '#/edit/l3'); await page.waitForSelector('.ex-form'); check('I22 once released, the editor shows the continue notice and plain Save changes', !!(await page.$('#ex-pending-note')) && (await page.textContent('#ex-publish')) === 'Save changes', 'continue');
+    await page.click('#ex-publish'); await page.waitForSelector('.ex-detail'); check('I23 publishing after release applies the edit and clears the private copy', (await page.textContent('.ex-title')) === '20-inch kids bike, red' && !(await page.$('#ex-pending')), await page.textContent('.ex-title')); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/edit/l3'); await page.waitForSelector('.ex-form');
+    await page.fill('#ex-description', '  Red bike,   tires need air.   Training wheels not included. '); await page.click('#ex-publish'); await settle(page);
+    check('I24 a spacing-only change is not material: no block, just "No changes to publish"', !(await page.$('dialog[open]')) && (await page.textContent('#toasts')).includes('No changes to publish'), await page.textContent('#toasts'));
+    await page.fill('#ex-title', ''); await page.click('#ex-private'); await settle(page); check('I25 private edits are still validated (empty title refused)', !!(await page.$('.ex-err:not(:empty)')), 'validate');
+    await page.fill('#ex-title', '20-inch kids bike'); await page.fill('#ex-area', '9 Oak Street'); await page.click('#ex-private'); await settle(page); check('I26 a street address is refused even in private edits', (await page.textContent('#ex-area-e')).includes('Street addresses'), 'address');
+    await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/edit/l3'); await page.waitForSelector('.ex-form'); await page.fill('#ex-title', 'Changed elsewhere');
+    await page.evaluate(() => { const l = window.ExchangePreview.state().db.listings.filter(x => x.id === 'l3')[0]; l.status = 'available'; });
+    await page.click('#ex-private'); await settle(page); check('I27 stale: saving private edits after the status changed elsewhere is refused cleanly', (await page.textContent('#toasts')).includes('already changed') && !(await page.evaluate(() => !!window.ExchangePreview.state().db.listings.filter(x => x.id === 'l3')[0].pending)), await page.textContent('#toasts')); await ctx.close(); }
 
   /* G. layout + themes + keyboard */
   { const { ctx, page } = await open(browser, { w: 320, h: 700, hash: '#/listing/l2' });

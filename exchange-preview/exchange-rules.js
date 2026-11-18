@@ -26,5 +26,19 @@
     if (d.kind === 'wanted' && (d.photos || []).length) e.photos = 'Wanted posts do not have photos in this preview.';
     return { ok: !Object.keys(e).length, errors: e };
   }
-  return { LIMITS: LIMITS, CATEGORIES: CATEGORIES, CONDITIONS: CONDITIONS, validate: validate, looksLikeAddress: looksLikeAddress, looksLikeContact: looksLikeContact, clean: clean };
+  /* MATERIAL CHANGES (preview definition, for the owner to review): the "agreed item" is everything another member can see in the public listing.
+   * A change is material if it alters the title (any letter, including capitals), the category, the condition, the description text, the pickup area,
+   * or the photos (added, removed or reordered). The only changes that are NOT material are extra spaces, tabs and line-break differences.
+   * While an item is reserved, material changes cannot be published; they can only be saved as private edits. */
+  function normText(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+  var MATERIAL = [['title', 'title'], ['category', 'category'], ['condition', 'condition'], ['description', 'description'], ['area', 'pickup area'], ['photos', 'photos']];
+  function materialChanges(before, after) {
+    var out = [];
+    MATERIAL.forEach(function (m) {
+      var k = m[0], a = k === 'photos' ? (before.photos || []).join('|') : normText(before[k]), b = k === 'photos' ? (after.photos || []).join('|') : normText(after[k]);
+      if (a !== b) out.push(m[1]);
+    });
+    return out;
+  }
+  return { materialChanges: materialChanges, LIMITS: LIMITS, CATEGORIES: CATEGORIES, CONDITIONS: CONDITIONS, validate: validate, looksLikeAddress: looksLikeAddress, looksLikeContact: looksLikeContact, clean: clean };
 });

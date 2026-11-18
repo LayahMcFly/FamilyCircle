@@ -25,7 +25,7 @@
   function find(id) { return DB.listings.filter(function (l) { return l.id === id; })[0]; }
   function toast(msg) { var t = h('div', { class: 'toast', text: msg }); toasts.appendChild(t); setTimeout(function () { t.remove(); }, 3500); }
   function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
-  var label = { available: 'Available', reserved: 'Reserved', gone: 'Gone', draft: 'Draft, only you can see this', withdrawn: 'Withdrawn', closed: 'Closed', open: 'Open', fulfilled: 'Fulfilled', hidden: 'Hidden' };
+  var label = { available: 'Available', reserved: 'Reserved', gone: 'Gone', draft: 'Draft, only you can see this', withdrawn: 'Withdrawn', released: 'Released', closed: 'Closed', open: 'Open', fulfilled: 'Fulfilled', hidden: 'Hidden' };
   function canSee(l) { var v = viewer(); if (l.status === 'draft') return l.owner === v.id; if (l.status === 'hidden') return l.owner === v.id; if (l.status === 'withdrawn') return l.owner === v.id || DB.requests.some(function (r) { return r.listing === l.id && r.from === v.id; }); return true; }
   function ended(s) { return s === 'gone' || s === 'fulfilled' || s === 'closed' || s === 'withdrawn'; }
   /* One place for every status change. It re-reads the listing first, so a stale screen (changed on another device) cannot act on old state. */
@@ -155,6 +155,14 @@
     var own = l.owner === v.id, o = person(l.owner), reqs = DB.requests.filter(function (r) { return r.listing === l.id; }), mine = reqs.filter(function (r) { return r.from === v.id; })[0], wanted = l.kind === 'wanted';
     body.appendChild(h('a', { class: 'btn ghost small', href: '#/browse', id: 'ex-back', text: 'Back to browse' }));
     var art = h('article', { class: 'card ex-detail' }); body.appendChild(art);
+    if (l.status === 'withdrawn' && !own) {
+      /* a minimal closed record: no photos, no description, no pickup area, no other applicants */
+      art.appendChild(h('div', { class: 'row ex-row' }, h('span', { class: 'badge ex-badge ex-withdrawn', text: 'Withdrawn' }), h('span', { class: 'badge', text: wanted ? 'Wanted' : 'Free item' })));
+      art.appendChild(h('h2', { class: 'ex-title', text: l.title }));
+      art.appendChild(h('p', { class: 'muted', id: 'ex-minimal', text: 'Posted by ' + o.name + '. The details are no longer shared.' }));
+      art.appendChild(h('p', { class: 'alert ok ex-mine', role: 'status', text: 'The owner withdrew this listing. Your request is closed.' }));
+      return;
+    }
     var gal = gallery(l); if (gal) art.appendChild(gal);
     art.appendChild(h('div', { class: 'row ex-row' }, h('span', { class: 'badge ex-badge ex-' + l.status, text: label[l.status] }), h('span', { class: 'badge', text: wanted ? 'Wanted' : 'Free item' })));
     art.appendChild(h('h2', { class: 'ex-title', text: l.title }));
@@ -169,17 +177,19 @@
       if (live && wanted) { act.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'ex-fulfilled', text: 'Mark as fulfilled', onclick: function () { lifeDlg(l, 'fulfilled', LIVE, 'Mark as fulfilled?', 'You got what you were looking for. Offers close, and a finished post cannot be reopened in this preview.', 'Mark as fulfilled', 'Marked as fulfilled.'); } })); act.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'ex-close', text: 'Close post', onclick: function () { lifeDlg(l, 'closed', LIVE, 'Close this wanted post?', 'Use this when you no longer need it. Offers close, and a closed post cannot be reopened in this preview.', 'Close post', 'Wanted post closed.'); } })); }
       if (live) act.appendChild(h('button', { type: 'button', class: 'btn ghost', id: 'ex-withdraw', text: 'Withdraw', onclick: function () { lifeDlg(l, 'withdrawn', LIVE, 'Withdraw this listing?', 'It leaves Browse. People who already asked can still open it and will see it was withdrawn. It cannot be put back in this preview.', 'Withdraw', 'Listing withdrawn.'); } }));
       if (ended(l.status)) { act.appendChild(h('a', { class: 'btn', id: 'ex-again', href: '#/new/' + l.id, text: 'Start a new listing from this one' })); act.appendChild(h('p', { class: 'hint', text: 'Finished listings cannot be reopened. Whether relisting should be allowed is not decided, so this makes a fresh draft instead.' })); }
+      if (l.status === 'reserved') act.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'ex-release', text: 'Release reservation', onclick: function () { confirmDlg('Release this reservation?', person(l.reservedFor).name + ' will be told it was released and can ask again. Your listing goes back to Available. Any private edits you saved can then be published.', 'Release', function () { var cur = find(l.id); if (!cur || cur.status !== 'reserved') { toast('This listing already changed. Showing the latest.'); return render(); } DB.requests.forEach(function (r) { if (r.listing === cur.id && r.status === 'reserved') r.status = 'released'; }); cur.status = 'available'; cur.reservedFor = null; toast('Reservation released.'); render(); }); } }));
+      if (l.pending) { var pn = h('div', { class: 'alert', id: 'ex-pending', role: 'status' }, h('p', { text: l.status === 'reserved' ? 'You have private edits. Other members still see the item as agreed. Release the reservation to publish them.' : 'You have private edits that are not published yet.' }), h('button', { type: 'button', class: 'btn small secondary', id: 'ex-discard', text: 'Discard private edits', onclick: function () { confirmDlg('Discard private edits?', 'Your saved edits are removed. The listing stays as it is now.', 'Discard', function () { delete find(l.id).pending; toast('Private edits discarded.'); render(); }); } })); art.appendChild(pn); }
       if (live) act.appendChild(h('p', { class: 'hint', text: 'Confirming a request is built in the next preview step.' }));
       if (l.status === 'draft') act.appendChild(h('p', { class: 'alert', text: 'This draft is only visible to you. It is not shared until you publish it.' }));
       var rs = h('section', { class: 'ex-requests', 'aria-labelledby': 'ex-req-h' }, h('h3', { id: 'ex-req-h', text: wanted ? 'Offers to help' : 'Requests' }));
       if (!reqs.length) rs.appendChild(h('p', { class: 'muted', text: wanted ? 'No offers yet.' : 'No one has asked yet.' }));
-      reqs.forEach(function (r) { rs.appendChild(h('div', { class: 'ex-req card inner' }, h('div', { class: 'row between' }, h('strong', { text: person(r.from).name }), h('span', { class: 'muted ex-meta', text: r.ago })), h('p', { text: r.note || 'No note.' }), h('div', { class: 'row' }, h('span', { class: 'badge', text: r.status === 'reserved' ? 'Reserved for them' : r.status === 'closed' ? 'Closed' : 'Waiting for you' }), r.status === 'waiting' && live ? h('button', { type: 'button', class: 'btn small secondary', disabled: true, text: 'Confirm (next step)' }) : null))); });
+      reqs.forEach(function (r) { rs.appendChild(h('div', { class: 'ex-req card inner' }, h('div', { class: 'row between' }, h('strong', { text: person(r.from).name }), h('span', { class: 'muted ex-meta', text: r.ago })), h('p', { text: r.note || 'No note.' }), h('div', { class: 'row' }, h('span', { class: 'badge', text: r.status === 'reserved' ? 'Reserved for them' : r.status === 'closed' ? 'Closed' : r.status === 'released' ? 'Released' : 'Waiting for you' }), r.status === 'waiting' && live ? h('button', { type: 'button', class: 'btn small secondary', disabled: true, text: 'Confirm (next step)' }) : null))); });
       if (l.status !== 'draft') art.appendChild(rs);
       if (l.status === 'reserved') act.appendChild(pickupBtn(person(l.reservedFor)));
     } else {
-      if (mine) art.appendChild(h('p', { class: 'alert ok ex-mine', role: 'status', text: mine.status === 'closed' ? 'This is no longer available (' + label[l.status].toLowerCase() + '). Your request is closed.' : mine.status === 'reserved' ? 'This is reserved for you. Use Messages to arrange pickup.' : (wanted ? 'You offered to help. Waiting for ' + o.name + '.' : 'You asked for this. Waiting for ' + o.name + ' to decide.') }));
+      if (mine) art.appendChild(h('p', { class: 'alert ok ex-mine', role: 'status', text: mine.status === 'released' ? 'The owner released the reservation. You can ask again.' : mine.status === 'closed' ? 'This is no longer available (' + label[l.status].toLowerCase() + '). Your request is closed.' : mine.status === 'reserved' ? 'This is reserved for you. Use Messages to arrange pickup.' : (wanted ? 'You offered to help. Waiting for ' + o.name + '.' : 'You asked for this. Waiting for ' + o.name + ' to decide.') }));
       if (mine && mine.status === 'reserved') act.appendChild(pickupBtn(o));
-      else if (!mine && (l.status === 'available' || l.status === 'open')) act.appendChild(h('button', { type: 'button', class: 'btn', id: 'ex-interest', text: wanted ? 'I can help' : 'I’m interested', onclick: function () { interest(l); } }));
+      else if ((!mine || mine.status === 'released') && (l.status === 'available' || l.status === 'open')) act.appendChild(h('button', { type: 'button', class: 'btn', id: 'ex-interest', text: mine ? 'Ask again' : (wanted ? 'I can help' : 'I’m interested'), onclick: function () { interest(l); } }));
       else if (!mine && l.status === 'reserved') act.appendChild(h('p', { class: 'alert', text: 'This has been reserved for someone else.' }));
       else if (!mine && ended(l.status)) act.appendChild(h('p', { class: 'alert', text: { gone: 'This item is gone.', fulfilled: 'This wanted post has been fulfilled.', closed: 'The poster closed this wanted post.', withdrawn: 'The owner withdrew this listing.' }[l.status] }));
       art.appendChild(h('p', { class: 'hint', text: 'Only ' + o.name + ' can see who asked. You see only your own request.' }));
@@ -195,7 +205,7 @@
     dialog(wanted ? 'Offer to help' : 'Ask for this item', h('div', null, h('p', { text: (wanted ? 'Tell ' : 'Tell ') + person(l.owner).name + ' you are interested. This is a request, not a reservation. They choose who gets it.' }), h('label', { for: 'ex-note', text: 'Note (optional)' }), ta, h('p', { class: 'hint', id: 'ex-note-h', text: 'Up to ' + L.note + ' characters. Please do not add a street address or phone number. Use Messages after they reply.' })),
       [{ text: 'Cancel' }, { text: 'Send request', cls: '', fn: function () {
         var n = ta.value.trim(); if (R.looksLikeContact(n) || R.looksLikeAddress(n)) { ta.setAttribute('aria-invalid', 'true'); document.getElementById('ex-note-h').textContent = 'Please remove phone numbers, emails, links and street addresses.'; ta.focus(); return false; }
-        DB.requests.push({ id: 'r' + (++DB.seq), listing: l.id, from: viewer().id, note: n, status: 'waiting', ago: 'Just now', offer: wanted }); toast('Request sent (sample only).'); setTimeout(render, 0);
+        var old = DB.requests.filter(function (r) { return r.listing === l.id && r.from === viewer().id && r.status === 'released'; })[0]; if (old) { old.status = 'waiting'; old.note = n; old.ago = 'Just now'; } else DB.requests.push({ id: 'r' + (++DB.seq), listing: l.id, from: viewer().id, note: n, status: 'waiting', ago: 'Just now', offer: wanted }); toast('Request sent (sample only).'); setTimeout(render, 0);
       } }]);
   }
   function report(l) {
@@ -233,7 +243,7 @@
 
   /* ---------- create / edit ---------- */
   function form(l, body, tpl) {
-    var v = viewer(), d = l ? clone(l) : tpl ? { kind: tpl.kind, title: tpl.title, category: tpl.category, condition: tpl.condition || '', description: tpl.description, area: tpl.area, photos: tpl.photos.slice() } : { kind: ST.tab === 'wanted' ? 'wanted' : 'free', title: '', category: '', condition: '', description: '', area: '', photos: [] }, errs = {}, wrap = h('div', { class: 'ex-form-wrap' });
+    var v = viewer(), d = l ? Object.assign(clone(l), l.pending ? clone(l.pending) : {}) : tpl ? { kind: tpl.kind, title: tpl.title, category: tpl.category, condition: tpl.condition || '', description: tpl.description, area: tpl.area, photos: tpl.photos.slice() } : { kind: ST.tab === 'wanted' ? 'wanted' : 'free', title: '', category: '', condition: '', description: '', area: '', photos: [] }, errs = {}, wrap = h('div', { class: 'ex-form-wrap' });
     var editing = !!l, reqs = l ? DB.requests.filter(function (r) { return r.listing === l.id; }).length : 0;
     body.appendChild(h('a', { class: 'btn ghost small', href: editing ? '#/listing/' + l.id : '#/browse', text: editing ? 'Back to listing' : 'Back to browse' }));
     body.appendChild(h('h2', { text: editing ? 'Edit listing' : 'New listing' })); if (tpl) body.appendChild(h('p', { class: 'alert', id: 'ex-tpl-note', text: 'Started from your earlier listing. It is a fresh draft: requests and status do not carry over.' })); body.appendChild(wrap);
@@ -251,23 +261,40 @@
         h('div', { class: 'ex-pick', role: 'group', 'aria-labelledby': 'ex-photos-l', 'aria-describedby': 'ex-photos-h' }, S.PHOTOS.map(function (p) { var on = d.photos.indexOf(p.id) >= 0; return h('button', { type: 'button', class: 'ex-pickbtn', 'aria-pressed': on ? 'true' : 'false', 'aria-label': p.alt + (on ? ', selected' : ''), 'data-id': p.id, onclick: function () { sync(); if (on) d.photos = d.photos.filter(function (x) { return x !== p.id; }); else if (d.photos.length < L.photos) d.photos.push(p.id); else { toast('You can pick up to ' + L.photos + ' photos.'); return; } draw('pick:' + p.id); } }, h('img', { src: p.src, alt: '', width: 72, height: 72 })); })),
         h('p', { class: 'muted ex-meta', id: 'ex-photo-count', text: d.photos.length + ' of ' + L.photos + ' chosen' }), h('p', { class: 'ex-err', id: 'ex-photos-e', role: 'alert', text: errs.photos || '' })));
       f.appendChild(field('ex-area', 'Pickup area (optional)', h('input', { type: 'text', id: 'ex-area', value: d.area, maxlength: L.area + 20, 'aria-invalid': errs.area ? 'true' : null, 'aria-describedby': 'ex-area-h ex-area-e', placeholder: 'For example: near the library', autocomplete: 'off', oninput: function () { d.area = this.value; prev(); } }), 'A broad area only. Never a street address. Work out exact pickup details in Messages.'));
+      if (editing && l.status === 'reserved') f.appendChild(h('p', { class: 'alert', id: 'ex-reserved-note', text: 'This item is reserved. Your edits stay private until you release the reservation. Other members keep seeing the item as agreed.' }));
+      if (editing && l.pending && l.status !== 'reserved') f.appendChild(h('p', { class: 'alert', id: 'ex-pending-note', text: 'You are continuing private edits that are not published yet.' }));
       if (editing && reqs) f.appendChild(h('p', { class: 'alert', id: 'ex-edit-note', text: 'This listing has ' + reqs + ' request' + (reqs > 1 ? 's' : '') + '. In this preview, editing leaves requests as they are. What editing should do to requests in the real app is not decided yet.' }));
-      f.appendChild(h('div', { class: 'row ex-submit' }, h('button', { type: 'button', class: 'btn secondary', id: 'ex-save', text: editing && l.status !== 'draft' ? 'Cancel' : 'Save draft', onclick: function () { sync(); if (editing && l.status !== 'draft') return go('#/listing/' + l.id); submit(false); } }),
-        h('button', { type: 'button', class: 'btn', id: 'ex-publish', text: editing && l.status !== 'draft' ? 'Save changes' : 'Publish to the family', onclick: function () { sync(); submit(true); } })));
+      var resv = editing && l.status === 'reserved', live2 = editing && l.status !== 'draft';
+      f.appendChild(h('div', { class: 'row ex-submit' }, h('button', { type: 'button', class: 'btn secondary', id: 'ex-save', text: live2 ? 'Cancel' : 'Save draft', onclick: function () { sync(); if (live2) return go('#/listing/' + l.id); submit(false); } }),
+        resv ? h('button', { type: 'button', class: 'btn secondary', id: 'ex-private', text: 'Save private edits', onclick: function () { sync(); savePrivate(); } }) : null,
+        h('button', { type: 'button', class: 'btn', id: 'ex-publish', text: resv ? 'Publish changes' : live2 ? 'Save changes' : 'Publish to the family', onclick: function () { sync(); if (resv) return publishWhileReserved(); submit(true); } })));
       wrap.appendChild(h('div', { class: 'ex-form-grid' }, f, h('aside', { class: 'ex-prevcol', 'aria-label': 'Preview of your listing' }, h('h3', { text: 'How it will look' }), h('div', { id: 'ex-prev' }))));
       prev(); var t = focusId && (focusId.indexOf('pick:') === 0 ? wrap.querySelector('[data-id="' + focusId.slice(5) + '"]') : document.getElementById(focusId)); if (t) t.focus();
     }
     function sync() { var g = function (id) { var n = document.getElementById(id); return n ? n.value : null; }; ['title', 'description', 'area'].forEach(function (k) { var x = g('ex-' + k); if (x != null) d[k] = x; }); }
     function prev() {
       var box = document.getElementById('ex-prev'); if (!box) return; box.textContent = '';
-      box.appendChild(card({ id: 'preview', kind: d.kind, status: d.kind === 'wanted' ? 'open' : 'available', owner: v.id, title: R.clean(d.title) || (d.kind === 'wanted' ? 'Your wanted post' : 'Your title'), category: d.category || 'Category', condition: d.condition, photos: d.photos, ago: 'Just now' }));
+      box.appendChild(card({ id: 'preview', kind: d.kind, status: editing && l.status !== 'draft' ? l.status : (d.kind === 'wanted' ? 'open' : 'available'), owner: v.id, title: R.clean(d.title) || (d.kind === 'wanted' ? 'Your wanted post' : 'Your title'), category: d.category || 'Category', condition: d.condition, photos: d.photos, ago: 'Just now' }));
       box.firstChild.removeAttribute('href'); box.firstChild.setAttribute('role', 'group'); var c = document.getElementById('ex-photo-count'); if (c) c.textContent = d.photos.length + ' of ' + L.photos + ' chosen';
+    }
+    function privateOk() { var r = R.validate(d); if (!R.clean(d.title)) r.errors.title = r.errors.title || 'Add a title.'; errs = r.errors; if (!r.ok) { draw(); var s2 = document.getElementById('ex-summary'); if (s2) s2.focus(); return false; } return true; }
+    function savePrivate(quiet) {
+      if (!privateOk()) return false;
+      var rec = find(l.id); if (!rec || rec.status !== 'reserved') { toast('This listing already changed. Showing the latest.'); go('#/listing/' + l.id); return false; }
+      rec.pending = { title: R.clean(d.title), category: d.category, condition: d.condition, description: d.description.trim(), area: d.area, photos: d.photos.slice() };
+      if (!quiet) { toast('Private edits saved. Only you can see them.'); go('#/listing/' + l.id); } return true;
+    }
+    function publishWhileReserved() {
+      if (!privateOk()) return; var changes = R.materialChanges(l, d);
+      if (!changes.length) { delete find(l.id).pending; return toast('No changes to publish. Only spacing differs.'); }
+      savePrivate(true);
+      dialog('Cannot publish while reserved', h('div', null, h('p', { text: 'Someone has this item reserved, so the public listing has to stay as agreed. Your changes to the ' + changes.join(', ') + ' were saved as private edits.' }), h('p', { text: 'To publish them, release the reservation first from the listing page.' })), [{ text: 'Back to the listing', cls: '', fn: function () { setTimeout(function () { go('#/listing/' + l.id); }, 0); } }]);
     }
     function submit(publish) {
       var r = R.validate(d); if (!publish) { r = { ok: !!R.clean(d.title), errors: R.clean(d.title) ? {} : { title: 'Add a title so you can find your draft again.' } }; var rr = R.validate(d); if (rr.errors.area) { r.ok = false; r.errors.area = rr.errors.area; } if (rr.errors.description && /phone|street/.test(rr.errors.description)) { r.ok = false; r.errors.description = rr.errors.description; } }
       errs = r.errors; if (!r.ok) { draw(); var s = document.getElementById('ex-summary'); if (s) s.focus(); return; }
       function save() {
-        var rec = l || { id: 'n' + (++DB.seq), owner: v.id, ago: 'Just now', reservedFor: null }; if (!l) DB.listings.unshift(rec);
+        var rec = l || { id: 'n' + (++DB.seq), owner: v.id, ago: 'Just now' }; if (!l) DB.listings.unshift(rec); delete rec.pending;
         ['kind', 'category', 'condition', 'area', 'photos'].forEach(function (k) { rec[k] = d[k]; }); rec.title = R.clean(d.title); rec.description = d.description.trim(); if (d.kind === 'wanted') rec.condition = undefined;
         if (publish) { if (rec.status === 'draft' || !l) rec.status = d.kind === 'wanted' ? 'open' : 'available'; } else rec.status = 'draft';
         toast(publish ? (editing && l.status !== 'draft' ? 'Changes saved (sample only).' : 'Published to the sample family.') : 'Draft saved. Only you can see it.'); go('#/listing/' + rec.id);

@@ -34,3 +34,10 @@ Lending, due dates, deposits, returns; optional priced listings; priced family-s
 - Photos (preview only): up to 3 bundled JPEGs, 600px longest edge, about 110 KB; square thumbnails, original ratio in detail.
 - Licence: LICENSE and headers untouched. New preview files carry a "licence not yet marked" line.
 - Pages: before merge, show deployment uncertainty and the smallest check; verify the deployed page carries the build marker.
+
+## Step 2 decisions from you (2026-11-17), preview only
+- Relisting: keep "Start a new listing from this one". Copies item details only. Never old requests, recipient identity or reservation state.
+- Withdrawn: previous applicants see a minimal closed record (title, status, poster name) and their own request status. No photos, description, pickup area or other applicants.
+- Editing while reserved: private draft edits are allowed and invisible to others. Publishing material changes is blocked until the owner releases the reservation.
+- Material change (preview definition, awaiting her review): any change to title (including capitals), category, condition, description text, pickup area, or photos (added, removed, reordered). Not material: extra spaces and line breaks only.
+- Preview assumption to confirm: releasing returns the listing to Available; the previously reserved person's request shows "Released" and they may ask again. Other waiting requests stay waiting.
