@@ -4,9 +4,9 @@ Update this file at every step. Continue by step number. Nothing here enables Ex
 
 ## Steps
 - [x] Step 0: inspection (see "Step 0 findings" below). Waiting on answers to the batched questions.
-- [~] Step 1: merged to main as 39a103e. DEPLOYMENT AND MANUAL VERIFICATION PENDING her report (a matching marker only proves the file is served). Path: /FamilyCircle/exchange-preview/
-- [~] Step 2: listing lifecycle built on branch `exchange-step2`, NOT merged; needs her approval of the exact commit before it can replace the deployed Step 1 preview
-- [ ] Step 3: interest and reservations (sample accounts)
+- [x] Step 1: merged as 39a103e; her manual checks passed (reported 2026-11-18). Dialog-title contrast fix confirmed in Step 2 build. Path: /FamilyCircle/exchange-preview/
+- [x] Step 2: listing lifecycle merged as c16cef8; her manual checks passed (reported 2026-11-18)
+- [~] Step 3: interest and reservations built on branch `exchange-step3`, NOT merged; needs her approval of the exact commit
 - [ ] Step 4: safety and access simulation
 - [ ] Step 5: real backend design gate (needs approval)
 - [ ] Step 6: approved backend implementation (branch only, production disabled)
@@ -48,4 +48,13 @@ Lending, due dates, deposits, returns; optional priced listings; priced family-s
 - Release reservation accepted as proposed. Release never publishes private edits. The confirmation says the item becomes available again.
 - Pre-reserved sample for her tests: "SAMPLE FOR TESTING: reserved lantern" (view as Dana Rowan).
 - Visible build marker under the banner: "Step 2 preview · build <8 characters>", and the full hash in the footer.
-- Step 3 on hold until this candidate is settled.
+- Step 3 was on hold until this candidate settled; it is now settled.
+
+## Step 3 (2026-11-18), preview only, sample rules, not production policy
+- Owner can Reserve (free item) or Accept offer (wanted post) for one waiting request at a time. Other waiting requests stay waiting and are told nothing.
+- Owner can Decline a waiting request. Declined person sees a plain notice, no reason, and cannot send another request for that listing (sample assumption, to confirm).
+- Requester can Cancel a waiting request, or Cancel their reservation (listing returns to Available/Open, owner sees "They cancelled", they may Ask again, which creates a waiting request).
+- A waiting person on a reserved listing sees "reserved for someone else for now" with no name. Applicants never see each other.
+- New "My activity" tab: Needs your reply, Reserved by you, Your requests.
+- Every action re-reads current state first (stale-screen guard). Nothing is sent: no notifications, no messages.
+- Still undecided for production: re-request after decline, notifications, timeouts for unanswered requests, what Messages integration looks like.

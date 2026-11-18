@@ -26,6 +26,7 @@
   function toast(msg) { var t = h('div', { class: 'toast', text: msg }); toasts.appendChild(t); setTimeout(function () { t.remove(); }, 3500); }
   function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
   var label = { available: 'Available', reserved: 'Reserved', gone: 'Gone', draft: 'Draft, only you can see this', withdrawn: 'Withdrawn', released: 'Released', closed: 'Closed', open: 'Open', fulfilled: 'Fulfilled', hidden: 'Hidden' };
+  function lbl(l) { return l.kind === 'wanted' && l.status === 'reserved' ? 'Offer accepted' : label[l.status]; }
   function canSee(l) { var v = viewer(); if (l.status === 'draft') return l.owner === v.id; if (l.status === 'hidden') return l.owner === v.id; if (l.status === 'withdrawn') return l.owner === v.id || DB.requests.some(function (r) { return r.listing === l.id && r.from === v.id; }); return true; }
   function ended(s) { return s === 'gone' || s === 'fulfilled' || s === 'closed' || s === 'withdrawn'; }
   /* One place for every status change. It re-reads the listing first, so a stale screen (changed on another device) cannot act on old state. */
@@ -54,14 +55,14 @@
     function sel(id, lab, opts, val, fn) { return h('div', null, h('label', { for: id, text: lab }), h('select', { id: id, onchange: function (e) { fn(e.target.value); } }, opts.map(function (o) { return h('option', { value: o[0], text: o[1], selected: o[0] === val }); }))); }
     controls.textContent = '';
     controls.appendChild(h('div', { class: 'pv-row' },
-      sel('pv-who', 'Viewing as (sample account)', S.VIEWERS.map(function (v) { return [v.id, v.name + ', ' + v.note]; }), ST.viewer, function (v) { ST.viewer = v; ST.failed = false; if (/^#\/(reports|new|edit|mine)/.test(location.hash)) location.hash = '#/browse'; render(); }),
+      sel('pv-who', 'Viewing as (sample account)', S.VIEWERS.map(function (v) { return [v.id, v.name + ', ' + v.note]; }), ST.viewer, function (v) { ST.viewer = v; ST.failed = false; if (/^#\/(reports|new|edit|mine|activity)/.test(location.hash)) location.hash = '#/browse'; render(); }),
       sel('pv-net', 'Connection', [['normal', 'Normal'], ['slow', 'Slow (1.5 seconds)'], ['loading', 'Stuck loading'], ['failonce', 'Fails once, then works'], ['error', 'Always fails'], ['denied', 'Server says no access']], ST.cond, function (v) { ST.cond = v; ST.failed = false; render(); }),
       sel('pv-handler', 'Independent case handler (Dana)', [['on', 'Available'], ['off', 'Not available']], ST.handler, function (v) { ST.handler = v; toast(v === 'on' ? 'A moderator is available for new reports.' : 'No independent handler for new reports.'); }),
       h('div', { class: 'pv-reset' }, h('button', { type: 'button', class: 'btn secondary small', id: 'pv-reset', text: 'Reset sample data', onclick: function () { location.hash = '#/browse'; location.reload(); } }))),
       h('p', { class: 'hint', text: 'These accounts, the moderator and the eligibility states are made up for this preview. Production eligibility and moderator assignment are not decided.' }));
   }
   function header(active) {
-    var v = viewer(), tabs = [['#/browse', 'Browse', 'browse'], ['#/mine', 'My listings', 'mine']]; if (v.moderator) tabs.push(['#/reports', 'Reports', 'reports']);
+    var v = viewer(), tabs = [['#/browse', 'Browse', 'browse'], ['#/mine', 'My listings', 'mine'], ['#/activity', 'My activity', 'activity']]; if (v.moderator) tabs.push(['#/reports', 'Reports', 'reports']);
     return h('header', { class: 'ex-head' }, h('div', { class: 'row between ex-sign' }, h('div', null, h('h1', { text: 'Family Exchange' }), h('p', { class: 'muted ex-sub', text: 'Free items and wanted posts for the ' + S.FAMILY })),
       h('a', { class: 'btn', href: '#/new', id: 'ex-new', text: 'New listing' })),
       h('nav', { class: 'tabs', 'aria-label': 'Exchange sections' }, tabs.map(function (t) { return h('a', { class: 'tab ex-tab', href: t[0], 'aria-current': active === t[2] ? 'page' : null, 'aria-pressed': active === t[2] ? 'true' : 'false', text: t[1] }); })));
@@ -87,7 +88,7 @@
     var my = ++seq, v = viewer(), hash = location.hash || '#/browse', m = hash.match(/^#\/([a-z]+)(?:\/([\w-]+))?/) || [0, 'browse'];
     renderControls(); main.textContent = ''; main.setAttribute('data-view', 'exchange-' + m[1]); document.title = 'Family Exchange preview (sample data) | Family Circle';
     if (!v.eligible) { main.appendChild(stateCard('denied', 'Family Exchange is not available for this account', 'Family Exchange is only open to eligible adult members of the family.')); return; }
-    var body = h('div', { class: 'ex-body' }), active = m[1] === 'listing' || m[1] === 'browse' ? 'browse' : m[1] === 'mine' ? 'mine' : m[1] === 'reports' ? 'reports' : null;
+    var body = h('div', { class: 'ex-body' }), active = m[1] === 'listing' || m[1] === 'browse' ? 'browse' : m[1] === 'mine' ? 'mine' : m[1] === 'activity' ? 'activity' : m[1] === 'reports' ? 'reports' : null;
     main.appendChild(header(active)); main.appendChild(body);
     function paint(res, late, hashThen) {
       if (my !== seq || (late && hashThen !== location.hash)) return;
@@ -105,6 +106,7 @@
     if (name === 'new') { var tpl = id ? find(id) : null; if (tpl && tpl.owner !== viewer().id) tpl = null; return form(null, body, tpl); }
     if (name === 'edit') { var l = find(id); if (!l || l.owner !== viewer().id || (l.status !== 'draft' && l.status !== 'available' && l.status !== 'open' && l.status !== 'reserved')) return body.appendChild(stateCard('missing', 'This listing is not available', 'It may have been removed, or it may not be yours to edit.', [h('a', { class: 'btn secondary', href: '#/browse', text: 'Back to browse' })])); return form(l, body); }
     if (name === 'mine') return mine(body);
+    if (name === 'activity') return activity(body);
     if (name === 'reports') return reports(body);
     browse(body);
   }
@@ -114,7 +116,7 @@
     return h('a', { class: 'card ex-card' + (l.kind === 'wanted' ? ' ex-wanted' : ' ex-freeitem') + (done ? ' ex-done' : ''), href: '#/listing/' + l.id, 'data-id': l.id },
       h('div', { class: 'ex-thumb' + (p ? '' : ' ex-nophoto') }, p ? h('img', { src: p.src, alt: p.alt, loading: 'lazy', width: 160, height: 160 }) : h('span', { text: l.kind === 'wanted' ? 'Wanted' : 'No photo' })),
       h('div', { class: 'ex-card-body' }, h('h3', { text: l.title }), h('p', { class: 'muted ex-meta', text: l.category + (l.kind === 'free' && l.condition ? ' · ' + l.condition : '') }),
-        h('div', { class: 'row ex-row' }, h('span', { class: 'badge ex-badge ex-' + l.status, text: label[l.status].split(',')[0] }), h('span', { class: 'muted ex-meta', text: o.name + ' · ' + l.ago }))));
+        h('div', { class: 'row ex-row' }, h('span', { class: 'badge ex-badge ex-' + l.status, text: lbl(l).split(',')[0] }), h('span', { class: 'muted ex-meta', text: o.name + ' · ' + l.ago }))));
   }
   function browse(body) {
     var q = ST.q.toLowerCase(), v = viewer();
@@ -164,7 +166,7 @@
       return;
     }
     var gal = gallery(l); if (gal) art.appendChild(gal);
-    art.appendChild(h('div', { class: 'row ex-row' }, h('span', { class: 'badge ex-badge ex-' + l.status, text: label[l.status] }), h('span', { class: 'badge', text: wanted ? 'Wanted' : 'Free item' })));
+    art.appendChild(h('div', { class: 'row ex-row' }, h('span', { class: 'badge ex-badge ex-' + l.status, text: lbl(l) }), h('span', { class: 'badge', text: wanted ? 'Wanted' : 'Free item' })));
     art.appendChild(h('h2', { class: 'ex-title', text: l.title }));
     art.appendChild(h('dl', { class: 'ex-facts' }, fact('Posted by', o.name + (own ? ' (you)' : '')), fact('Posted', l.ago), fact('Category', l.category), l.condition ? fact('Condition', l.condition) : null, fact('Pickup area', l.area || 'Not given')));
     art.appendChild(h('p', { class: 'ex-desc', text: l.description }));
@@ -177,24 +179,90 @@
       if (live && wanted) { act.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'ex-fulfilled', text: 'Mark as fulfilled', onclick: function () { lifeDlg(l, 'fulfilled', LIVE, 'Mark as fulfilled?', 'You got what you were looking for. Offers close, and a finished post cannot be reopened in this preview.', 'Mark as fulfilled', 'Marked as fulfilled.'); } })); act.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'ex-close', text: 'Close post', onclick: function () { lifeDlg(l, 'closed', LIVE, 'Close this wanted post?', 'Use this when you no longer need it. Offers close, and a closed post cannot be reopened in this preview.', 'Close post', 'Wanted post closed.'); } })); }
       if (live) act.appendChild(h('button', { type: 'button', class: 'btn ghost', id: 'ex-withdraw', text: 'Withdraw', onclick: function () { lifeDlg(l, 'withdrawn', LIVE, 'Withdraw this listing?', 'It leaves Browse. People who already asked can still open it and will see it was withdrawn. It cannot be put back in this preview.', 'Withdraw', 'Listing withdrawn.'); } }));
       if (ended(l.status)) { act.appendChild(h('a', { class: 'btn', id: 'ex-again', href: '#/new/' + l.id, text: 'Start a new listing from this one' })); act.appendChild(h('p', { class: 'hint', text: 'Finished listings cannot be reopened. Whether relisting should be allowed is not decided, so this makes a fresh draft instead.' })); }
-      if (l.status === 'reserved') act.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'ex-release', text: 'Release reservation', onclick: function () { confirmDlg('Release this reservation?', 'The item will become available again. ' + person(l.reservedFor).name + '’s request will show as Released, and they can ask again. Other waiting requests stay waiting. Your private edits stay private until you publish them yourself.', 'Release', function () { var cur = find(l.id); if (!cur || cur.status !== 'reserved') { toast('This listing already changed. Showing the latest.'); return render(); } DB.requests.forEach(function (r) { if (r.listing === cur.id && r.status === 'reserved') r.status = 'released'; }); cur.status = 'available'; cur.reservedFor = null; toast('Reservation released.'); render(); }); } }));
+      if (l.status === 'reserved') act.appendChild(h('button', { type: 'button', class: 'btn secondary', id: 'ex-release', text: wanted ? 'Release accepted offer' : 'Release reservation', onclick: function () { confirmDlg('Release this reservation?', 'The item will become available again. ' + person(l.reservedFor).name + '’s request will show as Released, and they can ask again. Other waiting requests stay waiting. Your private edits stay private until you publish them yourself.', 'Release', function () { var cur = find(l.id); if (!cur || cur.status !== 'reserved') { toast('This listing already changed. Showing the latest.'); return render(); } DB.requests.forEach(function (r) { if (r.listing === cur.id && r.status === 'reserved') r.status = 'released'; }); cur.status = 'available'; cur.reservedFor = null; toast('Reservation released.'); render(); }); } }));
       if (l.pending) { var pn = h('div', { class: 'alert', id: 'ex-pending', role: 'status' }, h('p', { text: l.status === 'reserved' ? 'You have private edits. Other members still see the item as agreed. Release the reservation to publish them.' : 'You have private edits that are not published yet.' }), h('button', { type: 'button', class: 'btn small secondary', id: 'ex-discard', text: 'Discard private edits', onclick: function () { confirmDlg('Discard private edits?', 'Your saved edits are removed. The listing stays as it is now.', 'Discard', function () { delete find(l.id).pending; toast('Private edits discarded.'); render(); }); } })); art.appendChild(pn); }
-      if (live) act.appendChild(h('p', { class: 'hint', text: 'Confirming a request is built in the next preview step.' }));
       if (l.status === 'draft') act.appendChild(h('p', { class: 'alert', text: 'This draft is only visible to you. It is not shared until you publish it.' }));
       var rs = h('section', { class: 'ex-requests', 'aria-labelledby': 'ex-req-h' }, h('h3', { id: 'ex-req-h', text: wanted ? 'Offers to help' : 'Requests' }));
       if (!reqs.length) rs.appendChild(h('p', { class: 'muted', text: wanted ? 'No offers yet.' : 'No one has asked yet.' }));
-      reqs.forEach(function (r) { rs.appendChild(h('div', { class: 'ex-req card inner' }, h('div', { class: 'row between' }, h('strong', { text: person(r.from).name }), h('span', { class: 'muted ex-meta', text: r.ago })), h('p', { text: r.note || 'No note.' }), h('div', { class: 'row' }, h('span', { class: 'badge', text: r.status === 'reserved' ? 'Reserved for them' : r.status === 'closed' ? 'Closed' : r.status === 'released' ? 'Released' : 'Waiting for you' }), r.status === 'waiting' && live ? h('button', { type: 'button', class: 'btn small secondary', disabled: true, text: 'Confirm (next step)' }) : null))); });
+      reqs.forEach(function (r) { rs.appendChild(reqRow(l, r, live)); });
       if (l.status !== 'draft') art.appendChild(rs);
       if (l.status === 'reserved') act.appendChild(pickupBtn(person(l.reservedFor)));
     } else {
-      if (mine) art.appendChild(h('p', { class: 'alert ok ex-mine', role: 'status', text: mine.status === 'released' ? 'The owner released the reservation. You can ask again.' : mine.status === 'closed' ? 'This is no longer available (' + label[l.status].toLowerCase() + '). Your request is closed.' : mine.status === 'reserved' ? 'This is reserved for you. Use Messages to arrange pickup.' : (wanted ? 'You offered to help. Waiting for ' + o.name + '.' : 'You asked for this. Waiting for ' + o.name + ' to decide.') }));
-      if (mine && mine.status === 'reserved') act.appendChild(pickupBtn(o));
-      else if ((!mine || mine.status === 'released') && (l.status === 'available' || l.status === 'open')) act.appendChild(h('button', { type: 'button', class: 'btn', id: 'ex-interest', text: mine ? 'Ask again' : (wanted ? 'I can help' : 'I’m interested'), onclick: function () { interest(l); } }));
-      else if (!mine && l.status === 'reserved') act.appendChild(h('p', { class: 'alert', text: 'This has been reserved for someone else.' }));
+      if (mine) art.appendChild(h('p', { class: 'alert ok ex-mine', role: 'status', text: mineMsg(mine, l, o, wanted) }));
+      var open = l.status === 'available' || l.status === 'open';
+      if (mine && mine.status === 'reserved' && l.status === 'reserved') { act.appendChild(pickupBtn(o)); act.appendChild(h('button', { type: 'button', class: 'btn ghost', id: 'ex-cancel-resv', text: 'Cancel my reservation', onclick: function () { cancelMine(l, mine, true); } })); }
+      else if (mine && mine.status === 'waiting' && !ended(l.status)) act.appendChild(h('button', { type: 'button', class: 'btn ghost', id: 'ex-cancel-req', text: 'Cancel my request', onclick: function () { cancelMine(l, mine, false); } }));
+      else if ((!mine || mine.status === 'released' || mine.status === 'cancelled') && open) act.appendChild(h('button', { type: 'button', class: 'btn', id: 'ex-interest', text: mine ? 'Ask again' : (wanted ? 'I can help' : 'I’m interested'), onclick: function () { interest(l); } }));
+      else if ((!mine || mine.status === 'released' || mine.status === 'cancelled') && l.status === 'reserved') act.appendChild(h('p', { class: 'alert', text: 'This has been reserved for someone else.' }));
       else if (!mine && ended(l.status)) act.appendChild(h('p', { class: 'alert', text: { gone: 'This item is gone.', fulfilled: 'This wanted post has been fulfilled.', closed: 'The poster closed this wanted post.', withdrawn: 'The owner withdrew this listing.' }[l.status] }));
       art.appendChild(h('p', { class: 'hint', text: 'Only ' + o.name + ' can see who asked. You see only your own request.' }));
       act.appendChild(h('button', { type: 'button', class: 'btn ghost', id: 'ex-report', text: 'Report this listing', onclick: function () { report(l); } }));
     }
+  }
+
+  /* ---------- Step 3: requests and reservations (sample only) ---------- */
+  function mineMsg(mine, l, o, wanted) {
+    if (mine.status === 'released') return 'The owner released the reservation. You can ask again.';
+    if (mine.status === 'closed') return 'This is no longer available (' + label[l.status].toLowerCase() + '). Your request is closed.';
+    if (mine.status === 'reserved') return wanted ? o.name + ' accepted your offer. Use Messages to arrange it.' : 'This is reserved for you. Use Messages to arrange pickup.';
+    if (mine.status === 'declined') return 'The owner did not choose your request. You cannot send another request for this listing.';
+    if (mine.status === 'cancelled') return 'You cancelled your request. You can ask again while it is still available.';
+    if (l.status === 'reserved') return 'This is reserved for someone else for now. Your request stays waiting in case it is released.';
+    return wanted ? 'You offered to help. Waiting for ' + o.name + '.' : 'You asked for this. Waiting for ' + o.name + ' to decide.';
+  }
+  function reqRow(l, r, live) {
+    var wanted = l.kind === 'wanted', who = person(r.from).name, names = { reserved: wanted ? 'Offer accepted' : 'Reserved for them', closed: 'Closed', released: 'Released', declined: 'You declined', cancelled: 'They cancelled', waiting: 'Waiting for you' }, acts = [];
+    if (r.status === 'waiting' && live) {
+      if (l.status === 'reserved') acts.push(h('span', { class: 'hint', text: 'Release the current reservation to choose someone else.' }));
+      else acts.push(h('button', { type: 'button', class: 'btn small', 'data-act': 'confirm', 'data-req': r.id, text: wanted ? 'Accept offer from ' + who : 'Reserve for ' + who, onclick: function () { confirmRequest(l, r); } }));
+      acts.push(h('button', { type: 'button', class: 'btn small ghost', 'data-act': 'decline', 'data-req': r.id, text: 'Decline', onclick: function () { declineRequest(l, r); } }));
+    }
+    return h('div', { class: 'ex-req card inner', 'data-req': r.id }, h('div', { class: 'row between' }, h('strong', { text: who }), h('span', { class: 'muted ex-meta', text: r.ago })), h('p', { text: r.note || 'No note.' }), h('div', { class: 'row' }, h('span', { class: 'badge', text: names[r.status] || r.status }), acts));
+  }
+  function stale() { toast('This listing already changed. Showing the latest.'); render(); }
+  function confirmRequest(l, r) {
+    var wanted = l.kind === 'wanted', who = person(r.from).name;
+    confirmDlg(wanted ? 'Accept this offer?' : 'Reserve this for ' + who + '?',
+      (wanted ? 'Your wanted post will show that you accepted ' + who + '’s offer.' : 'The listing will show as Reserved, and ' + who + ' will see it is reserved for them.') + ' One person at a time. Other waiting requests stay waiting, and they are not told anything unless you release this. Use Messages to arrange pickup. Nothing is sent from this preview.',
+      wanted ? 'Accept offer' : 'Reserve', function () {
+        var cur = find(l.id), req = DB.requests.filter(function (x) { return x.id === r.id; })[0];
+        if (!cur || !req || (cur.status !== 'available' && cur.status !== 'open') || req.status !== 'waiting') return stale();
+        cur.status = 'reserved'; cur.reservedFor = req.from; req.status = 'reserved'; toast(wanted ? 'Offer accepted.' : 'Reserved for ' + who + '.'); render();
+      });
+  }
+  function declineRequest(l, r) {
+    var who = person(r.from).name;
+    confirmDlg('Decline this request?', who + ' will see that you did not choose their request. They are not told why, and they cannot send another request for this listing. Other requests are not affected.', 'Decline', function () {
+      var cur = find(l.id), req = DB.requests.filter(function (x) { return x.id === r.id; })[0];
+      if (!cur || !req || ended(cur.status) || req.status !== 'waiting') return stale();
+      req.status = 'declined'; toast('Request declined.'); render();
+    });
+  }
+  function cancelMine(l, r, reserved) {
+    confirmDlg(reserved ? 'Cancel your reservation?' : 'Cancel your request?',
+      reserved ? 'The item becomes available again for others, and the owner will see that you cancelled. You can ask again while it is still available.' : 'The owner will see that you cancelled. You can ask again while it is still available.',
+      reserved ? 'Cancel reservation' : 'Cancel request', function () {
+        var cur = find(l.id), req = DB.requests.filter(function (x) { return x.id === r.id; })[0];
+        if (!cur || !req || ended(cur.status) || req.status !== (reserved ? 'reserved' : 'waiting') || (reserved && cur.reservedFor !== req.from)) return stale();
+        req.status = 'cancelled'; if (reserved) { cur.status = cur.kind === 'wanted' ? 'open' : 'available'; cur.reservedFor = null; }
+        toast(reserved ? 'Reservation cancelled.' : 'Request cancelled.'); render();
+      });
+  }
+  function activity(body) {
+    var v = viewer(), mineReqs = DB.requests.filter(function (r) { return r.from === v.id && find(r.listing); }), owned = DB.listings.filter(function (l) { return l.owner === v.id; });
+    var needs = owned.filter(function (l) { return (l.status === 'available' || l.status === 'open') && DB.requests.some(function (r) { return r.listing === l.id && r.status === 'waiting'; }); });
+    var held = owned.filter(function (l) { return l.status === 'reserved'; });
+    body.appendChild(h('p', { class: 'muted', text: 'Requests you sent, and requests waiting on your listings. Only you see this.' }));
+    if (!needs.length && !held.length && !mineReqs.length) return body.appendChild(stateCard('empty', 'No activity yet', 'When you ask for an item, or someone asks for yours, it shows up here.', [h('a', { class: 'btn', href: '#/browse', text: 'Browse the Exchange' })]));
+    function row(l, text, id) { return h('a', { class: 'card inner ex-act', href: '#/listing/' + l.id, 'data-id': id || l.id }, h('strong', { text: l.title }), h('span', { class: 'muted ex-meta', text: text })); }
+    function section(id, title, rows) { if (!rows.length) return; body.appendChild(h('section', { class: 'ex-actsec', 'aria-labelledby': id }, h('h3', { id: id, text: title }), rows)); }
+    section('ex-act-needs', 'Needs your reply', needs.map(function (l) { var n = DB.requests.filter(function (r) { return r.listing === l.id && r.status === 'waiting'; }).length; return row(l, n + ' waiting ' + (n > 1 ? 'requests' : 'request')); }));
+    section('ex-act-held', 'Reserved by you', held.map(function (l) { return row(l, 'Reserved for ' + person(l.reservedFor).name + '. Arrange it in Messages.'); }));
+    section('ex-act-mine', 'Your requests', mineReqs.map(function (r) { var l = find(r.listing), o = person(l.owner); return row(l, mineMsgShort(r, l, o), r.id); }));
+  }
+  function mineMsgShort(r, l, o) {
+    if (r.status === 'waiting') return l.status === 'reserved' ? 'Reserved for someone else for now. Still waiting.' : 'Waiting for ' + o.name;
+    return { reserved: 'Reserved for you', released: 'Released. You can ask again.', cancelled: 'You cancelled', declined: 'Not chosen', closed: 'Closed (' + label[l.status].toLowerCase() + ')' }[r.status] || r.status;
   }
   function fact(k, val) { return val == null ? null : h('div', { class: 'ex-fact' }, h('dt', { text: k }), h('dd', { text: val })); }
   function pickupBtn(other) {
@@ -205,7 +273,7 @@
     dialog(wanted ? 'Offer to help' : 'Ask for this item', h('div', null, h('p', { text: (wanted ? 'Tell ' : 'Tell ') + person(l.owner).name + ' you are interested. This is a request, not a reservation. They choose who gets it.' }), h('label', { for: 'ex-note', text: 'Note (optional)' }), ta, h('p', { class: 'hint', id: 'ex-note-h', text: 'Up to ' + L.note + ' characters. Please do not add a street address or phone number. Use Messages after they reply.' })),
       [{ text: 'Cancel' }, { text: 'Send request', cls: '', fn: function () {
         var n = ta.value.trim(); if (R.looksLikeContact(n) || R.looksLikeAddress(n)) { ta.setAttribute('aria-invalid', 'true'); document.getElementById('ex-note-h').textContent = 'Please remove phone numbers, emails, links and street addresses.'; ta.focus(); return false; }
-        var old = DB.requests.filter(function (r) { return r.listing === l.id && r.from === viewer().id && r.status === 'released'; })[0]; if (old) { old.status = 'waiting'; old.note = n; old.ago = 'Just now'; } else DB.requests.push({ id: 'r' + (++DB.seq), listing: l.id, from: viewer().id, note: n, status: 'waiting', ago: 'Just now', offer: wanted }); toast('Request sent (sample only).'); setTimeout(render, 0);
+        var old = DB.requests.filter(function (r) { return r.listing === l.id && r.from === viewer().id && (r.status === 'released' || r.status === 'cancelled'); })[0]; if (old) { old.status = 'waiting'; old.note = n; old.ago = 'Just now'; } else DB.requests.push({ id: 'r' + (++DB.seq), listing: l.id, from: viewer().id, note: n, status: 'waiting', ago: 'Just now', offer: wanted }); toast('Request sent (sample only).'); setTimeout(render, 0);
       } }]);
   }
   function report(l) {

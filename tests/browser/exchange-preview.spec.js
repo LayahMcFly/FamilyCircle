@@ -38,8 +38,8 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('A2 noindex + CSP connect-src none', await page.$eval('meta[name=robots]', m => m.content.includes('noindex')) && (await page.$eval('meta[http-equiv=Content-Security-Policy]', m => m.content)).includes("connect-src 'none'"), 'meta');
     check('A3 no external requests', log.external.length === 0 && log.requests.every(u => u.startsWith('http://127.0.0.1')), JSON.stringify(log.external));
     check('A4 no page or console errors', log.errors.length === 0 && log.console.length === 0, JSON.stringify([log.errors, log.console]));
-    check('A5 build marker shown', /exchange-preview-step2 · file hash [0-9a-f]{16}/.test(await page.textContent('#pv-build')), await page.textContent('#pv-build'));
-    check('A5b visible Step 2 marker under the banner matches the footer hash', /^Step 2 preview · build [0-9a-f]{8}$/.test((await page.textContent('#pv-step')).trim()) && (await page.textContent('#pv-build')).includes((await page.textContent('#pv-step')).trim().slice(-8)), await page.textContent('#pv-step'));
+    check('A5 build marker shown', /exchange-preview-step3 · file hash [0-9a-f]{16}/.test(await page.textContent('#pv-build')), await page.textContent('#pv-build'));
+    check('A5b visible Step 3 marker under the banner matches the footer hash', /^Step 3 preview · build [0-9a-f]{8}$/.test((await page.textContent('#pv-step')).trim()) && (await page.textContent('#pv-build')).includes((await page.textContent('#pv-step')).trim().slice(-8)), await page.textContent('#pv-step'));
     check('A6 no Hub link, no Appwrite script', !(await page.$('a[href*="index.html"], a[href="../"]')) && !(await page.$('script[src*="appwrite"], script[src*="config.js"]')), 'links');
     check('A7 no native checkbox/radio/file inputs', !(await page.$('input[type=checkbox], input[type=radio], input[type=file], input[type=date]')), 'native');
     await ctx.close(); }
@@ -77,7 +77,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('C3 wide photo stays wide', r2.nw / r2.nh > 1.5 && Math.abs(r2.nw / r2.nh - r2.w / r2.h) < 0.03, JSON.stringify(r2));
     check('C4 owner sees requests with names and no applicant-only text', (await page.textContent('.ex-requests')).includes('Ben Rowan') && (await page.textContent('.ex-requests')).includes('Dana Rowan'), 'reqs');
     check('C5 owner has edit; no interest/report buttons', !!(await page.$('#ex-edit')) && !(await page.$('#ex-interest')) && !(await page.$('#ex-report')), 'buttons');
-    check('C6 owner lifecycle buttons are live (Mark as gone, Withdraw); only Confirm stays disabled for step 3', !!(await page.$('#ex-gone:not([disabled])')) && !!(await page.$('#ex-withdraw:not([disabled])')) && (await page.$$('.ex-req button[disabled]')).length === 2, 'buttons'); await shot(page, 'phone-detail-owner');
+    check('C6 owner lifecycle buttons are live (Mark as gone, Withdraw); request buttons are live too (Reserve and Decline), none disabled', !!(await page.$('#ex-gone:not([disabled])')) && !!(await page.$('#ex-withdraw:not([disabled])')) && (await page.$$('.ex-req button[disabled]')).length === 0 && (await page.$$('.ex-req [data-act]')).length === 4, 'buttons'); await shot(page, 'phone-detail-owner');
     await who(page, 'ben'); await page.goto(URL_() + '#/listing/l1'); await page.waitForSelector('.ex-detail');
     check('C7 applicant sees only own status, not others', (await page.textContent('.ex-detail')).includes('You asked for this') && !(await page.textContent('.ex-detail')).includes('Dana Rowan asked') && !(await page.$('.ex-requests')), 'applicant');
     await ctx.close(); }
@@ -319,6 +319,78 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     await page.fill('#ex-description', raw); await page.fill('#ex-title', 'Desk  chair,  adjustable'); await page.click('#ex-publish'); await page.waitForSelector('.ex-detail');
     const r = await page.evaluate(() => { const l = window.ExchangePreview.state().db.listings.filter(x => x.id === 'l5')[0]; return [l.description, l.title]; });
     check('J11 saving a normal edit never rewrites the author\'s spacing or line breaks', r[0] === raw && r[1] === 'Desk  chair,  adjustable', JSON.stringify(r)); await ctx.close(); }
+
+  /* K. Step 3: requests, reservations, decline, cancel, My activity (sample data only) */
+  const dbq = (p, fn, arg) => p.evaluate(`(${fn.toString()})(window.ExchangePreview.state().db, ${JSON.stringify(arg === undefined ? null : arg)})`);
+  const detailText = p => p.textContent('.ex-detail');
+  { const { ctx, page, log } = await open(browser, { hash: '#/listing/l1' }); await page.waitForSelector('.ex-detail');
+    const labels = await page.$$eval('.ex-req [data-act]', n => n.map(x => x.textContent));
+    check('K1 owner sees Reserve and Decline for each waiting request, nothing disabled', labels.join('|') === 'Reserve for Ben Rowan|Decline|Reserve for Dana Rowan|Decline' && (await page.$$('.ex-detail button[disabled]')).length === 0, labels.join('|')); await shot(page, 'phone-step3-owner-requests');
+    await page.click('[data-act=confirm][data-req=r1]'); await page.waitForSelector('dialog[open]'); const dt = await page.textContent('dialog'); await shot(page, 'phone-step3-reserve-confirm');
+    check('K2 reserve dialog says one at a time, others stay waiting and are told nothing, nothing is sent', dt.includes('Reserve this for Ben Rowan?') && dt.includes('One person at a time') && dt.includes('Other waiting requests stay waiting') && dt.includes('Nothing is sent from this preview'), dt);
+    await page.click('dialog .btn.secondary'); await settle(page);
+    check('K3 cancelling the dialog changes nothing', (await dbq(page, db => db.listings.filter(l => l.id === 'l1')[0].status)) === 'available', 'status');
+    /* stale: change the listing behind the open dialog, then confirm */
+    await page.click('[data-act=confirm][data-req=r1]'); await page.waitForSelector('dialog[open]');
+    await dbq(page, db => { db.listings.filter(l => l.id === 'l1')[0].status = 'gone'; });
+    await dlgBtn(page); await settle(page); await page.waitForTimeout(100);
+    const stl = await dbq(page, db => ({ s: db.listings.filter(l => l.id === 'l1')[0].status, r1: db.requests.filter(r => r.id === 'r1')[0].status }));
+    check('K4 stale screen: confirming after the listing changed reserves nothing and shows the latest', stl.s === 'gone' && stl.r1 === 'waiting' && (await page.textContent('#toasts')).includes('already changed'), JSON.stringify(stl));
+    check('K5 no network, no errors during request actions', log.external.length === 0 && log.errors.length === 0 && log.requests.every(u => u.startsWith('http://127.0.0.1')), JSON.stringify([log.external, log.errors])); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/listing/l1' }); await page.waitForSelector('.ex-detail');
+    await page.click('[data-act=confirm][data-req=r1]'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    const st = await dbq(page, db => ({ s: db.listings.filter(l => l.id === 'l1')[0].status, f: db.listings.filter(l => l.id === 'l1')[0].reservedFor, r1: db.requests.filter(r => r.id === 'r1')[0].status, r2: db.requests.filter(r => r.id === 'r2')[0].status }));
+    check('K6 reserving sets Reserved for Ben, his request Reserved, Dana\'s request stays Waiting', st.s === 'reserved' && st.f === 'ben' && st.r1 === 'reserved' && st.r2 === 'waiting', JSON.stringify(st));
+    check('K7 while reserved the owner cannot reserve a second person but can still decline and release', !(await page.$('[data-act=confirm]')) && !!(await page.$('[data-req=r2] [data-act=decline]')) && !!(await page.$('#ex-release')) && (await detailText(page)).includes('Release the current reservation to choose someone else'), 'owner'); await shot(page, 'phone-step3-owner-reserved');
+    await who(page, 'dana'); await page.goto(URL_() + '#/listing/l1'); await page.waitForSelector('.ex-detail');
+    const dm = await detailText(page);
+    check('K8 a waiting person sees reserved for someone else, stays waiting, can cancel, and cannot see who', dm.includes('reserved for someone else for now') && dm.includes('stays waiting') && !!(await page.$('#ex-cancel-req')) && !(await page.$('#ex-interest')) && !dm.includes('Ben'), dm.slice(0, 300)); await shot(page, 'phone-step3-waiting-reserved-other');
+    await who(page, 'ben'); await page.goto(URL_() + '#/listing/l1'); await page.waitForSelector('.ex-detail');
+    check('K9 the reserved person sees reserved for you, pickup via Messages and Cancel my reservation', (await detailText(page)).includes('This is reserved for you') && !!(await page.$('#ex-pickup')) && !!(await page.$('#ex-cancel-resv')), 'recipient');
+    await page.click('#ex-cancel-resv'); await page.waitForSelector('dialog[open]'); check('K10 cancel reservation explains the item becomes available and the owner is told', (await page.textContent('dialog')).includes('becomes available again') && (await page.textContent('dialog')).includes('owner will see that you cancelled'), 'dlg'); await dlgBtn(page); await settle(page);
+    const c1 = await dbq(page, db => ({ s: db.listings.filter(l => l.id === 'l1')[0].status, f: db.listings.filter(l => l.id === 'l1')[0].reservedFor || null, r1: db.requests.filter(r => r.id === 'r1')[0].status, r2: db.requests.filter(r => r.id === 'r2')[0].status }));
+    check('K11 recipient cancel: listing Available again, recipient cleared, request Cancelled, other request still Waiting', c1.s === 'available' && !c1.f && c1.r1 === 'cancelled' && c1.r2 === 'waiting', JSON.stringify(c1));
+    check('K12 the person who cancelled can Ask again, and it makes a waiting request, never a reservation', !!(await page.$('#ex-interest')) && (await page.textContent('#ex-interest')) === 'Ask again', 'ask'); await page.click('#ex-interest'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page); await page.waitForTimeout(120);
+    const c2 = await dbq(page, db => ({ s: db.listings.filter(l => l.id === 'l1')[0].status, r1: db.requests.filter(r => r.id === 'r1')[0].status }));
+    check('K13 Ask again after cancelling is Waiting and the item stays Available', c2.s === 'available' && c2.r1 === 'waiting', JSON.stringify(c2));
+    await who(page, 'ava'); await page.goto(URL_() + '#/listing/l1'); await page.waitForSelector('.ex-detail'); check('K14 owner sees Ben\'s earlier choice recorded: Ben waiting again, Dana waiting', (await page.$$eval('.ex-req .badge', n => n.map(x => x.textContent))).join('|') === 'Waiting for you|Waiting for you', 'badges');
+    await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/listing/l1' }); await page.waitForSelector('.ex-detail');
+    await page.click('[data-act=decline][data-req=r2]'); await page.waitForSelector('dialog[open]'); const dt = await page.textContent('dialog');
+    check('K15 decline dialog says they are not told why and cannot ask again, others unaffected', dt.includes('not told why') && dt.includes('cannot send another request') && dt.includes('Other requests are not affected'), dt); await dlgBtn(page); await settle(page);
+    const d1 = await dbq(page, db => ({ r1: db.requests.filter(r => r.id === 'r1')[0].status, r2: db.requests.filter(r => r.id === 'r2')[0].status, s: db.listings.filter(l => l.id === 'l1')[0].status }));
+    check('K16 declining changes only that request', d1.r2 === 'declined' && d1.r1 === 'waiting' && d1.s === 'available', JSON.stringify(d1));
+    check('K17 owner row says You declined with no buttons left on it', (await page.textContent('[data-req=r2] .badge')) === 'You declined' && !(await page.$('[data-req=r2] button')), 'row');
+    await who(page, 'dana'); await page.goto(URL_() + '#/listing/l1'); await page.waitForSelector('.ex-detail'); const dm = await detailText(page);
+    check('K18 the declined person sees a plain notice, no reason, no Ask again, no cancel', dm.includes('The owner did not choose your request') && !(await page.$('#ex-interest')) && !(await page.$('#ex-cancel-req')) && !/because|reason/i.test(await page.textContent('.ex-mine')), dm.slice(0, 250));
+    await who(page, 'ben'); await page.goto(URL_() + '#/listing/l1'); await page.waitForSelector('.ex-detail');
+    check('K19 someone else\'s decline is invisible to other applicants', (await detailText(page)).includes('Waiting for Ava Rowan') && !(await detailText(page)).includes('declin'), 'ben');
+    await page.click('#ex-cancel-req'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    check('K20 cancelling a waiting request marks it Cancelled and allows asking again', (await dbq(page, db => db.requests.filter(r => r.id === 'r1')[0].status)) === 'cancelled' && !!(await page.$('#ex-interest')), 'cancel'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'ben'); await page.goto(URL_() + '#/listing/w1'); await page.waitForSelector('.ex-detail');
+    check('K21 wanted post owner sees Accept offer, not Reserve', (await page.textContent('[data-act=confirm]')) === 'Accept offer from Ava Rowan', 'wanted');
+    await page.click('[data-act=confirm]'); await page.waitForSelector('dialog[open]'); check('K22 accept dialog is worded for an offer', (await page.textContent('dialog')).includes('Accept this offer?') && (await page.textContent('dialog')).includes('accepted Ava Rowan’s offer'), await page.textContent('dialog')); await dlgBtn(page); await settle(page);
+    check('K23 accepted wanted post is labelled Offer accepted and can be released', (await status(page)) === 'Offer accepted' && (await page.textContent('#ex-release')) === 'Release accepted offer', await status(page));
+    await who(page, 'ava'); await page.goto(URL_() + '#/listing/w1'); await page.waitForSelector('.ex-detail'); check('K24 the helper is told their offer was accepted and can cancel it', (await detailText(page)).includes('accepted your offer') && !!(await page.$('#ex-cancel-resv')), 'helper');
+    await page.click('#ex-cancel-resv'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    check('K25 helper cancelling an accepted offer reopens the wanted post (Open)', (await dbq(page, db => db.listings.filter(l => l.id === 'w1')[0].status)) === 'open', 'reopen'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/activity' }); await page.waitForSelector('.ex-actsec');
+    const t = await page.textContent('main');
+    check('K26 owner activity: Needs your reply lists the item with its waiting count', (await page.textContent('#ex-act-needs')) === 'Needs your reply' && t.includes('Oak bookshelf') && t.includes('2 waiting requests'), t.slice(0, 300)); await shot(page, 'phone-step3-activity-owner');
+    check('K27 activity link opens the listing', (await page.$eval('.ex-act', a => a.getAttribute('href'))).startsWith('#/listing/'), 'href');
+    await who(page, 'ben'); await page.goto(URL_() + '#/activity'); await page.waitForSelector('.ex-actsec'); const bt = await page.textContent('main');
+    check('K28 requester activity shows statuses: waiting for Ava, reserved for you (bike and lantern), no one else\'s requests', bt.includes('Waiting for Ava Rowan') && (bt.match(/Reserved for you/g) || []).length === 2 && !bt.includes('Dana Rowan asked'), bt.slice(0, 400)); await shot(page, 'phone-step3-activity-requester');
+    await who(page, 'dana'); await page.goto(URL_() + '#/activity'); await page.waitForSelector('.ex-actsec');
+    check('K29 reserver activity lists what they reserved for whom', (await page.textContent('#ex-act-held')) === 'Reserved by you' && (await page.textContent('main')).includes('Reserved for Ben Rowan'), 'held');
+    check('K30 My activity tab is current in the nav and has no horizontal scroll at 320px', (await page.$eval('.ex-tab[aria-current=page]', a => a.textContent)) === 'My activity', 'tab');
+    await dbq(page, db => { db.requests.length = 0; db.listings = db.listings.filter(l => l.owner !== 'dana'); }); await page.goto(URL_() + '#/browse'); await page.goto(URL_() + '#/activity'); await settle(page);
+    check('K31 empty activity shows a calm empty state with a way to browse', !!(await page.$('.ex-state-empty')) && (await page.textContent('.ex-state-empty')).includes('No activity yet'), 'empty'); await shot(page, 'phone-step3-activity-empty');
+    await cond(page, 'error'); check('K32 activity honours the connection error state', !!(await page.$('.ex-state-error')), 'err'); await cond(page, 'normal');
+    await who(page, 'cleo'); await page.goto(URL_() + '#/activity'); await settle(page); check('K33 an ineligible account cannot open My activity', (await page.textContent('main')).includes('not available for this account') && !(await page.$('.ex-actsec')), 'denied'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { w: 320, h: 700, hash: '#/activity' }); await page.waitForSelector('.ex-actsec');
+    check('K34 activity and request rows have no horizontal scroll at 320px', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'ov');
+    await page.goto(URL_() + '#/listing/l1'); await page.waitForSelector('.ex-detail'); check('K35 owner request buttons fit at 320px', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'ov2');
+    check('K36 dialog titles stay readable on the new dialogs', await (async () => { await page.click('[data-act=decline][data-req=r2]'); await page.waitForSelector('dialog[open]'); return page.$eval('dialog h2', e => getComputedStyle(e).color !== getComputedStyle(e.closest('dialog')).backgroundColor); })(), 'contrast'); await ctx.close(); }
 
   /* G. layout + themes + keyboard */
   { const { ctx, page } = await open(browser, { w: 320, h: 700, hash: '#/listing/l2' });
