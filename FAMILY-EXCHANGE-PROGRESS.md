@@ -4,8 +4,8 @@ Update this file at every step. Continue by step number. Nothing here enables Ex
 
 ## Steps
 - [x] Step 0: inspection (see "Step 0 findings" below). Waiting on answers to the batched questions.
-- [x] Step 1: browse and listing UI preview built on branch `exchange-preview` (not merged; waiting for your approval of the exact commit). Path when deployed: /FamilyCircle/exchange-preview/
-- [ ] Step 2: listing lifecycle (sample data)
+- [~] Step 1: merged to main as 39a103e. DEPLOYMENT AND MANUAL VERIFICATION PENDING her report (a matching marker only proves the file is served). Path: /FamilyCircle/exchange-preview/
+- [~] Step 2: listing lifecycle built on branch `exchange-step2`, NOT merged; needs her approval of the exact commit before it can replace the deployed Step 1 preview
 - [ ] Step 3: interest and reservations (sample accounts)
 - [ ] Step 4: safety and access simulation
 - [ ] Step 5: real backend design gate (needs approval)

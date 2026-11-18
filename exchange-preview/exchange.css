@@ -267,3 +267,7 @@ body.ex-skin .ex-sign .btn, body.ex-skin .ex-sign a.btn { color: #3b2410 !import
 body.ex-skin .btn.ghost, body.ex-skin a.btn.ghost { color: #3b2410 !important; }
 :root[data-theme="dark"] body.ex-skin .btn.ghost { color: #fff3d6 !important; }
 body.ex-skin .btn.secondary, body.ex-skin a.btn.secondary { color: var(--ink) !important; }
+
+.ex-chips { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 14px; }
+/* dialog titles sit on paper, so they use ink, not the cream used on the cork board */
+body.ex-skin dialog.ex-dlg h2 { color: var(--ink) !important; text-shadow: none !important; font-family: "Patrick Hand", sans-serif; font-size: 1.5rem; }

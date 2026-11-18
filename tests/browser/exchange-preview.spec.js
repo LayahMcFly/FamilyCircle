@@ -38,7 +38,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('A2 noindex + CSP connect-src none', await page.$eval('meta[name=robots]', m => m.content.includes('noindex')) && (await page.$eval('meta[http-equiv=Content-Security-Policy]', m => m.content)).includes("connect-src 'none'"), 'meta');
     check('A3 no external requests', log.external.length === 0 && log.requests.every(u => u.startsWith('http://127.0.0.1')), JSON.stringify(log.external));
     check('A4 no page or console errors', log.errors.length === 0 && log.console.length === 0, JSON.stringify([log.errors, log.console]));
-    check('A5 build marker shown', /exchange-preview-step1 · file hash [0-9a-f]{16}/.test(await page.textContent('#pv-build')), await page.textContent('#pv-build'));
+    check('A5 build marker shown', /exchange-preview-step2 · file hash [0-9a-f]{16}/.test(await page.textContent('#pv-build')), await page.textContent('#pv-build'));
     check('A6 no Hub link, no Appwrite script', !(await page.$('a[href*="index.html"], a[href="../"]')) && !(await page.$('script[src*="appwrite"], script[src*="config.js"]')), 'links');
     check('A7 no native checkbox/radio/file inputs', !(await page.$('input[type=checkbox], input[type=radio], input[type=file], input[type=date]')), 'native');
     await ctx.close(); }
@@ -76,7 +76,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('C3 wide photo stays wide', r2.nw / r2.nh > 1.5 && Math.abs(r2.nw / r2.nh - r2.w / r2.h) < 0.03, JSON.stringify(r2));
     check('C4 owner sees requests with names and no applicant-only text', (await page.textContent('.ex-requests')).includes('Ben Rowan') && (await page.textContent('.ex-requests')).includes('Dana Rowan'), 'reqs');
     check('C5 owner has edit; no interest/report buttons', !!(await page.$('#ex-edit')) && !(await page.$('#ex-interest')) && !(await page.$('#ex-report')), 'buttons');
-    check('C6 later-step buttons are disabled, not fake', await page.$$eval('.ex-actions button[disabled]', n => n.length === 2), 'disabled'); await shot(page, 'phone-detail-owner');
+    check('C6 owner lifecycle buttons are live (Mark as gone, Withdraw); only Confirm stays disabled for step 3', !!(await page.$('#ex-gone:not([disabled])')) && !!(await page.$('#ex-withdraw:not([disabled])')) && (await page.$$('.ex-req button[disabled]')).length === 2, 'buttons'); await shot(page, 'phone-detail-owner');
     await who(page, 'ben'); await page.goto(URL_() + '#/listing/l1'); await page.waitForSelector('.ex-detail');
     check('C7 applicant sees only own status, not others', (await page.textContent('.ex-detail')).includes('You asked for this') && !(await page.textContent('.ex-detail')).includes('Dana Rowan asked') && !(await page.$('.ex-requests')), 'applicant');
     await ctx.close(); }
@@ -180,6 +180,66 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     await who(page, 'ava'); await page.goto(URL_() + '#/listing/l6'); await settle(page);
     check('F10 reporter name never appears on a listing page', !(await page.textContent('main')).includes('Reported by'), 'leak');
     await ctx.close(); }
+
+
+  /* H. Step 2: listing lifecycle (sample data, per-context in-memory) */
+  const dlgBtn = p => p.click('dialog .btn:not(.secondary)');
+  const status = async (p) => (await p.textContent('.ex-detail .ex-badge')).trim();
+  { const { ctx, page } = await open(browser, { hash: '#/listing/l1' }); await page.waitForSelector('.ex-detail');
+    check('H1 owner of a live free item sees Edit, Mark as gone, Withdraw and no restart button', !!(await page.$('#ex-edit')) && !!(await page.$('#ex-gone')) && !!(await page.$('#ex-withdraw')) && !(await page.$('#ex-again')), 'buttons'); await shot(page, 'phone-step2-owner-actions');
+    await page.click('#ex-gone'); await page.waitForSelector('dialog[open]'); await shot(page, 'phone-step2-confirm-gone');
+    check('H2b dialog title is readable (ink on paper, not cream on cream)', await page.$eval('dialog h2', e => { const c = s => s.match(/[\d.]+/g).slice(0, 3).map(Number), t = c(getComputedStyle(e).color), b = c(getComputedStyle(e.closest('dialog')).backgroundColor); const L = x => { const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }; return .2126 * f(x[0]) + .7152 * f(x[1]) + .0722 * f(x[2]); }; const r = (Math.max(L(t), L(b)) + .05) / (Math.min(L(t), L(b)) + .05); return r >= 4.5; }), 'contrast');
+    check('H2 confirm dialog explains requests close and nothing is final until confirmed', (await page.textContent('dialog')).includes('their requests close'), 'text');
+    await page.click('dialog .btn.secondary'); await settle(page); check('H3 cancel changes nothing', (await status(page)).includes('AVAILABLE') || (await status(page)).toLowerCase().includes('available'), await status(page));
+    await page.click('#ex-gone'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    check('H4 mark gone: badge Gone, edit and lifecycle buttons gone, restart offered', (await status(page)).toLowerCase() === 'gone' && !(await page.$('#ex-edit')) && !(await page.$('#ex-gone')) && !!(await page.$('#ex-again')), await status(page));
+    check('H5 requests on it are closed, confirm buttons removed', (await page.$$eval('.ex-req .badge', n => n.map(x => x.textContent))).every(t => t === 'Closed') && !(await page.$('.ex-req button')), 'closed'); await shot(page, 'phone-step2-gone');
+    await who(page, 'ben'); await settle(page);
+    check('H6 requester sees closed request with the reason, no buttons', (await page.textContent('.ex-mine')).includes('no longer available (gone). Your request is closed.') && !(await page.$('#ex-interest')), await page.textContent('.ex-mine'));
+    await page.goto(URL_() + '#/browse'); await settle(page); check('H7 gone item leaves Browse until "Show finished"', !(await titles(page)).includes('Oak bookshelf'), 'browse'); await page.click('#ex-finished'); await settle(page); check('H8 and returns with Show finished', (await titles(page)).includes('Oak bookshelf'), 'finished');
+    await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/listing/l3' }); await who(page, 'dana'); await page.waitForSelector('.ex-detail');
+    await page.click('#ex-gone'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    check('H9 a reserved item can be marked gone', (await status(page)).toLowerCase() === 'gone', await status(page)); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/listing/l5' }); await who(page, 'dana'); await page.waitForSelector('.ex-detail');
+    await page.click('#ex-gone'); await page.waitForSelector('dialog[open]');
+    await page.evaluate(() => { window.ExchangePreview.state().db.listings.filter(l => l.id === 'l5')[0].status = 'withdrawn'; });
+    await dlgBtn(page); await settle(page);
+    check('H10 stale screen: acting on old state is refused with a clear message and does not overwrite', (await page.textContent('#toasts')).includes('already changed') && !(await page.evaluate(() => window.ExchangePreview.state().db.listings.filter(l => l.id === 'l5')[0].status === 'gone')), await page.textContent('#toasts'));
+    await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/listing/w1' }); await who(page, 'ben'); await page.waitForSelector('.ex-detail');
+    check('H12 wanted owner sees Mark as fulfilled, Close post, Withdraw (no "Mark as gone")', !!(await page.$('#ex-fulfilled')) && !!(await page.$('#ex-close')) && !!(await page.$('#ex-withdraw')) && !(await page.$('#ex-gone')), 'wanted');
+    await page.click('#ex-close'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    check('H13 close post: badge Closed and offers closed', (await status(page)).toLowerCase() === 'closed' && (await page.$$eval('.ex-req .badge', n => n.every(x => x.textContent === 'Closed'))), await status(page));
+    await who(page, 'ava'); await settle(page); check('H14 the helper sees their offer closed', (await page.textContent('.ex-mine')).includes('closed'), await page.textContent('.ex-mine'));
+    await page.goto(URL_() + '#/browse'); await page.click('.ex-kind .tab:nth-child(2)'); await settle(page); check('H15 closed post leaves Wanted browse', !(await titles(page)).includes('Tomato cages'), 'wanted'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/listing/l1' }); await page.waitForSelector('.ex-detail');
+    await page.click('#ex-withdraw'); await page.waitForSelector('dialog[open]'); check('H16 withdraw dialog says it leaves Browse and cannot be put back here', (await page.textContent('dialog')).includes('leaves Browse') && (await page.textContent('dialog')).includes('cannot be put back'), 'text'); await dlgBtn(page); await settle(page);
+    check('H17 withdrawn badge shown to owner', (await status(page)).toLowerCase() === 'withdrawn', await status(page));
+    await who(page, 'ben'); await settle(page); check('H18 someone who asked still sees it, read-only, with the reason', (await page.textContent('.ex-mine')).includes('withdrawn') && !(await page.$('#ex-interest')), await page.textContent('.ex-mine'));
+    await page.goto(URL_() + '#/browse'); await settle(page); check('H19 withdrawn is not in Browse for anyone', !(await titles(page)).includes('Oak bookshelf'), 'browse');
+    await who(page, 'dana'); await who(page, 'ava'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/listing/l2' }); await who(page, 'ava'); await page.waitForSelector('.ex-detail'); await page.goto(URL_() + '#/listing/l1'); await settle(page);
+    await who(page, 'cleo'); check('H20 ineligible account still gets only the denied screen', !!(await page.$('.ex-state-denied')) && !(await page.$('.ex-detail')), 'denied'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/listing/d1' }); await page.waitForSelector('.ex-detail');
+    check('H21 draft detail offers Edit draft and Publish', (await page.textContent('#ex-edit')) === 'Edit draft' && !!(await page.$('#ex-publish-draft')) && !(await page.$('#ex-gone')), 'draft');
+    await page.click('#ex-publish-draft'); await page.waitForSelector('dialog[open]'); check('H22 rules appear before the first publish', (await page.textContent('dialog')).includes('Please do not post'), 'rules');
+    await page.click('#ex-ack'); await dlgBtn(page); await page.waitForSelector('dialog[open] h2:has-text("Publish to")'); await dlgBtn(page); await settle(page);
+    check('H23 draft published from the detail page', (await status(page)).toLowerCase() === 'available', await status(page));
+    await who(page, 'ben'); await page.goto(URL_() + '#/browse'); await settle(page); check('H24 other members now see it', (await titles(page)).includes('Mixing bowls'), 'visible'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/mine' }); await page.waitForSelector('.ex-chips');
+    const n = async f => { await page.click('.chip[data-f=' + f + ']'); await settle(page); return (await titles(page)); };
+    let t = await n('draft'); check('H25 My listings: Drafts group', t.length === 1 && t[0] === 'Mixing bowls', t.join('|'));
+    t = await n('live'); check('H26 Live group', t.length === 2 && t.includes('Oak bookshelf'), t.join('|'));
+    t = await n('done'); check('H27 Finished group', t.length === 1 && t[0].startsWith('Rain boots'), t.join('|'));
+    await who(page, 'cleo'); await who(page, 'ben'); await page.goto(URL_() + '#/mine'); await settle(page); await page.click('.chip[data-f=draft]'); await settle(page);
+    check('H28 empty group shows a calm empty state', !!(await page.$('.ex-state-empty')), 'empty'); await shot(page, 'phone-step2-mine-empty-group');
+    await who(page, 'ava'); await page.goto(URL_() + '#/mine'); await settle(page); await page.click('.chip[data-f=done]'); await settle(page); await shot(page, 'phone-step2-mine-finished');
+    await page.click('#ex-grid .ex-card'); await page.waitForSelector('.ex-detail');
+    await page.click('#ex-again'); await page.waitForSelector('.ex-form');
+    check('H29 "start a new listing" prefills a fresh draft with the note', (await page.inputValue('#ex-title')) === 'Rain boots, kids size 2' && !!(await page.$('#ex-tpl-note')) && !!(await page.$('#ex-publish')) && (await page.textContent('#ex-publish')) === 'Publish to the family', 'tpl');
+    await who(page, 'ben'); await page.goto(URL_() + '#/new/l1'); await settle(page); check('H30 cannot start from someone else\'s listing', !(await page.$('#ex-tpl-note')) && (await page.inputValue('#ex-title')) === '', 'foreign'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { w: 320, h: 700, hash: '#/listing/l1' }); await page.waitForSelector('.ex-detail'); check('H31 owner action row has no horizontal scroll at 320px', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'overflow'); await ctx.close(); }
 
   /* G. layout + themes + keyboard */
   { const { ctx, page } = await open(browser, { w: 320, h: 700, hash: '#/listing/l2' });
