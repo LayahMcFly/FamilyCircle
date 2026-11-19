@@ -32,7 +32,10 @@ test('the probe only writes columns the manifest defines, with values that fit',
 });
 
 test('the events and hint definitions match the production schema as of this commit (drift alarm, not a runtime dependency)', async () => {
-  const { EXCHANGE_SCHEMA: S } = await import('../function/src/exchange.js');
+  /* read the object literal from the source text: importing the module would need the function's own node_modules */
+  const src = fs.readFileSync(path.join(__dirname, '../function/src/exchange.js'), 'utf8');
+  const m = /export const EXCHANGE_SCHEMA = (\{[\s\S]*?\n\});/.exec(src); assert.ok(m, 'EXCHANGE_SCHEMA literal found');
+  const S = require('vm').runInNewContext('(' + m[1] + ')');
   const size = (s) => (/^string\((\d+)\)$/.exec(s) || [])[1];
   const pairs = [['probeEvents', 'exchangeEvents'], ['probeHints', 'exchangeRequests']];
   for (const [mine, prod] of pairs) {
