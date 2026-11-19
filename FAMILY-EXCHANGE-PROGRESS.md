@@ -7,9 +7,9 @@ Update this file at every step. Continue by step number. Nothing here enables Ex
 - [x] Step 1: merged as 39a103e; her manual checks passed (reported 2026-11-18). Dialog-title contrast fix confirmed in Step 2 build. Path: /FamilyCircle/exchange-preview/
 - [x] Step 2: listing lifecycle merged as c16cef8; her manual checks passed (reported 2026-11-18)
 - [x] Step 3: merged as 931ac3d; her manual checks passed (reported 2026-11-19). Sample rules only, see "Step 3" below.
-- [~] Step 4: safety and access simulation built on branch `exchange-step4`, NOT merged; needs her approval of the exact commit
-- [~] Step 5: real backend design written in `EXCHANGE-BACKEND-DESIGN.md` on branch `exchange-step5-design`, NOT merged; design only, needs her review and decisions in its section 12
-- [ ] Step 6: approved backend implementation (branch only, production disabled)
+- [x] Step 4: merged as 786ba31; her manual checks passed (reported 2026-11-19)
+- [x] Step 5: design merged as afe9dbe (`EXCHANGE-BACKEND-DESIGN.md`). It is the current draft only: its section 12 decisions are unresolved and no backend deployment is authorized
+- [ ] Step 6: approved backend implementation (branch only, production disabled). Checked 2026-11-19: NO Exchange backend code exists in the repo (no function/src/exchange*.js, nothing in main.js) and no exchange* tables exist in Appwrite
 - [ ] Step 7: external changes and dedicated live tests (each needs separate approval)
 - [ ] Step 8: production release and closeout (needs release approval)
 
@@ -66,3 +66,6 @@ Lending, due dates, deposits, returns; optional priced listings; priced family-s
 - Access cases: ineligible accounts see only "not available for this account" on any link, with no reason; non-moderators cannot open Reports; "server says no access" shows a calm denied state and changes nothing.
 - Sample quirk: report p2 was filed by Dana, who is also the simulated moderator. Real reporter/handler separation is undecided.
 - Still undecided for production: who moderates, escalation when the owner is the handler, how long moderation records are kept, removed-member data, whether owners get a way to appeal.
+
+## Open note (2026-11-19)
+- The Hub's planned Family Exchange card text still says "listings, giveaways, services and deals". That is wider than the approved scope (free items and Wanted posts, no deals, services or payments). It needs a wording change with her approval before any release (Step 8). Not changed.
