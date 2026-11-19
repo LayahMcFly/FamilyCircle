@@ -116,4 +116,13 @@ async function cleanup(a, created) {
   for (const [t, id] of created.slice().reverse()) { try { await a.del(t, id); removed++; } catch (e) { if (e.code !== 404) failed.push(t + '/' + id); } }
   return { removed, failed };
 }
-module.exports = { runProbe, cleanup, waitReady };
+/* Secondary guard only. It is NOT credential isolation: a key valid for the production project would pass a script check like this and could still act on production.
+ * Isolation comes from using a separate, empty project with its own key (see EXCHANGE-PROBE-PLAN.md). */
+const PRODUCTION_PROJECT_ID = '6aef6a03002636be44c2';
+function assertTarget({ projectId, recordedProbeProjectId }) {
+  if (!projectId || !recordedProbeProjectId) throw new Error('probe target not recorded');
+  if (projectId === PRODUCTION_PROJECT_ID) throw new Error('refusing to run against the production project');
+  if (projectId !== recordedProbeProjectId) throw new Error('project id does not match the recorded probe project');
+  return true;
+}
+module.exports = { runProbe, cleanup, waitReady, assertTarget, PRODUCTION_PROJECT_ID };

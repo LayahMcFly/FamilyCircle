@@ -1,7 +1,7 @@
 'use strict';
 /* Offline rehearsal: the probe logic against an in-memory fake that enforces unique keys, plus two broken fakes the probe must catch. No network. */
 const test = require('node:test'), assert = require('node:assert');
-const { runProbe, cleanup } = require('./probe');
+const { runProbe, cleanup, assertTarget, PRODUCTION_PROJECT_ID } = require('./probe');
 const T = { events: 'ev', hints: 'hi', text: 'tx' };
 const UNIQ = { ev: ['claimKey', 'opKey'], hi: ['requestKey'], tx: [] };
 const err = (code) => Object.assign(new Error('e' + code), { code });
@@ -42,4 +42,10 @@ test('an index that is not of type unique stops the run at readiness', async () 
 });
 test('a text column smaller than 60000 bytes fails P9', async () => {
   const r = await runProbe(fake({ cap: 30000 }), opts); assert.ok(r.results.find((x) => x.id === 'P9' && !x.pass));
+});
+test('the target guard refuses production, unrecorded and mismatched projects', () => {
+  assert.throws(() => assertTarget({ projectId: PRODUCTION_PROJECT_ID, recordedProbeProjectId: PRODUCTION_PROJECT_ID }), /production/);
+  assert.throws(() => assertTarget({ projectId: 'abc', recordedProbeProjectId: '' }), /not recorded/);
+  assert.throws(() => assertTarget({ projectId: 'abc', recordedProbeProjectId: 'def' }), /does not match/);
+  assert.equal(assertTarget({ projectId: 'abc', recordedProbeProjectId: 'abc' }), true);
 });
