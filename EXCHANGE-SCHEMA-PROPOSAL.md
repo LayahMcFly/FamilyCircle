@@ -37,3 +37,37 @@ Membership and eligibility live outside the chain, so no single operation covers
 - The per-person listing limit counts live listings (draft, available, open, reserved, hidden) from their real state. Withdrawn, gone, fulfilled and closed listings free a place at once. The number 50 stays provisional. The count is soft under simultaneous creates: two creates at the same instant can both pass.
 - Placeholder numbers still to confirm: 60 requests a minute (in memory), 10 reports a day, 20 reports per listing, 40 open requests per listing (100 entries), 50 live listings per member, 300 on the home list.
 - Home, activity and report lists read one snapshot per listing (eight at a time). That is fine for a family-sized list and is capped by the numbers above.
+
+
+---
+
+## Addendum (Step 7 review, branch exchange-step7-review, 2026-11-19): retention, size, hints
+
+Status: proposal only. Not approved for execution. Code is in `function/src/exchange.js`, tests in `function/test/exchange.test.js` (66 tests in that file).
+
+### 1. Retention and deletion
+**Bottom line.** An append-only chain keeps every past snapshot, so without a deliberate step, personal content stays forever. This is stated here so nobody assumes otherwise: **retention is indefinite until a retention policy and a job that applies it exist. Neither exists, and no period is chosen.**
+What exists (not wired to any action, not routed, no defaults):
+- `erase`: appends one new snapshot that clears the personal content (title, description, area, notes, report detail) and closes the listing. The chain stays valid because this is an ordinary append.
+- `blankHistory`: sets `state` to `{}` (and optionally `actorId` to `erased`) on rows below the head. It keeps `claimKey` and `opKey`, so a stale writer is still refused with 409 and a replayed op is still a no-op. The head row is never blanked, so the current state is always readable.
+- `redactMember`: runs `erase` on that person's listings, clears their notes, report details and account id, deletes their hint rows, then blanks history. The `[familyId, actorId]` index on `exchangeEvents` exists so this finds a person's rows without a scan.
+- `sweepHints(familyId, olderThanMs)`: deletes only hint rows with no matching snapshot entry. Requires a window of at least one hour; there is no default.
+Example: Dana leaves the family. `redactMember` appends an erased snapshot to her listing, removes her request and report hints, and blanks her older snapshots. Another member's listing that mentions Dana in a request note keeps the note text only if that note was written by someone else; her own notes are cleared.
+Report evidence: a report's reason and detail live in the snapshot. Whether evidence is kept after the report is resolved, and for how long, is a decision for her. The mechanism can clear detail while keeping "a report existed and how it ended". Decision needed before any job is written.
+Still open: retention periods, who triggers redaction (admin action, account deletion, a schedule), and whether moderators may keep evidence after a member leaves.
+
+### 2. Snapshot size and safety actions
+**Bottom line.** Actions that make a snapshot bigger (ask, report, edit) are refused once it passes a soft cap of 40000 bytes. The hard cap is 60000 bytes, so 20000 bytes of headroom is always left for withdraw, close, release, decline, cancel, hide, restore and keep. A change that does not enlarge the snapshot is never refused for size, even above the soft cap.
+Evidence: tests fill a listing with maximum-length fields in CJK and emoji (3 bytes and 4 bytes per character), up to 25 reports and maximum-length notes, confirm growth is refused, then run every safety action successfully under the hard cap. A 160-operation random run asserts the invariants, and a mutation check (soft cap raised to 59990) makes those tests fail. The headroom is asserted to be at least ten times the largest single change.
+Assumption to confirm in Step 7: the text column accepts 60000 bytes (probe check P9). If the real ceiling is lower, both caps move down.
+
+### 3. Hint rows
+**Bottom line.** Hint rows are created before the snapshot that references them, so a failure in between can leave an orphan. An orphan grants nothing and hides nothing.
+- Hint ids are a hash of the key (`q` for requests, `p` for reports), so a retry or later recreation always lands on the same row, and a repeated create is a 409 treated as success.
+- If the snapshot commit fails after the hint exists: the retry reuses the hint and commits. If nobody retries, the orphan is invisible (state is read only from the chain) and `sweepHints` removes it after the window.
+- If the hint is lost but the snapshot exists: the next ask recreates it. Rights never depend on it.
+- A hint cannot count toward another person's limits (`activeCount` checks owner id and membership id on the real snapshot).
+Tests cover: ask failure then retry, ended-listing cleanup, report orphan, a create orphan with a squatted opId then sweep, forged hints granting nothing, and a lost hint restored.
+
+### 4. Schema change
+Add to `exchangeEvents` the index key `[familyId, actorId]` (used by `redactMember`). Nothing else in the five-table schema changes.
