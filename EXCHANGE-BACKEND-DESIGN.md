@@ -23,6 +23,8 @@
 
 The rule file `exchange-preview/exchange-rules.js` is moved, not rewritten, so the 8 rule tests keep meaning the same thing.
 
+> **Superseded in part (2026-11-19, branch exchange-step6):** sections 2 and 3 below describe the first draft. The build now follows `EXCHANGE-SCHEMA-PROPOSAL.md` (append-only snapshot chain, membership binding). Section 12 decisions are still unresolved.
+
 ## 2. Tables (function-only, no client permissions)
 
 Every table has **no client permissions at all**, like `addresses` and the Giving tables. Only `family-api` reads or writes them. Every row carries `familyId`, and every query filters on it.

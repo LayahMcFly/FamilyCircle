@@ -9,7 +9,7 @@ Update this file at every step. Continue by step number. Nothing here enables Ex
 - [x] Step 3: merged as 931ac3d; her manual checks passed (reported 2026-11-19). Sample rules only, see "Step 3" below.
 - [x] Step 4: merged as 786ba31; her manual checks passed (reported 2026-11-19)
 - [x] Step 5: design merged as afe9dbe (`EXCHANGE-BACKEND-DESIGN.md`). It is the current draft only: its section 12 decisions are unresolved and no backend deployment is authorized
-- [~] Step 6: backend code built on branch `exchange-step6` (source commit da29e9e), awaiting review. Not merged, not uploaded, no schema created, Exchange off by default. Details in "Step 6" below.
+- [~] Step 6: backend code on branch `exchange-step6` (revision 2, source commit 280d5eb), awaiting review. First candidate 22a94df is withdrawn. Not merged, not uploaded, no schema created, Exchange off by default. Details in "Step 6" below.
 - [ ] Step 7: external changes and dedicated live tests (each needs separate approval)
 - [ ] Step 8: production release and closeout (needs release approval)
 
@@ -70,16 +70,20 @@ Lending, due dates, deposits, returns; optional priced listings; priced family-s
 ## Open note (2026-11-19)
 - The Hub's planned Family Exchange card text still says "listings, giveaways, services and deals". That is wider than the approved scope (free items and Wanted posts, no deals, services or payments). It needs a wording change with her approval before any release (Step 8). Not changed.
 
-## Step 6 (2026-11-19, branch exchange-step6, source commit da29e9e)
-- Files: `function/src/exchange-rules.js`, `function/src/exchange.js`, routing in `function/src/logic.js`, `function/test/exchange.test.js`. No frontend, Hub, schema, Appwrite or environment change.
-- Persistence mechanism: every change goes through one claim step. A new immutable `exchangeEvents` row is inserted with UNIQUE `claimKey` (listingId_seq) and UNIQUE `opKey` (listingId_opId). The loser gets a conflict and re-reads. The winner applies an idempotent plan and writes the listing row last. Anyone who finds a claimed but unapplied event finishes it first. Appwrite transactions are not relied on because their conflict, unique-index and locking behaviour is not documented.
-- Known limit: the claim is atomic, the apply steps are not one transaction. A fence check before each op narrows the window where a slow executor could race a repairing one but cannot close it. Live Appwrite behaviour (unique index 409s, permissions, concurrency) is a Step 7 check. Tests use a fake database and prove the simulation only.
-- Schema delta versus `EXCHANGE-BACKEND-DESIGN.md`: events gain `claimKey` and `opKey` unique keys. Proposed schema is `EXCHANGE_SCHEMA` in exchange.js. Nothing is created. Needs approval at Step 7 action 1.
-- Fail closed: Exchange defaults off per family. `cfg.exchangeEligibility` and `cfg.exchangeModerators` are deliberately unset, so nobody is eligible and no reports can be filed. Reports are stored only when an independent handler exists. The accused never sees or resolves reports about their own listing.
-- Placeholder caps to confirm: 60 requests per minute (in-memory), 10 reports per day, 40 requests per listing, 50 listings per member, 300 on the home list.
-- Package integrity: built from the committed tree with `git archive da29e9e:function package.json package-lock.json src | gzip -n`. Contents: package.json, package-lock.json, src/ (13 files). sha256 0fe46d9d1c40a42d88a120b70c3b0730ffa7b653774ec775266ea653f9ee41f2. Not uploaded. Before any upload her upload record must be compared with the repo `function/` folder, because the active deployment may hold features this tree lacks.
+## Step 6 (2026-11-19, branch exchange-step6, revision 2, source commit 280d5eb)
+Revision 2 replaces the first candidate (22a94df) after an independent inspection found backend issues. The first candidate must not be merged.
+- Files: `function/src/exchange-rules.js`, `function/src/exchange.js`, routing in `function/src/logic.js`, `function/test/exchange.test.js`, plus `EXCHANGE-SCHEMA-PROPOSAL.md` (schema and mechanism, replaces sections 2 and 3 of the design draft). No frontend, Hub, schema, Appwrite or environment change.
+- Persistence: one atomic insert per change into an append-only snapshot chain (`exchangeEvents`, UNIQUE claimKey and opKey). Nothing is applied afterwards, nothing is overwritten, a failed insert changes nothing. Full reasoning is in `EXCHANGE-SCHEMA-PROPOSAL.md`.
+- Gate: the feature stays closed unless `persistenceVerified === true`, which is not set anywhere. It opens only after the Step 7 probe confirms every unique index is available and refuses a duplicate insert with 409.
+- Membership binding, recipient recheck before reserving, paged membership reads and the live-listings limit are implemented and tested. The consistency boundary for membership changes is stated in the proposal.
+- Fail closed: Exchange is off by default, eligibility and moderators are deliberately unset, so nobody is eligible and no report can be filed.
+- Placeholder numbers to confirm: 60 requests a minute, 10 reports a day, 20 reports per listing, 40 open requests per listing, 50 live listings per member (soft under simultaneous creates), 300 on the home list.
+- Package (not uploaded): `git archive 280d5eb:function package.json package-lock.json src | gzip -n`. 16 entries: package.json, package-lock.json, src/ (13 files). sha256 2236adaae8426c9e7e164ff62df2a73b1e30296c23c0885e9fd1a17ae5edf29d. Before any upload, her upload record must be compared with this `function/` folder, because the active deployment may hold features this tree lacks.
 - Rollback: the primary function rollback target is whichever deployment is active immediately before activation. Reported active now: 6afbacf20a0e3243296c. Do not auto-pick 6afb96027ecde62c258a. Reconfirm at the activation gate. New tables stay unused while the switch is off.
 - Licence: new files carry no licence statement. exchange-rules.js keeps the source file's own notice unchanged. The repository licence decision stays separate.
-- Preview finding: the preview shows the reporter's name to the accused. The server withholds it. Preview fix is a later frontend item.
-- Copy correction still to make before release: Hub card says "services and deals".
-- Blocked decisions: eligibility source, moderators and escalation, retention, photos, pickup messaging, licence. Eligibility and moderators block Step 7 activation for any real use. Photos and pickup messaging block only those features.
+- Blocked decisions: eligibility source, moderators and escalation, retention, photos, pickup messaging, licence.
+
+## Known defects in the published synthetic preview
+- Reporter exposure (found 2026-11-19, after her manual pass): the preview can show the reporter's identity to a moderator who is the accused listing's owner. Her earlier manual pass does not clear a defect found afterwards. The server withholds it. The isolated frontend fix is to be brought as its own branch and approval, not in the backend candidate. Until it is fixed, the preview should not be described as having passed the reporter-privacy rule.
+- Hub copy: the planned card says "services and deals". Correct before release.
+
