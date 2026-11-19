@@ -1,73 +1,99 @@
-# Family Exchange: unique-index probe plan (Step 7, revision 2, proposal only)
+# Family Exchange: unique-index probe plan (Step 7, revision 3, proposal only)
 
-Status: NOT approved, NOT run. Nothing in this file has touched Appwrite. Stages A, B and C each need their own approval. Revision 2 replaces the plan at 8601345, which relied on a key "limited to exchange_probe" inside the production project. That does not exist (see section 1).
+Status: NOT approved, NOT run. Nothing here has made a request to Appwrite or any other service, created a key, project or schema, or used a credential. Stages A, B and C each need their own approval, and so do the connectivity check, the key, and the choice of runner. Revision 3 replaces revision 2 (`4199408`).
 
-**Bottom line.** The probe runs in a separate, empty, disposable Appwrite project with its own short-lived key. Nothing in the production project (Family Circle, id 6aef6a03002636be44c2) is touched, and no credential that works on production is used. A pass is supporting evidence about the schedules tried. It does not prove every concurrency schedule, does not open the feature, and does not leave `persistenceVerified` anywhere but false.
+**Bottom line.** The probe is a self-contained, pinned package in `exchange-probe/` that runs against a separate, empty, disposable Appwrite project with its own short-lived key. It is built and tested offline against a fake that has the same call shapes as the pinned SDK. Its result, if it ever runs, is evidence about that project, that configuration and the schedules observed. It is not verification of production.
 
-## 1. Credential boundary: what Appwrite supports
-Finding, from Appwrite's current documentation (API keys page and scope catalog, read 2026-11-19): API key access is "restricted by scopes instead of permissions". Every database scope is worded for the whole project: `databases.read/write` ("your project's databases"), `tables.*`, `columns.*`, `indexes.*`, `rows.*`. I found no documented way to limit a key to one database, table or row set. A community thread asking for exactly that (a key limited to one bucket and collection) describes the same gap. Appwrite Cloud is versioned by the provider, so "our version" is the current Cloud release; I could not check the Console key screen myself, so she should confirm on screen at Stage A that the key form offers scopes only and no resource picker. If a resource picker does exist, this plan still stands, because a separate project is stronger.
-Consequences for the plan:
-- Empty table permissions do not isolate a server key (server keys bypass row and table permissions).
-- A database-id check in the script is only a guard against mistakes. `assertTarget` in `exchange-probe/probe.js` refuses the production project id and any id that differs from the recorded probe project id. It is documented in code as NOT isolation.
-- Real isolation: a separate project has separate keys, so a probe key cannot be used on production at all.
+## 1. Credential boundary (unchanged from revision 2)
+Appwrite API keys are limited by service scopes that cover the whole project (`databases.*`, `tables.*`, `columns.*`, `indexes.*`, `rows.*` are worded "your project's ..."). I found no documented way to restrict a key to one database. Empty table permissions and a project-id check in a script are not credential isolation (server keys bypass row permissions, and a production key would pass the check). The isolation is a separate project, which has its own keys. `assertTarget` in `probe.js` is a mistake guard only and says so.
 
-## 2. Target and setup (approval A)
-She creates these in the Appwrite Console (I do not hold an organization key and none is requested):
-1. A new project named `exchange-probe-2026-11`, region New York (same as production), in her existing organization. Record its project id in the proposal log (the id is not a secret).
-2. One database `exchange_probe`, three tables (`probeEvents`, `probeHints`, `probeText`), with the columns and indexes below. Table and row permissions: none for every role.
+## 2. The candidate (one exact commit)
+The commit is named in the approval request, with the tree hash of `exchange-probe/` (`git rev-parse <commit>:exchange-probe`) so she or a reviewer can check the folder is byte-identical to what was reviewed. The candidate does not import anything from `function/` at run time.
+| File | Purpose |
+|---|---|
+| `schema.manifest.json` | The exact schema: database `exchange_probe`; tables `probeEvents`, `probeHints`, `probeText`; every column type, size and required flag; every index key, type and columns; table permissions `[]`, row security off. Copied here, not imported. |
+| `probe.js` | The checks P0 to P10, `budget()`, `assertTarget()`, `cleanup()`. |
+| `adapter.js` | Wraps `node-appwrite` `TablesDB` (object-parameter calls, as the production function uses). Hard call cap, wall-clock deadline, immediate stop on 401/403 and on repeated 429/5xx/unexpected network loss. Also `verifySchema` (read-only) and `createSchema` (create-only, stops on any 409). |
+| `run.js` | Command line: `budget`, `verify-schema`, `create-schema`, `run`, `cleanup`. |
+| `redact.js` | Masks the key value and key-shaped strings in everything printed or written. |
+| `fake-sdk.js` + `*.test.js` | Offline tests. |
+| `package.json`, `package-lock.json` | One dependency, `node-appwrite` exactly `31.1.0` (the version the production function pins), 4 packages total, every one pinned with an integrity hash. |
+Schema (all columns required; defaults, arrays, encryption, index orders and lengths are left at Appwrite's defaults and are not compared):
 | Table | Mirrors | Columns | Indexes |
 |---|---|---|---|
-| probeEvents | exchangeEvents | familyId, listingId, claimKey, opKey, actorId, kind (strings); seq (integer); state (text) | UNIQUE claimKey, UNIQUE opKey, key [listingId, seq], key [familyId, actorId] |
-| probeHints | exchangeRequests | familyId, listingId, requesterId, requesterMembership, requestKey (strings) | UNIQUE requestKey, key [familyId, requesterId] |
-| probeText | state column | state (text) | none |
-Column types and sizes are copied from `EXCHANGE_SCHEMA` in `function/src/exchange.js` at the commit approved for Stage A (the commit is named in the approval request).
-3. No functions, no sites, no storage buckets, no auth users, no teams, no platforms, no webhooks, no messaging in that project.
-4. Rows contain invented values only, with `familyId: "probe"`.
+| `probeEvents` | `exchangeEvents` | familyId string(36), listingId string(36), seq integer, claimKey string(80), opKey string(80), actorId string(36), kind string(24), state text | `uq_claimKey` UNIQUE [claimKey], `uq_opKey` UNIQUE [opKey], `ix_listing_seq` [listingId, seq], `ix_family_actor` [familyId, actorId] |
+| `probeHints` | `exchangeRequests` | familyId, listingId, requesterId, requesterMembership string(36), requestKey string(80) | `uq_requestKey` UNIQUE [requestKey], `ix_listing` [listingId], `ix_family_requester` [familyId, requesterId] |
+| `probeText` | the state column | state text | none |
+A drift test compares `probeEvents` and `probeHints` with `EXCHANGE_SCHEMA` at the candidate commit and fails if they differ. It is an alarm for reviewers, not a dependency. Differences from production that remain: all columns required (production's flags are unspecified), no `exchangeListings`, `exchangeReports` or `exchangeState` tables, and a different database and table ids.
 
-## 3. Credential: scopes, expiry
-- Created by her in the Console of the probe project only, with an expiry date set at creation. Expiry: 24 hours after creation (the run takes minutes; a short expiry limits exposure if the key leaks). An ephemeral key (maximum 3600 seconds) is an alternative if she prefers; the cost is that setup waiting for index readiness may need a second key.
-- Scopes, exactly these ten and no others: `databases.read`, `databases.write`, `tables.read`, `tables.write`, `columns.read`, `columns.write`, `indexes.read`, `indexes.write`, `rows.read`, `rows.write`. If she creates the tables herself in the Console (step 2), the key needs only `rows.read`, `rows.write`, `tables.read`, `columns.read`, `indexes.read`, and the other five are left off. Preferred: she creates the schema, the key gets those five.
-- Never granted: `keys.read`, `keys.write` (a key holding `keys.write` can alter and delete other keys), `project.read/write`, functions, sites, users, teams, storage, messaging, or any organization-level scope.
-- The key value is never pasted into chat or committed. How the key reaches the script is an open decision (section 8).
+## 3. Commands
+Setup (on whichever machine is approved as the runner, section 4):
+```
+git clone https://github.com/LayahMcFly/FamilyCircle.git && cd FamilyCircle
+git checkout <candidate commit>
+test "$(git rev-parse HEAD:exchange-probe)" = "<tree hash from the approval>"
+cd exchange-probe && npm ci --ignore-scripts && npm test        # 37 tests, offline, no key
+node run.js budget                                              # prints the call budget, no key, no network
+```
+Key file (never an argument, never in Git or logs): `umask 077; mkdir -p ~/probe-secret; read -rs V; printf %s "$V" > ~/probe-secret/key; unset V`. `read -s` keeps it out of the screen and the shell history. Then:
+```
+export PROBE_ENDPOINT=https://nyc.cloud.appwrite.io/v1
+export PROBE_PROJECT_ID=<probe project id>
+export PROBE_KEY_FILE=$HOME/probe-secret/key
+node run.js verify-schema --expect-project <probe project id>   # Stage A check, read-only, 7 calls
+node run.js create-schema --expect-project <id>                 # only if the runner creates the schema (setup key), 114 calls at most
+node run.js run           --expect-project <id>                 # Stage B, 6015 calls at most
+node run.js cleanup       --expect-project <id>                 # Stage C, rows recorded in out/created.json only
+rm -P ~/probe-secret/key || shred -u ~/probe-secret/key         # then she revokes the key and deletes the project in the Console
+```
+The runner refuses to start unless `--expect-project` (typed by hand) equals `PROBE_PROJECT_ID`, neither is the production project id, and the endpoint is exactly `https://<region>.cloud.appwrite.io/v1` (so the key cannot be sent to another host). `run` refuses a project whose tables already hold rows, whose schema differs from the manifest, or whose `out/created.json` still lists rows.
 
-## 4. Cost and resource limits
-- Plan: Appwrite's free plan allows two projects per organization and one database per project, with resources shared across projects (per the billing pages, read 2026-11-19). I do not know how many projects her organization already has or which plan it is on. If a third project is not allowed, she must delete an unused one (her decision) or the probe waits. Any paid plan or charge is hers to approve; none is assumed.
-- Expected load, an upper estimate: about 4,000 write attempts (most are intended 409 refusals) and under 2,000 reads. Created rows at most about 700. Usage is billed per row affected, so this is far below free-tier quotas.
-- Hard stops in the script: abort on any rate-limit response that persists after a short backoff and report the check as inconclusive, and refuse to run a second time without a clean project.
-- Free projects can be paused after inactivity; the project is deleted at Stage C, so this does not matter.
+## 4. Runner and secret delivery (decision for her; nothing assumed)
+The runner is the Node script above. It needs Node 20 or newer (tested on 22.23.4), `git`, access to the npm registry for `npm ci`, and outbound HTTPS to `nyc.cloud.appwrite.io`. It sends the key only in the SDK's request header, over HTTPS, to that host.
+- **Runner A, her own computer (proposed).** She holds the key, writes the key file with the commands above, and runs the three commands. She sends back `exchange-probe/out/run-*.json` (it contains results and counts, no key). Cost: she has said she tests only through a browser link, so this needs her explicit agreement.
+- **Runner B, this workspace (not available as things stand).** Two things are unconfirmed. This workspace reaches the internet through a policy proxy, and I have not checked that `nyc.cloud.appwrite.io` is allowed. There is also no channel for a secret other than pasting it into chat, and no Appwrite-key variable exists in this environment. I will not use it unless she shows a channel that keeps the key out of chat, Git, arguments, logs and test files.
+- Not proposed: CI (a workflow would have to live on `main`, which is not approved), the Appwrite connector (it acts under its own credentials and its project is not confirmed), any shared or pasted key.
+How the key stays contained: it is read once from the key file (outside the repository, regular file, owner-only mode) or from `PROBE_APPWRITE_KEY` (removed from the environment after reading); a key-shaped argument is refused; all output goes through a redactor that masks the key and key-shaped strings, including inside SDK error messages; `out/` is git-ignored and holds only ids, counts and results (a test scans it); no child processes are started. Tests use a fake key built in code. A mutation check (redaction disabled) fails the redaction test.
+**Connectivity check (separate approval, not run).** Exact target: one `GET https://nyc.cloud.appwrite.io/v1/health/version`, no key, no project header, no body, from the approved runner. It changes nothing; it tells us the host is reachable from that runner and reports the server's version, which I would record in the progress file. If the endpoint answers 401 or similar, reachability is still shown. No other live request is part of this check.
 
-## 5. Probe run (approval B)
-Script `exchange-probe/probe.js` plus a small Appwrite adapter (`appwrite-adapter.js`, to be written and reviewed offline before B). Rehearsed offline in `exchange-probe/probe.test.js` against a fake that enforces unique keys and fakes that do not (the probe must fail those).
-| Check | What it does | Pass means |
-|---|---|---|
-| P0 | Readiness, index types | every column and index `available`, unique ones are `unique` |
-| P1 | Second row with the same claimKey, then the same opKey | both refused with 409 |
-| P2 | 20 concurrent inserts, same claimKey, different opKeys, 25 rounds | exactly 1 success and 19 conflicts, 0 other errors, every round |
-| P3 | 20 concurrent inserts, same opKey, different claimKeys, 25 rounds | exactly 1 success and 19 conflicts |
-| P4 | 20 concurrent identical inserts, 25 rounds | exactly 1 success and 19 conflicts |
-| P5 | The real loop: 16 writers read the newest seq, claim seq+1, retry on 409 (5 rounds) | each writer lands once, seq is 1..16 with no gap or duplicate |
-| P6 | 40 write-then-read pairs, newest first | informational: counts stale reads, never fails |
-| P7 | 40 inserts with a 1 to 7 ms client timeout, lookup by opKey, retry with the same keys | exactly one row per opKey at the end |
-| P8 | Delete a hint, recreate with the same id and key; insert the same key under another id | recreate works and the duplicate key is still 409 |
-| P9 | 60000-byte state, ASCII and 20000 CJK characters, hash round trip; then 65535 and 70000 bytes | 60000 bytes round-trip identically; the other two results record the real ceiling |
-| P10 | 250 rows paged 100 at a time with cursorAfter; orderDesc seq; orderDesc $createdAt | all 250 seen once, ordering correct |
-Expected conflicts: P2 to P4 produce 19 x 25 = 475 refusals each by design. A non-409 error (429, 5xx) is counted as "other" and fails that check; the check is rerun once at lower width to separate rate limiting from a real fault, and a rate-limited run is reported inconclusive, never a pass.
-Partial or timeout outcomes: nothing is assumed after a stop. The run is repeated only from a clean project, or the project is deleted at Stage C.
+## 5. Project and costs (her Console checks, once she is ready)
+I have not created a project, upgraded a plan or incurred a charge, and will not. Before approving Stage A she should check, in the Console:
+1. Organization, plan, and how many projects exist; whether a further project is allowed (Free: 2 per organization, one database per project, shared resources, per Appwrite's billing page).
+2. Whether creating the project would change what she pays, and the usage and billing pages' current figures. The expected load is at most 6,015 calls for the run (about 3,300 in a typical run), at most 491 rows, nothing stored afterwards.
+3. Region New York is selectable for the new project.
+4. The key form: that it offers service scopes with no way to limit to one database (if it does offer resource limits, tell me; the plan still stands), and which expiry choices it shows.
+5. That the project's settings page allows deleting it.
+6. Which runner (section 4) she is willing to use.
 
-## 6. Cleanup boundary (approval C)
-Principle: delete only what is recorded as created for the probe. Never delete or modify any pre-existing resource, automatically or otherwise.
-- **Before Stage A** (read-only, recorded in the approval request): inventory of her organization's projects (id and name) and, for the production project, nothing is listed or changed. This is the pre-probe inventory.
-- **Created-resource record**, written during A and B: the probe project id, database id, three table ids, the key id, and the row ids the script reports as created.
-- **Cleanup steps:** (1) the script deletes rows only from the recorded ids; (2) she revokes the key and deletes the probe project in the Console after checking that its id equals the recorded id; (3) compare the organization's project list with the pre-probe inventory: the only difference must be the removal of the recorded probe project; (4) confirm the production project's `family-api` function, its active deployment (reported 6afbacf20a0e3243296c) and the `family` database were not touched (read-only view).
-- Anything unexpected (an unrecorded resource, a mismatch) stops the cleanup and is reported. Nothing is deleted on a guess.
+## 6. Keys (nothing created; to be proposed again at the execution gate)
+Console-created keys in the probe project only. Preferred: she creates the database and tables by hand from the manifest (the Console shows the same column and index fields), so no schema-privilege key is ever issued, and one run key does `verify-schema`, `run` and `cleanup`.
+| Key | When | Scopes (exact) | Never |
+|---|---|---|---|
+| Run key | Stages B and C, and the read-only `verify-schema` | `rows.read`, `rows.write`, `tables.read`, `columns.read`, `indexes.read` | `keys.*`, `project.*`, `databases.write`, `tables.write`, `columns.write`, `indexes.write`, users, teams, storage, functions, messaging, any organization scope |
+| Setup key (only if the runner creates the schema) | Stage A `create-schema`, then deleted | `databases.write`, `tables.write`, `columns.write`, `indexes.write`, `tables.read`, `columns.read`, `indexes.read` | `rows.*`, `keys.*`, `project.*` |
+The two are never one key. Expiry: the shortest the Console offers that covers the stage (setup about 6 minutes of calls, run at most 15). The short ephemeral keys Appwrite documents (3600 seconds) are made through the key API, which needs a key with `keys.write`, so they are not used. If the shortest Console expiry is a day, I will say so, and she revokes each key right after its stage (revocation, not expiry, is the real limit). If a call returns 401 or 403 the runner stops; widening scopes is a new approval, never automatic.
 
-## 7. What the isolated probe can and cannot establish about production
-Differences from production: separate project (own quotas, rate-limit buckets and key), possibly a different plan and limits, tiny data volume, no function runtime (so no function timeouts, cold starts or many parallel function instances), no Teams, no real permissions or real rows, and schema created fresh by hand instead of by the Step 7 setup script.
-Can establish: that unique indexes on current Appwrite Cloud TablesDB refuse concurrent duplicate inserts with 409 under the schedules tried; that retries after timeouts converge to one row; the real text column ceiling; the query behaviours the code uses; delete-then-recreate of a unique key.
-Cannot establish: behaviour of the production project's configuration or limits, behaviour under real function concurrency, Teams paging, every possible schedule, or future platform changes. After any pass, Step 7 schema creation in production still needs its own approval, and its first readiness check re-verifies the unique indexes there (no insert load on family data).
+## 7. Call budget and stop conditions (enforced in code, covered by tests)
+Calls per stage, worst case, with the defaults: precheck 3; P0 readiness 150; P1 3; P2 to P4 1,500; P5 3,845; P6 80; P7 160; P8 4; P9 6; P10 257. Total 6,008, plus a 7-call schema check = **6,015 cap**. `create-schema` 114 at most (24 creates plus up to 30 column-readiness polls per table), `verify-schema` 7, `cleanup` at most 491 (one per recorded row; rows created at most 491). A typical correct run is about 3,300 calls. The adapter refuses the next request once the cap is reached (a test confirms the fake sees exactly the cap and no more).
+The run stops, sends nothing further, records the rows created so far in `out/created.json`, and exits with status 2 on: any 401 or 403; five consecutive 429, 5xx or unexpected network failures; the call cap; the wall-clock limit (run 15 min, create-schema 6, cleanup 10, verify 1); a project that is not clean; a schema that differs from the manifest; any 409 during `create-schema` (it never touches pre-existing resources). A rate-limited run is reported inconclusive, never a pass. If the process is killed, deleting the project is the cleanup of last resort.
 
-## 8. Decisions that block Stage A
-1. Does her organization have room for another project, and is a charge acceptable (none assumed)?
-2. Who runs the script and how the key reaches it without being pasted in chat. I have not confirmed the shell here can reach the Appwrite API; if it cannot, the options are her running it herself or using the Appwrite connector, and I will bring that as its own proposal.
-3. Expiry: 24-hour Console key (proposed) or one-hour ephemeral key.
-4. The exact commit for the schema definition and probe scripts (this branch tip, once she approves its contents for this purpose).
+## 8. Checks, and what a result means
+P0 readiness and index types; P1 sequential duplicate claimKey and opKey; P2 to P4 20 concurrent inserts (same claimKey; same opKey; identical rows), 25 rounds each, expecting exactly 1 success and 19 conflicts; P5 the real claim loop with 16 writers, 5 rounds, gap-free sequence; P6 stale-read count (informational); P7 timeouts then lookup then retry, one row per opKey; P8 delete then recreate a unique key; P9 60000-byte ASCII and multibyte state round trip plus the 65535 and 70000-byte results (the real text ceiling); P10 paging, orderDesc seq and orderDesc $createdAt.
+**Evidence wording.** A pass is evidence that, in that project, with that configuration, on the date and Appwrite version observed, the schedules tried behaved as expected. A pass is not production verification, not proof of every concurrency schedule, and does not set `persistenceVerified`. The run record says so in its `note` field. Later, production schema creation will report index configuration and status; that shows the indexes exist and are marked unique and available. It does not by itself show that production enforces uniqueness under concurrent inserts, and the plan never claims it does.
+What it cannot show about production: its own configuration, limits and rate-limit buckets, behaviour under real function concurrency, Teams paging, every schedule, or future platform changes. Differences from production: separate project and plan limits, tiny data volume, no function runtime, hand-made schema, fewer tables.
+
+## 9. Cleanup boundary
+Delete only what is recorded as created for the probe; never delete or modify a pre-existing resource.
+- Before Stage A, a read-only inventory of her organization's projects (id and name) is recorded in the approval request.
+- Created-resource record: the probe project id; the database, table and key ids; and `out/created.json` (the exact rows the run created). The script's `cleanup` deletes only those rows, and a test confirms an unrecorded row survives.
+- Then she revokes the key and deletes the probe project in the Console after checking its id equals the recorded id. The organization's project list must equal the pre-probe inventory minus nothing and plus nothing. Production's `family-api` function, its active deployment (reported 6afbacf20a0e3243296c) and the `family` database are never touched; a read-only look confirms nothing changed.
+- Anything unexpected stops the cleanup and is reported. Nothing is deleted on a guess.
+
+## 10. Offline test evidence (at the candidate commit)
+`cd exchange-probe && npm ci --ignore-scripts && npm test` (Node 22.23.4): 37 tests, 37 pass, 0 fail, 0 skipped, 0 cancelled. By file: `manifest.test.js` 4, `adapter.test.js` 15, `runner.test.js` 12, `probe.test.js` 6. Covered: pinned SDK and lockfile, manifest completeness and drift alarm, every probe write fits the manifest, SDK call-surface contract, full probe through the adapter within budget, hard cap, auth, throttling and deadline stops, clean-project refusal, unique-key violations caught, readiness and schema drift (10 kinds), create-only schema creation, timeouts, key containment, target and endpoint guards, cleanup boundary. Mutation checks (each made the named test fail, then reverted): redaction off, call cap off, auth stop off, key-file mode check off, cleanup widened. `cd function && npm test`: 142 of 142 (unchanged). Nothing in these runs touched the network except `npm ci`.
+
+## 11. Decisions that block the next action
+1. Her Console checks (section 5) and whether a further project is acceptable at no charge.
+2. Which runner (section 4), and her explicit agreement if it is her own computer.
+3. Whether she creates the schema by hand (preferred, one key) or allows the setup key.
+4. Separate approvals still needed, in order: the connectivity check, Stage A (project and schema), the key(s), Stage B, Stage C.

@@ -8,6 +8,29 @@ const CJK = (n) => '漢'.repeat(n);
 /* adapter: { create(table, id, data), del(table, id), get(table, id), list(table, q) -> rows, readiness() -> [{kind,table,key,status,type?}], createWithTimeout?(table,id,data,ms) }
  * q is a plain object: { eq: [attr, value]?, orderDesc: attr?, limit: n?, after: id? }.  create/del/get throw an object with .code (HTTP status; 0 = no answer / timeout). */
 const is409 = (e) => e && e.code === 409;
+/* Every number that sets how much load the probe makes lives here, so budget() and the run cannot disagree. */
+const DEFAULTS = { rounds: 25, width: 20, trials: 40, p5Rounds: 5, p5Writers: 16, p5AttemptCap: 24, readyTimeoutMs: 120000, readyPollMs: 5000, tableCount: 3 };
+/* Worst-case count of API calls per stage. The adapter also enforces runTotal as a hard cap, so a bug cannot exceed it. */
+function budget(p = {}) {
+  const d = { ...DEFAULTS, ...p }, W5 = Math.min(d.width, d.p5Writers);
+  const polls = Math.floor(d.readyTimeoutMs / d.readyPollMs) + 1;
+  const parts = {
+    precheck: d.tableCount,
+    P0: polls * d.tableCount * 2,
+    P1: 3,
+    'P2-P4': 3 * d.rounds * d.width,
+    P5: d.p5Rounds * (W5 * d.p5AttemptCap * 2 + 1),
+    P6: d.trials * 2,
+    P7: d.trials * 4,
+    P8: 4,
+    P9: 6,
+    P10: 250 + 5 + 2
+  };
+  const runTotal = Object.values(parts).reduce((x, y) => x + y, 0);
+  /* rows the run can leave behind, which is also the cleanup call count: P1 1, P2-P4 one per round, P5 one per writer, P6 trials, P7 at most trials, P8 1, P9 4, P10 250 */
+  const rowsMax = 1 + 3 * d.rounds + d.p5Rounds * W5 + d.trials + d.trials + 1 + 4 + 250;
+  return { parts, runTotal, rowsMax, cleanupTotal: rowsMax };
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function waitReady(a, { timeoutMs = 120000, pollMs = 2000 } = {}) {
@@ -20,26 +43,41 @@ async function waitReady(a, { timeoutMs = 120000, pollMs = 2000 } = {}) {
   return { ok: false, items: last };
 }
 
-async function runProbe(a, { tables, runId = crypto.randomBytes(5).toString('hex'), rounds = 25, width = 20, trials = 40, log = () => {} } = {}) {
-  const E = tables.events, H = tables.hints, X = tables.text, created = [];
+async function runProbe(a, opts = {}) {
+  const stopOf = () => (typeof a.stopReason === 'function' ? a.stopReason() : null);
+  try { return await runProbeInner(a, opts); }
+  catch (e) { const why = stopOf(); if (why) return { results: [], pass: false, created: opts.__created || [], stopped: why }; throw e; }
+}
+
+async function runProbeInner(a, opts) {
+  const { tables, runId = crypto.randomBytes(5).toString('hex'), log = () => {} } = opts;
+  const { rounds, width, trials, p5Rounds, p5Writers, p5AttemptCap, readyTimeoutMs, readyPollMs } = { ...DEFAULTS, ...opts };
+  const E = tables.events, H = tables.hints, X = tables.text, created = (opts.__created = []);
+  const halted = () => (typeof a.stopReason === 'function' ? a.stopReason() : null);
   const results = [], add = (id, name, pass, detail, info) => { results.push({ id, name, pass, detail, info: info || null }); log((pass ? 'PASS ' : 'FAIL ') + id + ' ' + name + (pass ? '' : ' -> ' + detail)); };
+  const finish = () => ({ results, pass: !halted() && results.every((r) => r.pass), created, stopped: halted() });
   const mk = (table, id, data) => a.create(table, id, data).then((r) => { created.push([table, id]); return r; });
   const ev = (listing, seq, op, claim) => ({ familyId: 'probe', listingId: listing, seq, claimKey: claim || listing + '_' + seq, opKey: op, actorId: 'probe', kind: 'probe', state: '{}' });
   const settle = (ps) => Promise.allSettled(ps);
   const tally = (rs) => ({ ok: rs.filter((r) => r.status === 'fulfilled').length, conflict: rs.filter((r) => r.status === 'rejected' && is409(r.reason)).length, other: rs.filter((r) => r.status === 'rejected' && !is409(r.reason)).length });
 
+  /* precheck: refuse to run on anything but a clean project */
+  for (const t of [E, H, X]) { const rows = await a.list(t, { limit: 1 }); if (rows.length) return { results: [{ id: 'PRE', name: 'probe tables are empty before the run', pass: false, detail: t + ' already holds rows' }], pass: false, created, stopped: 'not_clean' }; }
+
   /* P0 readiness */
-  const ready = await waitReady(a);
+  const ready = await waitReady(a, { timeoutMs: readyTimeoutMs, pollMs: readyPollMs });
   const p0 = ready.ok && ready.items.filter((x) => x.kind === 'index' && x.unique).every((x) => x.type === 'unique');
   add('P0', 'every column and index reports available, and the unique ones are unique', p0, JSON.stringify(ready.items.filter((x) => x.status !== 'available' || (x.unique && x.type !== 'unique'))), { items: ready.items.length });
   if (!p0) return { results, pass: false, created };
 
+  if (halted()) return finish();
   /* P1 sequential duplicate */
   { const L = 'p1' + runId; await mk(E, 'e' + L + 'a', ev(L, 1, L + '_o1'));
     const dupClaim = await a.create(E, 'e' + L + 'b', ev(L, 1, L + '_o2')).then(() => 'created', (e) => e.code);
     const dupOp = await a.create(E, 'e' + L + 'c', ev(L, 2, L + '_o1')).then(() => 'created', (e) => e.code);
     add('P1', 'a second row with the same claimKey, or the same opKey, is refused with 409', dupClaim === 409 && dupOp === 409, JSON.stringify({ dupClaim, dupOp })); }
 
+  if (halted()) return finish();
   /* P2-P4 concurrent inserts */
   for (const [id, name, shape] of [
     ['P2', 'same claimKey, different opKeys, concurrently: exactly one wins', (L, i) => ev(L, 1, L + '_o' + i)],
@@ -54,22 +92,25 @@ async function runProbe(a, { tables, runId = crypto.randomBytes(5).toString('hex
     add(id, name + ` (${rounds} rounds of ${width})`, !bad, JSON.stringify(bad));
   }
 
+  if (halted()) return finish();
   /* P5 the real pattern: read the head, claim head+1, retry on 409 */
   { let bad = null;
-    for (let r = 0; r < Math.max(5, rounds >> 2) && !bad; r++) {
-      const L = 'p5r' + r + runId, W = Math.min(width, 16);
-      const writer = async (i) => { for (let attempt = 0; attempt < 60; attempt++) { const top = (await a.list(E, { eq: ['listingId', L], orderDesc: 'seq', limit: 1 }))[0]; const seq = top ? top.seq + 1 : 1; try { await mk(E, 'e' + L + 'w' + i + 'a' + attempt, ev(L, seq, L + '_op' + i)); return seq; } catch (e) { if (!is409(e)) throw e; } } throw new Error('gave up'); };
+    for (let r = 0; r < p5Rounds && !bad; r++) {
+      const L = 'p5r' + r + runId, W = Math.min(width, p5Writers);
+      const writer = async (i) => { for (let attempt = 0; attempt < p5AttemptCap; attempt++) { const top = (await a.list(E, { eq: ['listingId', L], orderDesc: 'seq', limit: 1 }))[0]; const seq = top ? top.seq + 1 : 1; try { await mk(E, 'e' + L + 'w' + i + 'a' + attempt, ev(L, seq, L + '_op' + i)); return seq; } catch (e) { if (!is409(e)) throw e; } } throw new Error('gave up'); };
       const rs = await settle(Array.from({ length: W }, (_, i) => writer(i)));
       const rows = await a.list(E, { eq: ['listingId', L], limit: 100 }), seqs = rows.map((x) => x.seq).sort((p, q) => p - q), ops = new Set(rows.map((x) => x.opKey));
       if (rs.some((x) => x.status !== 'fulfilled') || rows.length !== W || seqs.some((s, i) => s !== i + 1) || ops.size !== W) bad = { round: r, rows: rows.length, seqs, rejected: rs.filter((x) => x.status !== 'fulfilled').length };
     }
     add('P5', 'the real claim loop: every writer succeeds exactly once, sequence numbers are gap-free, nothing is lost or doubled', !bad, JSON.stringify(bad)); }
 
+  if (halted()) return finish();
   /* P6 read after write (informational about staleness; the design is safe either way because P5 passes) */
   { const L = 'p6' + runId; let stale = 0;
     for (let i = 1; i <= trials; i++) { await mk(E, 'e' + L + i, ev(L, i, L + '_o' + i)); const top = (await a.list(E, { eq: ['listingId', L], orderDesc: 'seq', limit: 1 }))[0]; if (!top || top.seq !== i) stale++; }
     add('P6', 'newest-first read right after a write (stale reads are counted, not failed)', true, '', { trials, stale }); }
 
+  if (halted()) return finish();
   /* P7 unknown outcomes */
   if (typeof a.createWithTimeout === 'function') {
     const L = 'p7' + runId; let unknown = 0, committed = 0, bad = null;
@@ -83,6 +124,7 @@ async function runProbe(a, { tables, runId = crypto.randomBytes(5).toString('hex
     add('P7', 'a request that times out may or may not have committed; retrying with the same keys always ends with exactly one row', !bad, JSON.stringify(bad), { attempts: trials, unknown, committedAmongUnknown: committed });
   } else add('P7', 'timeouts (adapter cannot force them)', true, '', { skipped: true });
 
+  if (halted()) return finish();
   /* P8 delete then recreate a unique key (hint cleanup and retry) */
   { const L = 'p8' + runId, key = L + '_k', id = 'h' + L;
     await mk(H, id, { familyId: 'probe', listingId: L, requesterId: 'u', requesterMembership: 'm', requestKey: key });
@@ -91,6 +133,7 @@ async function runProbe(a, { tables, runId = crypto.randomBytes(5).toString('hex
     const other = await a.create(H, id + 'x', { familyId: 'probe', listingId: L, requesterId: 'u', requesterMembership: 'm', requestKey: key }).then(() => 'created', (e) => e.code);
     add('P8', 'a deleted hint can be recreated with the same id and key, and a duplicate key is still refused', again === 'created' && other === 409, JSON.stringify({ again, other })); }
 
+  if (halted()) return finish();
   /* P9 large text */
   { const sizes = [['ASCII 60000 bytes', 'a'.repeat(60000)], ['CJK 60000 bytes', CJK(20000)]], info = {}; let good = true;
     for (const [label, text] of sizes) { const id = 'x' + label.replace(/\W/g, '').slice(0, 6) + runId; const hash = crypto.createHash('sha256').update(text).digest('hex');
@@ -98,6 +141,7 @@ async function runProbe(a, { tables, runId = crypto.randomBytes(5).toString('hex
     for (const [label, bytes] of [['65535 bytes', 65535], ['70000 bytes', 70000]]) { const id = 'xb' + bytes + runId; info[label] = await a.create(X, id, { state: 'a'.repeat(bytes) }).then(() => { created.push([X, id]); return 'accepted'; }, (e) => 'refused ' + e.code); }
     add('P9', 'a 60000-byte state (ASCII and multibyte) is stored and read back byte for byte; the real ceiling is recorded', good, JSON.stringify(info), info); }
 
+  if (halted()) return finish();
   /* P10 the queries the app depends on */
   { const L = 'p10' + runId; let ok = true, why = '';
     for (let i = 1; i <= 250; i++) await mk(H, 'q' + L + i, { familyId: L, listingId: 'l' + (i % 5), requesterId: 'u' + (i % 7), requesterMembership: 'm', requestKey: L + '_' + i });
@@ -108,7 +152,7 @@ async function runProbe(a, { tables, runId = crypto.randomBytes(5).toString('hex
     const byCreated = await a.list(H, { eq: ['familyId', L], orderDesc: '$createdAt', limit: 3 }); if (byCreated.length !== 3) { ok = false; why += ' orderDesc createdAt'; }
     add('P10', 'paging 250 rows at 100 a page, newest-first by seq and by creation time', ok, why); }
 
-  return { results, pass: results.every((r) => r.pass), created };
+  return finish();
 }
 
 async function cleanup(a, created) {
@@ -125,4 +169,4 @@ function assertTarget({ projectId, recordedProbeProjectId }) {
   if (projectId !== recordedProbeProjectId) throw new Error('project id does not match the recorded probe project');
   return true;
 }
-module.exports = { runProbe, cleanup, waitReady, assertTarget, PRODUCTION_PROJECT_ID };
+module.exports = { runProbe, cleanup, waitReady, assertTarget, PRODUCTION_PROJECT_ID, DEFAULTS, budget };

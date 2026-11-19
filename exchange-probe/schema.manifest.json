@@ -1,0 +1,51 @@
+{
+  "manifestVersion": 1,
+  "purpose": "Disposable probe schema. Mirrors EXCHANGE_SCHEMA (function/src/exchange.js at 8dc41b9) for exchangeEvents and one hint table, copied here so a moving schema on main cannot change the probe.",
+  "database": { "id": "exchange_probe", "name": "exchange_probe" },
+  "tableDefaults": { "permissions": [], "rowSecurity": false, "enabled": true },
+  "tables": {
+    "probeEvents": {
+      "mirrors": "exchangeEvents",
+      "columns": [
+        { "key": "familyId", "type": "string", "size": 36, "required": true },
+        { "key": "listingId", "type": "string", "size": 36, "required": true },
+        { "key": "seq", "type": "integer", "required": true },
+        { "key": "claimKey", "type": "string", "size": 80, "required": true },
+        { "key": "opKey", "type": "string", "size": 80, "required": true },
+        { "key": "actorId", "type": "string", "size": 36, "required": true },
+        { "key": "kind", "type": "string", "size": 24, "required": true },
+        { "key": "state", "type": "text", "required": true }
+      ],
+      "indexes": [
+        { "key": "uq_claimKey", "type": "unique", "columns": ["claimKey"] },
+        { "key": "uq_opKey", "type": "unique", "columns": ["opKey"] },
+        { "key": "ix_listing_seq", "type": "key", "columns": ["listingId", "seq"] },
+        { "key": "ix_family_actor", "type": "key", "columns": ["familyId", "actorId"] }
+      ]
+    },
+    "probeHints": {
+      "mirrors": "exchangeRequests",
+      "columns": [
+        { "key": "familyId", "type": "string", "size": 36, "required": true },
+        { "key": "listingId", "type": "string", "size": 36, "required": true },
+        { "key": "requesterId", "type": "string", "size": 36, "required": true },
+        { "key": "requesterMembership", "type": "string", "size": 36, "required": true },
+        { "key": "requestKey", "type": "string", "size": 80, "required": true }
+      ],
+      "indexes": [
+        { "key": "uq_requestKey", "type": "unique", "columns": ["requestKey"] },
+        { "key": "ix_listing", "type": "key", "columns": ["listingId"] },
+        { "key": "ix_family_requester", "type": "key", "columns": ["familyId", "requesterId"] }
+      ]
+    },
+    "probeText": {
+      "mirrors": "the state column only",
+      "columns": [
+        { "key": "state", "type": "text", "required": true }
+      ],
+      "indexes": []
+    }
+  },
+  "roles": { "events": "probeEvents", "hints": "probeHints", "text": "probeText" },
+  "notDefined": "Column defaults, array columns, encryption, index orders and index lengths are left at Appwrite's defaults and are not compared. Production's required flags are not specified in EXCHANGE_SCHEMA; the probe sets every column required."
+}
