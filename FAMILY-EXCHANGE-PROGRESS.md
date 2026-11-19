@@ -8,7 +8,7 @@ Update this file at every step. Continue by step number. Nothing here enables Ex
 - [x] Step 2: listing lifecycle merged as c16cef8; her manual checks passed (reported 2026-11-18)
 - [x] Step 3: merged as 931ac3d; her manual checks passed (reported 2026-11-19). Sample rules only, see "Step 3" below.
 - [~] Step 4: safety and access simulation built on branch `exchange-step4`, NOT merged; needs her approval of the exact commit
-- [ ] Step 5: real backend design gate (needs approval)
+- [~] Step 5: real backend design written in `EXCHANGE-BACKEND-DESIGN.md` on branch `exchange-step5-design`, NOT merged; design only, needs her review and decisions in its section 12
 - [ ] Step 6: approved backend implementation (branch only, production disabled)
 - [ ] Step 7: external changes and dedicated live tests (each needs separate approval)
 - [ ] Step 8: production release and closeout (needs release approval)
