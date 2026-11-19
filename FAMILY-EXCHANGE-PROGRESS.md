@@ -6,7 +6,7 @@ Update this file at every step. Continue by step number. Nothing here enables Ex
 - [x] Step 0: inspection (see "Step 0 findings" below). Waiting on answers to the batched questions.
 - [x] Step 1: merged as 39a103e; her manual checks passed (reported 2026-11-18). Dialog-title contrast fix confirmed in Step 2 build. Path: /FamilyCircle/exchange-preview/
 - [x] Step 2: listing lifecycle merged as c16cef8; her manual checks passed (reported 2026-11-18)
-- [~] Step 3: interest and reservations built on branch `exchange-step3`, NOT merged; needs her approval of the exact commit
+- [x] Step 3: merged as 931ac3d; her manual checks passed (reported 2026-11-19). Sample rules only, see "Step 3" below.
 - [ ] Step 4: safety and access simulation
 - [ ] Step 5: real backend design gate (needs approval)
 - [ ] Step 6: approved backend implementation (branch only, production disabled)
