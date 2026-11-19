@@ -3,7 +3,7 @@
  * No network request, no Appwrite, no account, no storage. All text is set with textContent so typed text stays as typed. */
 (function () {
   'use strict';
-  var S = window.ExchangeSample, R = window.ExchangeRules, L = R.LIMITS;
+  var S = window.ExchangeSample, R = window.ExchangeRules, A = window.ExchangeFakeApi, L = R.LIMITS;
   var DB, ST, main = document.getElementById('main'), controls = document.getElementById('pv-controls'), toasts = document.getElementById('toasts');
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
   function reset() { DB = { listings: clone(S.LISTINGS), requests: clone(S.REQUESTS), reports: clone(S.REPORTS), seq: 100 }; ST = ST || {}; ST.acked = {}; }
@@ -307,35 +307,35 @@
     body.appendChild(h('div', { class: 'ex-grid', id: 'ex-grid' }, list.map(card)));
   }
   function reports(body) {
-    var v = viewer(); if (!v.moderator) return body.appendChild(stateCard('denied', 'Reports are not available for this account', 'Only the simulated Exchange moderator sees reports in this preview.'));
+    var v = viewer(), res = JSON.parse(A.listReports(DB, S.VIEWERS, v.id));   /* only what the fake server returns for this account is ever drawn */
+    if (!res.ok) return body.appendChild(stateCard('denied', 'Reports are not available for this account', 'Only the simulated Exchange moderator sees reports in this preview.'));
     body.appendChild(h('p', { class: 'muted', text: 'Simulated moderator view. Who can moderate in the real app is not decided.' }));
-    if (!DB.reports.length) return body.appendChild(stateCard('empty', 'No reports', 'Nothing has been reported.'));
-    DB.reports.forEach(function (r) {
-      var l = find(r.listing), mineCase = l && l.owner === v.id, bs = { open: 'Open', kept: 'Kept', hidden: 'Hidden' };
+    if (!res.reports.length) return body.appendChild(stateCard('empty', 'No reports', 'Nothing has been reported.'));
+    res.reports.forEach(function (r) {
+      var l = find(r.listingId), bs = { open: 'Open', kept: 'Kept', hidden: 'Hidden' };
       var acts;
-      if (mineCase) acts = h('p', { class: 'alert error', role: 'status', text: 'You posted this listing, so you cannot review this report. No other independent handler is set up, so this case is waiting for escalation that does not exist yet.' });
-      else if (r.status === 'open' && l && !ended(l.status) && l.status !== 'hidden') acts = h('div', { class: 'row' }, h('a', { class: 'btn small ghost', href: '#/listing/' + l.id, text: 'Open listing' }), h('button', { type: 'button', class: 'btn small secondary', 'data-act': 'keep', 'data-rep': r.id, text: 'Keep listing', onclick: function () { keepReport(r); } }), h('button', { type: 'button', class: 'btn small', 'data-act': 'hide', 'data-rep': r.id, text: 'Hide listing', onclick: function () { hideListing(r); } }));
+      if (r.status === 'open' && l && !ended(l.status) && l.status !== 'hidden') acts = h('div', { class: 'row' }, h('a', { class: 'btn small ghost', href: '#/listing/' + l.id, text: 'Open listing' }), h('button', { type: 'button', class: 'btn small secondary', 'data-act': 'keep', 'data-rep': r.id, text: 'Keep listing', onclick: function () { keepReport(r); } }), h('button', { type: 'button', class: 'btn small', 'data-act': 'hide', 'data-rep': r.id, text: 'Hide listing', onclick: function () { hideListing(r); } }));
       else if (r.status === 'hidden' && l && l.status === 'hidden') acts = h('div', { class: 'row' }, h('a', { class: 'btn small ghost', href: '#/listing/' + l.id, text: 'Open listing' }), h('button', { type: 'button', class: 'btn small secondary', 'data-act': 'restore', 'data-rep': r.id, text: 'Restore listing', onclick: function () { restoreListing(r); } }));
       else acts = h('p', { class: 'muted ex-meta', text: r.status === 'open' ? 'The listing has already ended, so there is nothing left to decide.' : 'Decision recorded. Nothing more to do.' });
-      body.appendChild(h('div', { class: 'card ex-report', 'data-id': r.id }, h('div', { class: 'row between' }, h('strong', { text: l ? l.title : 'Removed listing' }), h('span', { class: 'muted ex-meta', text: r.ago })), h('div', { class: 'row' }, h('span', { class: 'badge ex-rstatus', text: bs[r.status] || r.status })), h('p', { text: r.reason + (r.detail ? ': ' + r.detail : '') }), h('p', { class: 'muted ex-meta', text: 'Reported by ' + person(r.by).name + ' (only the handler sees this)' }), acts));
+      body.appendChild(h('div', { class: 'card ex-report', 'data-id': r.id }, h('div', { class: 'row between' }, h('strong', { text: r.title }), h('span', { class: 'muted ex-meta', text: r.ago })), h('div', { class: 'row' }, h('span', { class: 'badge ex-rstatus', text: bs[r.status] || r.status })), h('p', { text: r.reason + (r.detail ? ': ' + r.detail : '') }), h('p', { class: 'muted ex-meta', text: 'Reported by ' + r.reporter + ' (only the handler sees this)' }), acts));
     });
   }
   function repOf(r) { return DB.reports.filter(function (x) { return x.id === r.id; })[0]; }
   function keepReport(r) {
     confirmDlg('Keep this listing?', 'The report is closed and the listing stays exactly as it is. The owner is not told about the report.', 'Keep listing', function () {
-      var rep = repOf(r), l = rep && find(rep.listing); if (!rep || rep.status !== 'open' || !l || l.owner === viewer().id || !viewer().moderator) return stale2();
+      var rep = repOf(r), l = rep && find(rep.listing); if (!A.canResolve(DB, S.VIEWERS, viewer().id, r.id) || !rep || rep.status !== 'open' || !l || l.owner === viewer().id || !viewer().moderator) return stale2();
       rep.status = 'kept'; toast('Report closed. Listing kept.'); render();
     });
   }
   function hideListing(r) {
     confirmDlg('Hide this listing?', 'It leaves Browse for everyone but the owner and moderators. Requests on it go on hold, and anyone who asked will see it is not available. The owner is told a moderator hid it. They are not told who reported it.', 'Hide listing', function () {
-      var rep = repOf(r), l = rep && find(rep.listing); if (!rep || rep.status !== 'open' || !l || l.owner === viewer().id || !viewer().moderator || (l.status !== 'available' && l.status !== 'open' && l.status !== 'reserved')) return stale2();
+      var rep = repOf(r), l = rep && find(rep.listing); if (!A.canResolve(DB, S.VIEWERS, viewer().id, r.id) || !rep || rep.status !== 'open' || !l || l.owner === viewer().id || !viewer().moderator || (l.status !== 'available' && l.status !== 'open' && l.status !== 'reserved')) return stale2();
       l.hiddenFrom = l.status; l.status = 'hidden'; rep.status = 'hidden'; toast('Listing hidden.'); render();
     });
   }
   function restoreListing(r) {
     confirmDlg('Restore this listing?', 'It returns to how it was before it was hidden, and it shows in Browse again. Requests on it come off hold.', 'Restore listing', function () {
-      var rep = repOf(r), l = rep && find(rep.listing); if (!rep || rep.status !== 'hidden' || !l || l.status !== 'hidden' || l.owner === viewer().id || !viewer().moderator) return stale2();
+      var rep = repOf(r), l = rep && find(rep.listing); if (!A.canResolve(DB, S.VIEWERS, viewer().id, r.id) || !rep || rep.status !== 'hidden' || !l || l.status !== 'hidden' || l.owner === viewer().id || !viewer().moderator) return stale2();
       l.status = l.hiddenFrom || (l.kind === 'wanted' ? 'open' : 'available'); delete l.hiddenFrom; rep.status = 'kept'; toast('Listing restored.'); render();
     });
   }

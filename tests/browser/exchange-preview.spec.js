@@ -38,8 +38,8 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('A2 noindex + CSP connect-src none', await page.$eval('meta[name=robots]', m => m.content.includes('noindex')) && (await page.$eval('meta[http-equiv=Content-Security-Policy]', m => m.content)).includes("connect-src 'none'"), 'meta');
     check('A3 no external requests', log.external.length === 0 && log.requests.every(u => u.startsWith('http://127.0.0.1')), JSON.stringify(log.external));
     check('A4 no page or console errors', log.errors.length === 0 && log.console.length === 0, JSON.stringify([log.errors, log.console]));
-    check('A5 build marker shown', /exchange-preview-step4 · file hash [0-9a-f]{16}/.test(await page.textContent('#pv-build')), await page.textContent('#pv-build'));
-    check('A5b visible Step 4 marker under the banner matches the footer hash', /^Step 4 preview · build [0-9a-f]{8}$/.test((await page.textContent('#pv-step')).trim()) && (await page.textContent('#pv-build')).includes((await page.textContent('#pv-step')).trim().slice(-8)), await page.textContent('#pv-step'));
+    check('A5 build marker shown', /exchange-preview-step4-reporter-fix · file hash [0-9a-f]{16}/.test(await page.textContent('#pv-build')), await page.textContent('#pv-build'));
+    check('A5b visible Step 4 marker under the banner matches the footer hash', /^Step 4 preview, reporter fix · build [0-9a-f]{8}$/.test((await page.textContent('#pv-step')).trim()) && (await page.textContent('#pv-build')).includes((await page.textContent('#pv-step')).trim().slice(-8)), await page.textContent('#pv-step'));
     check('A6 no Hub link, no Appwrite script', !(await page.$('a[href*="index.html"], a[href="../"]')) && !(await page.$('script[src*="appwrite"], script[src*="config.js"]')), 'links');
     check('A7 no native checkbox/radio/file inputs', !(await page.$('input[type=checkbox], input[type=radio], input[type=file], input[type=date]')), 'native');
     await ctx.close(); }
@@ -175,8 +175,8 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('F5 non-moderators have no Reports tab and cannot open it', !(await page.$('a[href="#/reports"]')), 'tab');
     await page.goto(URL_() + '#/reports'); await settle(page); check('F6 reports route is denied for non-moderators', !!(await page.$('.ex-state-denied')), 'denied');
     await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await settle(page);
-    check('F7 moderator sees reports', (await page.$$('.ex-report')).length === 4, 'reports (3 sample + the one Ben just sent)');
-    check('F8 report on moderator\'s own listing shows the conflict state, no actions', (await page.textContent('.ex-report[data-id=p1]')).includes('you cannot review this report') && !(await page.$('.ex-report[data-id=p1] button')), await page.textContent('.ex-report[data-id=p1]'));
+    check('F7 moderator sees reports', (await page.$$('.ex-report')).length === 3, 'reports (2 sample about other people + the one Ben just sent; the one about Dana\'s own listing is not delivered)');
+    check('F8 a report about the moderator\'s own listing is not delivered at all: no card, no placeholder, no text, no reporter', !(await page.$('.ex-report[data-id=p1]')) && !(await page.textContent('main')).includes('seems loose') && !(await page.textContent('main')).includes('waiting for escalation'), await page.textContent('main'));
     check('F9 other report shows reporter to the handler only, with live Keep and Hide actions', (await page.textContent('.ex-report[data-id=p2]')).includes('Reported by Dana Rowan (only the handler sees this)') && (await page.$$('.ex-report[data-id=p2] button[disabled]')).length === 0 && (await page.$$('.ex-report[data-id=p2] [data-act]')).length === 2, 'p2'); await shot(page, 'phone-reports');
     await who(page, 'ava'); await page.goto(URL_() + '#/listing/l6'); await settle(page);
     check('F10 reporter name never appears on a listing page', !(await page.textContent('main')).includes('Reported by'), 'leak');
@@ -395,7 +395,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
   /* L. Step 4: moderation actions, hidden listings, access cases (sample data only) */
   { const { ctx, page, log } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await page.waitForSelector('.ex-report');
     check('L1 moderator sees Keep and Hide on reports about other people\'s listings, none disabled', (await page.$$('.ex-report [data-act=keep]')).length === 2 && (await page.$$('.ex-report [data-act=hide]')).length === 2 && (await page.$$('.ex-report button[disabled]')).length === 0, 'buttons'); await shot(page, 'phone-step4-reports');
-    check('L2 the report on the moderator\'s own listing has no action buttons and says why', (await page.$$('[data-id=p1] button')).length === 0 && (await page.textContent('[data-id=p1]')).includes('you cannot review this report'), 'own');
+    check('L2 the report on the moderator\'s own listing is not on the screen at all', (await page.$$('[data-id=p1]')).length === 0 && !(await page.textContent('main')).includes('you cannot review'), 'own');
     await page.click('[data-rep=p2][data-act=hide]'); await page.waitForSelector('dialog[open]'); const dt = await page.textContent('dialog'); await shot(page, 'phone-step4-hide-confirm');
     check('L3 hide dialog says who still sees it, requests go on hold, owner not told who reported', dt.includes('leaves Browse') && dt.includes('on hold') && dt.includes('not told who reported it'), dt);
     await page.click('dialog .btn.secondary'); await settle(page); check('L4 cancel hides nothing', (await dbq(page, db => db.listings.filter(l => l.id === 'l6')[0].status)) === 'available', 'cancel');
@@ -463,6 +463,33 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     await ctx.close(); }
   { const { ctx, page } = await open(browser, { dark: true }); await shot(page, 'phone-browse-dark');
     check('G6 dark mode readable: card text differs from background', await page.$eval('.ex-card h3', e => getComputedStyle(e).color !== getComputedStyle(document.body).backgroundColor), 'dark'); await ctx.close(); }
+
+  /* M. reporter-leak fix: the accused account must not RECEIVE the protected payload (checked on the fake API response, not only on screen) */
+  { const { ctx, page, log } = await open(browser, { hash: '#/browse' });
+    const api = (p, id) => p.evaluate(`(function(){var s=window.ExchangePreview.state();return window.ExchangeFakeApi.listReports(s.db,window.ExchangeSample.VIEWERS,${JSON.stringify(id)});})()`);
+    const PROT = ['seems loose', 'Item looks unsafe', 'Ben Rowan', '"p1"', '"by"'], SCREEN = ['seems loose', 'Item looks unsafe', 'Reported by'];
+    const dana = await api(page, 'dana'), danaObj = JSON.parse(dana);
+    check('M1 direct request as the accused moderator: the response holds no trace of the report on their own listing', danaObj.ok === true && PROT.every(t => !dana.includes(t)) && danaObj.reports.every(r => r.listingId !== 'l5') && danaObj.reports.length === 2, dana);
+    check('M2 the response carries no placeholder or count for the withheld report', !/count|total|hidden_reports|withheld|escalat/i.test(dana), dana);
+    const ava = JSON.parse(await api(page, 'ava')), cleo = JSON.parse(await api(page, 'cleo')), ben = JSON.parse(await api(page, 'ben')), ghost = JSON.parse(await api(page, 'nobody'));
+    check('M3 non-moderators and unknown accounts get the same not-available answer and no payload', [ava, cleo, ben, ghost].every(x => JSON.stringify(x) === '{"ok":false,"status":404,"error":"not_available"}'), JSON.stringify([ava, cleo, ben, ghost]));
+    await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await settle(page);
+    check('M4 as Dana: the screen shows only the two reports about other people', (await page.$$eval('.ex-report', n => n.map(x => x.getAttribute('data-id')))).join() === 'p2,p3', 'ids');
+    await who(page, 'ava'); await settle(page);
+    const afterAva = await page.textContent('body');
+    check('M5 switching to another account leaves nothing from the moderator view on the page', SCREEN.every(t => !afterAva.includes(t)), 'residue');
+    await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await settle(page);
+    const html2 = await page.textContent('main');
+    check('M6 switching back to Dana still withholds it', !html2.includes('seems loose') && !html2.includes('Item looks unsafe'), 'again');
+    await page.goto(URL_() + '#/listing/l5'); await settle(page); const t5 = await page.textContent('main');
+    check('M7 the accused moderator opening her own reported listing sees no report text or reporter', !t5.includes('seems loose') && !t5.includes('Reported by') && !t5.includes('Ben Rowan'), t5.slice(0, 300));
+    const direct = await page.evaluate(() => { const s = window.ExchangePreview.state(); return window.ExchangeFakeApi.canResolve(s.db, window.ExchangeSample.VIEWERS, 'dana', 'p1'); });
+    check('M8 she cannot decide that report even by asking for it directly, and an unknown report looks the same', direct === false && await page.evaluate(() => { const s = window.ExchangePreview.state(); return window.ExchangeFakeApi.canResolve(s.db, window.ExchangeSample.VIEWERS, 'dana', 'zzz'); }) === false, 'resolve');
+    check('M9 a listing the moderator does not own can still be decided', await page.evaluate(() => { const s = window.ExchangePreview.state(); return window.ExchangeFakeApi.canResolve(s.db, window.ExchangeSample.VIEWERS, 'dana', 'p2'); }) === true, 'p2');
+    await who(page, 'ben'); await page.goto(URL_() + '#/listing/l5'); await settle(page);
+    check('M10 a reporter on the same listing sees no report and no reporter names', !(await page.textContent('main')).includes('Reported by'), 'ben');
+    check('M11 no page errors during account switching', log.errors.length === 0 && log.external.length === 0, JSON.stringify([log.errors, log.external]));
+    await ctx.close(); }
 
   await browser.close(); server.close();
   console.log(out.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

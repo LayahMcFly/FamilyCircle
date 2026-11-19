@@ -84,6 +84,6 @@ Revision 2 replaces the first candidate (22a94df) after an independent inspectio
 - Blocked decisions: eligibility source, moderators and escalation, retention, photos, pickup messaging, licence.
 
 ## Known defects in the published synthetic preview
-- Reporter exposure (found 2026-11-19, after her manual pass): the preview can show the reporter's identity to a moderator who is the accused listing's owner. Her earlier manual pass does not clear a defect found afterwards. The server withholds it. The isolated frontend fix is to be brought as its own branch and approval, not in the backend candidate. Until it is fixed, the preview should not be described as having passed the reporter-privacy rule.
+- Reporter exposure (found 2026-11-19, after her manual pass; her earlier passes stay recorded and this later defect is listed separately): in the published preview, a moderator who owns the reported listing was sent that report's text and reporter name, and the screen showed a card about it. Fix candidate on branch `exchange-preview-reporter-fix` (not merged, not deployed): the preview's fake API now answers each account only with what the real server would, so the accused account's response contains no byte of that report (no card, placeholder or count), and deciding it is refused. Until that fix is merged and deployed the published preview still has the defect.
 - Hub copy: the planned card says "services and deals". Correct before release.
 
