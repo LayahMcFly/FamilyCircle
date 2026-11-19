@@ -27,7 +27,7 @@
   function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
   var label = { available: 'Available', reserved: 'Reserved', gone: 'Gone', draft: 'Draft, only you can see this', withdrawn: 'Withdrawn', released: 'Released', closed: 'Closed', open: 'Open', fulfilled: 'Fulfilled', hidden: 'Hidden' };
   function lbl(l) { return l.kind === 'wanted' && l.status === 'reserved' ? 'Offer accepted' : label[l.status]; }
-  function canSee(l) { var v = viewer(); if (l.status === 'draft') return l.owner === v.id; if (l.status === 'hidden') return l.owner === v.id; if (l.status === 'withdrawn') return l.owner === v.id || DB.requests.some(function (r) { return r.listing === l.id && r.from === v.id; }); return true; }
+  function canSee(l) { var v = viewer(); if (l.status === 'draft') return l.owner === v.id; if (l.status === 'hidden') return l.owner === v.id || (!!v.moderator && DB.reports.some(function (r) { return r.listing === l.id; })); if (l.status === 'withdrawn') return l.owner === v.id || DB.requests.some(function (r) { return r.listing === l.id && r.from === v.id; }); return true; }
   function ended(s) { return s === 'gone' || s === 'fulfilled' || s === 'closed' || s === 'withdrawn'; }
   /* One place for every status change. It re-reads the listing first, so a stale screen (changed on another device) cannot act on old state. */
   function change(id, to, from, msg) {
@@ -165,12 +165,19 @@
       art.appendChild(h('p', { class: 'alert ok ex-mine', role: 'status', text: 'The owner withdrew this listing. Your request is closed.' }));
       return;
     }
+    if (l.status === 'hidden' && !own) {
+      /* moderator view of a hidden listing: no request, report or interest actions */
+      art.appendChild(h('div', { class: 'row ex-row' }, h('span', { class: 'badge ex-badge ex-hidden', text: 'Hidden' }), h('span', { class: 'badge', text: wanted ? 'Wanted' : 'Free item' })));
+      art.appendChild(h('h2', { class: 'ex-title', text: l.title })); art.appendChild(h('p', { class: 'ex-desc', text: l.description }));
+      art.appendChild(h('p', { class: 'alert', id: 'ex-hidden-mod', role: 'status', text: 'Hidden from the family. You can see it because you are the simulated moderator. Decide on the Reports tab.' })); return;
+    }
     var gal = gallery(l); if (gal) art.appendChild(gal);
     art.appendChild(h('div', { class: 'row ex-row' }, h('span', { class: 'badge ex-badge ex-' + l.status, text: lbl(l) }), h('span', { class: 'badge', text: wanted ? 'Wanted' : 'Free item' })));
     art.appendChild(h('h2', { class: 'ex-title', text: l.title }));
     art.appendChild(h('dl', { class: 'ex-facts' }, fact('Posted by', o.name + (own ? ' (you)' : '')), fact('Posted', l.ago), fact('Category', l.category), l.condition ? fact('Condition', l.condition) : null, fact('Pickup area', l.area || 'Not given')));
     art.appendChild(h('p', { class: 'ex-desc', text: l.description }));
     var act = h('div', { class: 'ex-actions' }); art.appendChild(act);
+    if (own && l.status === 'hidden') art.appendChild(h('p', { class: 'alert', id: 'ex-hidden-own', role: 'status', text: 'A moderator hid this listing. Only you and moderators can see it, and requests on it are on hold. You are not told who reported it. You cannot edit or change it while it is hidden.' }));
     if (own) {
       var live = l.status === 'available' || l.status === 'open' || l.status === 'reserved', LIVE = ['available', 'open', 'reserved'];
       if (l.status === 'draft' || live) act.appendChild(h('a', { class: 'btn secondary', href: '#/edit/' + l.id, id: 'ex-edit', text: l.status === 'draft' ? 'Edit draft' : 'Edit' }));
@@ -217,7 +224,7 @@
       else acts.push(h('button', { type: 'button', class: 'btn small', 'data-act': 'confirm', 'data-req': r.id, text: wanted ? 'Accept offer from ' + who : 'Reserve for ' + who, onclick: function () { confirmRequest(l, r); } }));
       acts.push(h('button', { type: 'button', class: 'btn small ghost', 'data-act': 'decline', 'data-req': r.id, text: 'Decline', onclick: function () { declineRequest(l, r); } }));
     }
-    return h('div', { class: 'ex-req card inner', 'data-req': r.id }, h('div', { class: 'row between' }, h('strong', { text: who }), h('span', { class: 'muted ex-meta', text: r.ago })), h('p', { text: r.note || 'No note.' }), h('div', { class: 'row' }, h('span', { class: 'badge', text: names[r.status] || r.status }), acts));
+    return h('div', { class: 'ex-req card inner', 'data-req': r.id }, h('div', { class: 'row between' }, h('strong', { text: who }), h('span', { class: 'muted ex-meta', text: r.ago })), h('p', { text: r.note || 'No note.' }), h('div', { class: 'row' }, h('span', { class: 'badge', text: (l.status === 'hidden' && r.status === 'waiting' ? 'On hold' : names[r.status] || r.status) }), acts));
   }
   function stale() { toast('This listing already changed. Showing the latest.'); render(); }
   function confirmRequest(l, r) {
@@ -249,15 +256,16 @@
       });
   }
   function activity(body) {
-    var v = viewer(), mineReqs = DB.requests.filter(function (r) { return r.from === v.id && find(r.listing); }), owned = DB.listings.filter(function (l) { return l.owner === v.id; });
+    var v = viewer(), mineReqs = DB.requests.filter(function (r) { return r.from === v.id && find(r.listing) && canSee(find(r.listing)); }), owned = DB.listings.filter(function (l) { return l.owner === v.id; });
     var needs = owned.filter(function (l) { return (l.status === 'available' || l.status === 'open') && DB.requests.some(function (r) { return r.listing === l.id && r.status === 'waiting'; }); });
-    var held = owned.filter(function (l) { return l.status === 'reserved'; });
+    var held = owned.filter(function (l) { return l.status === 'reserved'; }), hid = owned.filter(function (l) { return l.status === 'hidden'; });
     body.appendChild(h('p', { class: 'muted', text: 'Requests you sent, and requests waiting on your listings. Only you see this.' }));
-    if (!needs.length && !held.length && !mineReqs.length) return body.appendChild(stateCard('empty', 'No activity yet', 'When you ask for an item, or someone asks for yours, it shows up here.', [h('a', { class: 'btn', href: '#/browse', text: 'Browse the Exchange' })]));
+    if (!needs.length && !held.length && !hid.length && !mineReqs.length) return body.appendChild(stateCard('empty', 'No activity yet', 'When you ask for an item, or someone asks for yours, it shows up here.', [h('a', { class: 'btn', href: '#/browse', text: 'Browse the Exchange' })]));
     function row(l, text, id) { return h('a', { class: 'card inner ex-act', href: '#/listing/' + l.id, 'data-id': id || l.id }, h('strong', { text: l.title }), h('span', { class: 'muted ex-meta', text: text })); }
     function section(id, title, rows) { if (!rows.length) return; body.appendChild(h('section', { class: 'ex-actsec', 'aria-labelledby': id }, h('h3', { id: id, text: title }), rows)); }
     section('ex-act-needs', 'Needs your reply', needs.map(function (l) { var n = DB.requests.filter(function (r) { return r.listing === l.id && r.status === 'waiting'; }).length; return row(l, n + ' waiting ' + (n > 1 ? 'requests' : 'request')); }));
     section('ex-act-held', 'Reserved by you', held.map(function (l) { return row(l, 'Reserved for ' + person(l.reservedFor).name + '. Arrange it in Messages.'); }));
+    section('ex-act-hid', 'Hidden by a moderator', hid.map(function (l) { return row(l, 'Only you and moderators can see it. Requests are on hold.'); }));
     section('ex-act-mine', 'Your requests', mineReqs.map(function (r) { var l = find(r.listing), o = person(l.owner); return row(l, mineMsgShort(r, l, o), r.id); }));
   }
   function mineMsgShort(r, l, o) {
@@ -303,11 +311,35 @@
     body.appendChild(h('p', { class: 'muted', text: 'Simulated moderator view. Who can moderate in the real app is not decided.' }));
     if (!DB.reports.length) return body.appendChild(stateCard('empty', 'No reports', 'Nothing has been reported.'));
     DB.reports.forEach(function (r) {
-      var l = find(r.listing), mineCase = l && l.owner === v.id;
-      body.appendChild(h('div', { class: 'card ex-report', 'data-id': r.id }, h('div', { class: 'row between' }, h('strong', { text: l ? l.title : 'Removed listing' }), h('span', { class: 'muted ex-meta', text: r.ago })), h('p', { text: r.reason + (r.detail ? ': ' + r.detail : '') }), h('p', { class: 'muted ex-meta', text: 'Reported by ' + person(r.by).name + ' (only the handler sees this)' }),
-        mineCase ? h('p', { class: 'alert error', role: 'status', text: 'You posted this listing, so you cannot review this report. No other independent handler is set up, so this case is waiting for escalation that does not exist yet.' }) : h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn small secondary', disabled: true, text: 'Keep listing (step 4)' }), h('button', { type: 'button', class: 'btn small secondary', disabled: true, text: 'Hide listing (step 4)' }))));
+      var l = find(r.listing), mineCase = l && l.owner === v.id, bs = { open: 'Open', kept: 'Kept', hidden: 'Hidden' };
+      var acts;
+      if (mineCase) acts = h('p', { class: 'alert error', role: 'status', text: 'You posted this listing, so you cannot review this report. No other independent handler is set up, so this case is waiting for escalation that does not exist yet.' });
+      else if (r.status === 'open' && l && !ended(l.status) && l.status !== 'hidden') acts = h('div', { class: 'row' }, h('a', { class: 'btn small ghost', href: '#/listing/' + l.id, text: 'Open listing' }), h('button', { type: 'button', class: 'btn small secondary', 'data-act': 'keep', 'data-rep': r.id, text: 'Keep listing', onclick: function () { keepReport(r); } }), h('button', { type: 'button', class: 'btn small', 'data-act': 'hide', 'data-rep': r.id, text: 'Hide listing', onclick: function () { hideListing(r); } }));
+      else if (r.status === 'hidden' && l && l.status === 'hidden') acts = h('div', { class: 'row' }, h('a', { class: 'btn small ghost', href: '#/listing/' + l.id, text: 'Open listing' }), h('button', { type: 'button', class: 'btn small secondary', 'data-act': 'restore', 'data-rep': r.id, text: 'Restore listing', onclick: function () { restoreListing(r); } }));
+      else acts = h('p', { class: 'muted ex-meta', text: r.status === 'open' ? 'The listing has already ended, so there is nothing left to decide.' : 'Decision recorded. Nothing more to do.' });
+      body.appendChild(h('div', { class: 'card ex-report', 'data-id': r.id }, h('div', { class: 'row between' }, h('strong', { text: l ? l.title : 'Removed listing' }), h('span', { class: 'muted ex-meta', text: r.ago })), h('div', { class: 'row' }, h('span', { class: 'badge ex-rstatus', text: bs[r.status] || r.status })), h('p', { text: r.reason + (r.detail ? ': ' + r.detail : '') }), h('p', { class: 'muted ex-meta', text: 'Reported by ' + person(r.by).name + ' (only the handler sees this)' }), acts));
     });
   }
+  function repOf(r) { return DB.reports.filter(function (x) { return x.id === r.id; })[0]; }
+  function keepReport(r) {
+    confirmDlg('Keep this listing?', 'The report is closed and the listing stays exactly as it is. The owner is not told about the report.', 'Keep listing', function () {
+      var rep = repOf(r), l = rep && find(rep.listing); if (!rep || rep.status !== 'open' || !l || l.owner === viewer().id || !viewer().moderator) return stale2();
+      rep.status = 'kept'; toast('Report closed. Listing kept.'); render();
+    });
+  }
+  function hideListing(r) {
+    confirmDlg('Hide this listing?', 'It leaves Browse for everyone but the owner and moderators. Requests on it go on hold, and anyone who asked will see it is not available. The owner is told a moderator hid it. They are not told who reported it.', 'Hide listing', function () {
+      var rep = repOf(r), l = rep && find(rep.listing); if (!rep || rep.status !== 'open' || !l || l.owner === viewer().id || !viewer().moderator || (l.status !== 'available' && l.status !== 'open' && l.status !== 'reserved')) return stale2();
+      l.hiddenFrom = l.status; l.status = 'hidden'; rep.status = 'hidden'; toast('Listing hidden.'); render();
+    });
+  }
+  function restoreListing(r) {
+    confirmDlg('Restore this listing?', 'It returns to how it was before it was hidden, and it shows in Browse again. Requests on it come off hold.', 'Restore listing', function () {
+      var rep = repOf(r), l = rep && find(rep.listing); if (!rep || rep.status !== 'hidden' || !l || l.status !== 'hidden' || l.owner === viewer().id || !viewer().moderator) return stale2();
+      l.status = l.hiddenFrom || (l.kind === 'wanted' ? 'open' : 'available'); delete l.hiddenFrom; rep.status = 'kept'; toast('Listing restored.'); render();
+    });
+  }
+  function stale2() { toast('This report already changed. Showing the latest.'); render(); }
 
   /* ---------- create / edit ---------- */
   function form(l, body, tpl) {

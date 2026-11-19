@@ -38,8 +38,8 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('A2 noindex + CSP connect-src none', await page.$eval('meta[name=robots]', m => m.content.includes('noindex')) && (await page.$eval('meta[http-equiv=Content-Security-Policy]', m => m.content)).includes("connect-src 'none'"), 'meta');
     check('A3 no external requests', log.external.length === 0 && log.requests.every(u => u.startsWith('http://127.0.0.1')), JSON.stringify(log.external));
     check('A4 no page or console errors', log.errors.length === 0 && log.console.length === 0, JSON.stringify([log.errors, log.console]));
-    check('A5 build marker shown', /exchange-preview-step3 · file hash [0-9a-f]{16}/.test(await page.textContent('#pv-build')), await page.textContent('#pv-build'));
-    check('A5b visible Step 3 marker under the banner matches the footer hash', /^Step 3 preview · build [0-9a-f]{8}$/.test((await page.textContent('#pv-step')).trim()) && (await page.textContent('#pv-build')).includes((await page.textContent('#pv-step')).trim().slice(-8)), await page.textContent('#pv-step'));
+    check('A5 build marker shown', /exchange-preview-step4 · file hash [0-9a-f]{16}/.test(await page.textContent('#pv-build')), await page.textContent('#pv-build'));
+    check('A5b visible Step 4 marker under the banner matches the footer hash', /^Step 4 preview · build [0-9a-f]{8}$/.test((await page.textContent('#pv-step')).trim()) && (await page.textContent('#pv-build')).includes((await page.textContent('#pv-step')).trim().slice(-8)), await page.textContent('#pv-step'));
     check('A6 no Hub link, no Appwrite script', !(await page.$('a[href*="index.html"], a[href="../"]')) && !(await page.$('script[src*="appwrite"], script[src*="config.js"]')), 'links');
     check('A7 no native checkbox/radio/file inputs', !(await page.$('input[type=checkbox], input[type=radio], input[type=file], input[type=date]')), 'native');
     await ctx.close(); }
@@ -175,9 +175,9 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('F5 non-moderators have no Reports tab and cannot open it', !(await page.$('a[href="#/reports"]')), 'tab');
     await page.goto(URL_() + '#/reports'); await settle(page); check('F6 reports route is denied for non-moderators', !!(await page.$('.ex-state-denied')), 'denied');
     await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await settle(page);
-    check('F7 moderator sees reports', (await page.$$('.ex-report')).length === 3, 'reports (2 sample + the one Ben just sent)');
+    check('F7 moderator sees reports', (await page.$$('.ex-report')).length === 4, 'reports (3 sample + the one Ben just sent)');
     check('F8 report on moderator\'s own listing shows the conflict state, no actions', (await page.textContent('.ex-report[data-id=p1]')).includes('you cannot review this report') && !(await page.$('.ex-report[data-id=p1] button')), await page.textContent('.ex-report[data-id=p1]'));
-    check('F9 other report shows reporter to the handler only and disabled actions', (await page.$$('.ex-report[data-id=p2] button[disabled]')).length === 2, 'p2'); await shot(page, 'phone-reports');
+    check('F9 other report shows reporter to the handler only, with live Keep and Hide actions', (await page.textContent('.ex-report[data-id=p2]')).includes('Reported by Dana Rowan (only the handler sees this)') && (await page.$$('.ex-report[data-id=p2] button[disabled]')).length === 0 && (await page.$$('.ex-report[data-id=p2] [data-act]')).length === 2, 'p2'); await shot(page, 'phone-reports');
     await who(page, 'ava'); await page.goto(URL_() + '#/listing/l6'); await settle(page);
     check('F10 reporter name never appears on a listing page', !(await page.textContent('main')).includes('Reported by'), 'leak');
     await ctx.close(); }
@@ -391,6 +391,63 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.joi
     check('K34 activity and request rows have no horizontal scroll at 320px', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'ov');
     await page.goto(URL_() + '#/listing/l1'); await page.waitForSelector('.ex-detail'); check('K35 owner request buttons fit at 320px', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'ov2');
     check('K36 dialog titles stay readable on the new dialogs', await (async () => { await page.click('[data-act=decline][data-req=r2]'); await page.waitForSelector('dialog[open]'); return page.$eval('dialog h2', e => getComputedStyle(e).color !== getComputedStyle(e.closest('dialog')).backgroundColor); })(), 'contrast'); await ctx.close(); }
+
+  /* L. Step 4: moderation actions, hidden listings, access cases (sample data only) */
+  { const { ctx, page, log } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await page.waitForSelector('.ex-report');
+    check('L1 moderator sees Keep and Hide on reports about other people\'s listings, none disabled', (await page.$$('.ex-report [data-act=keep]')).length === 2 && (await page.$$('.ex-report [data-act=hide]')).length === 2 && (await page.$$('.ex-report button[disabled]')).length === 0, 'buttons'); await shot(page, 'phone-step4-reports');
+    check('L2 the report on the moderator\'s own listing has no action buttons and says why', (await page.$$('[data-id=p1] button')).length === 0 && (await page.textContent('[data-id=p1]')).includes('you cannot review this report'), 'own');
+    await page.click('[data-rep=p2][data-act=hide]'); await page.waitForSelector('dialog[open]'); const dt = await page.textContent('dialog'); await shot(page, 'phone-step4-hide-confirm');
+    check('L3 hide dialog says who still sees it, requests go on hold, owner not told who reported', dt.includes('leaves Browse') && dt.includes('on hold') && dt.includes('not told who reported it'), dt);
+    await page.click('dialog .btn.secondary'); await settle(page); check('L4 cancel hides nothing', (await dbq(page, db => db.listings.filter(l => l.id === 'l6')[0].status)) === 'available', 'cancel');
+    await page.click('[data-rep=p2][data-act=hide]'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    const h1 = await dbq(page, db => ({ l: db.listings.filter(l => l.id === 'l6')[0].status, r: db.reports.filter(r => r.id === 'p2')[0].status }));
+    check('L5 hiding sets the listing Hidden and the report Hidden', h1.l === 'hidden' && h1.r === 'hidden', JSON.stringify(h1));
+    check('L6 hidden report offers Restore and Open listing, no more Keep/Hide', !!(await page.$('[data-rep=p2][data-act=restore]')) && !(await page.$('[data-rep=p2][data-act=hide]')), 'restore');
+    await page.click('[data-id=p2] a'); await page.waitForSelector('.ex-detail'); check('L7 moderator can open the hidden listing and sees only a banner, no request or report buttons', !!(await page.$('#ex-hidden-mod')) && !(await page.$('#ex-interest')) && !(await page.$('#ex-report')), 'mod view');
+    await who(page, 'ben'); await page.goto(URL_() + '#/browse'); await settle(page); const bt = await titles(page);
+    check('L8 hidden listing is gone from Browse for everyone else', !bt.includes('Baby blankets'), bt.join('|'));
+    await page.goto(URL_() + '#/listing/l6'); await page.waitForSelector('.ex-state'); const hiddenText = await page.textContent('main'); await page.goto(URL_() + '#/listing/zzz'); await page.waitForSelector('.ex-state'); const missingText = await page.textContent('main');
+    check('L9 a direct link to a hidden listing looks exactly like a missing one (no hint it exists)', hiddenText === missingText && !hiddenText.includes('Baby blankets') && !/hidden|moderator/i.test(hiddenText), hiddenText);
+    await who(page, 'ava'); await page.goto(URL_() + '#/listing/l6'); await page.waitForSelector('.ex-detail'); const ot = await detailText(page);
+    check('L10 owner sees the listing with a notice: hidden by a moderator, requests on hold, reporter not named, no edit or lifecycle buttons', !!(await page.$('#ex-hidden-own')) && ot.includes('not told who reported it') && !ot.includes('Dana') && !(await page.$('#ex-edit')) && !(await page.$('#ex-gone')) && !(await page.$('#ex-withdraw')), ot.slice(0, 300)); await shot(page, 'phone-step4-owner-hidden');
+    await page.goto(URL_() + '#/edit/l6'); await page.waitForSelector('.ex-state'); check('L11 owner cannot open the edit form for a hidden listing', !(await page.$('.ex-form')), 'edit');
+    await page.goto(URL_() + '#/activity'); await page.waitForSelector('.ex-actsec'); check('L12 owner activity lists it under Hidden by a moderator', (await page.textContent('#ex-act-hid')) === 'Hidden by a moderator', 'act');
+    await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await page.waitForSelector('.ex-report'); await page.click('[data-rep=p2][data-act=restore]'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    const rs = await dbq(page, db => ({ l: db.listings.filter(l => l.id === 'l6')[0].status, r: db.reports.filter(r => r.id === 'p2')[0].status }));
+    check('L13 restore returns the listing to how it was (Available) and closes the report', rs.l === 'available' && rs.r === 'kept', JSON.stringify(rs));
+    await page.click('[data-rep=p3][data-act=keep]'); await page.waitForSelector('dialog[open]'); check('L14 keep dialog says the listing stays and the owner is not told', (await page.textContent('dialog')).includes('stays exactly as it is') && (await page.textContent('dialog')).includes('not told about the report'), 'keep'); await dlgBtn(page); await settle(page);
+    const kp = await dbq(page, db => ({ l: db.listings.filter(l => l.id === 'l2')[0].status, r: db.reports.filter(r => r.id === 'p3')[0].status }));
+    check('L15 keep closes the report and changes nothing on the listing', kp.l === 'available' && kp.r === 'kept', JSON.stringify(kp));
+    check('L16 no network and no page errors through moderation', log.external.length === 0 && log.errors.length === 0, JSON.stringify([log.external, log.errors])); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'ben');
+    await page.goto(URL_() + '#/listing/l3'); await page.waitForSelector('.ex-detail'); await who(page, 'dana'); await page.goto(URL_() + '#/listing/l1');
+    /* hiding a reserved listing: the reserved person loses sight of it, reservation is kept for restore */
+    await dbq(page, db => { db.reports.push({ id: 'p9', listing: 'l3', by: 'ben', reason: 'Other', detail: '', ago: 'Just now', status: 'open' }); });
+    await who(page, 'ava'); await dbq(page, db => { db.reports.push({ id: 'p8', listing: 'l7', by: 'ava', reason: 'Other', detail: '', ago: 'Just now', status: 'open' }); });
+    await who(page, 'dana'); await page.goto(URL_() + '#/browse'); await page.goto(URL_() + '#/reports'); await page.waitForSelector('.ex-report');
+    check('L17 a report on Dana\'s own reserved lantern or bike cannot be acted on by Dana', (await page.$$('[data-id=p8] button')).length === 0 && (await page.$$('[data-id=p9] button')).length === 0, 'own');
+    await dbq(page, db => { db.listings.filter(l => l.id === 'l3')[0].owner = 'ava'; }); await page.goto(URL_() + '#/browse'); await page.goto(URL_() + '#/reports'); await page.waitForSelector('.ex-report');
+    await page.click('[data-rep=p9][data-act=hide]'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    const st = await dbq(page, db => { const l = db.listings.filter(x => x.id === 'l3')[0]; return { s: l.status, f: l.reservedFor, req: db.requests.filter(r => r.id === 'r3')[0].status }; });
+    check('L18 hiding a reserved listing keeps the reservation data for a later restore', st.s === 'hidden' && st.f === 'ben' && st.req === 'reserved', JSON.stringify(st));
+    await who(page, 'ben'); await page.goto(URL_() + '#/activity'); await page.waitForSelector('.ex-actsec'); const at = await page.textContent('main');
+    check('L19 the reserved person no longer sees the hidden listing in My activity (no title leak)', !at.includes('20-inch kids bike'), at.slice(0, 300));
+    await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await page.waitForSelector('.ex-report'); await page.click('[data-rep=p9][data-act=restore]'); await page.waitForSelector('dialog[open]'); await dlgBtn(page); await settle(page);
+    const st2 = await dbq(page, db => { const l = db.listings.filter(x => x.id === 'l3')[0]; return { s: l.status, f: l.reservedFor }; });
+    check('L20 restoring brings back Reserved for the same person', st2.s === 'reserved' && st2.f === 'ben', JSON.stringify(st2)); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await page.waitForSelector('.ex-report');
+    await page.click('[data-rep=p2][data-act=hide]'); await page.waitForSelector('dialog[open]');
+    await dbq(page, db => { db.listings.filter(l => l.id === 'l6')[0].status = 'gone'; });
+    await dlgBtn(page); await settle(page); await page.waitForTimeout(100);
+    const sg = await dbq(page, db => ({ l: db.listings.filter(l => l.id === 'l6')[0].status, r: db.reports.filter(r => r.id === 'p2')[0].status }));
+    check('L21 stale moderation: if the listing changed behind the dialog, nothing is hidden and the latest is shown', sg.l === 'gone' && sg.r === 'open' && (await page.textContent('#toasts')).includes('already changed'), JSON.stringify(sg)); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { hash: '#/browse' });
+    for (const id of ['cleo', 'eli']) { await who(page, id); await page.goto(URL_() + '#/listing/l1'); await settle(page); const t = await page.textContent('main');
+      check('L22 ' + id + ' (ineligible) opening a direct link sees only the not-available state, no listing and no reason', t.includes('not available for this account') && !t.includes('Oak bookshelf') && !/restrict|unclassified|removed/i.test(t), t); }
+    await who(page, 'ava'); await page.goto(URL_() + '#/reports'); await settle(page); check('L23 a non-moderator opening the Reports link is refused', (await page.textContent('main')).includes('not available for this account') || (await page.textContent('main')).includes('Reports are not available'), 'non-mod');
+    await cond(page, 'denied'); await page.goto(URL_() + '#/listing/l1'); await settle(page); check('L24 access removed mid-session (server says no access) shows a calm denied state and changes nothing', !!(await page.$('.ex-state-denied')) && (await page.textContent('main')).includes('Nothing was changed'), 'denied'); await shot(page, 'phone-step4-denied'); await ctx.close(); }
+  { const { ctx, page } = await open(browser, { w: 320, h: 700, hash: '#/browse' }); await who(page, 'dana'); await page.goto(URL_() + '#/reports'); await page.waitForSelector('.ex-report');
+    check('L25 reports screen has no horizontal scroll at 320px', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'ov'); await ctx.close(); }
 
   /* G. layout + themes + keyboard */
   { const { ctx, page } = await open(browser, { w: 320, h: 700, hash: '#/listing/l2' });

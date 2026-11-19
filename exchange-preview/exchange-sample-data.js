@@ -55,8 +55,9 @@
     { id: 'r4', listing: 'w1', from: 'ava', note: 'I have six cages in the shed.', status: 'waiting', ago: '20 hours ago', offer: true }
   ];
   var REPORTS = [
-    { id: 'p1', listing: 'l5', by: 'ben', reason: 'Item looks unsafe', detail: 'The height lever seems loose.', ago: '10 hours ago' },
-    { id: 'p2', listing: 'l6', by: 'dana', reason: 'Wrong category', detail: '', ago: '2 days ago' }
+    { id: 'p1', listing: 'l5', by: 'ben', reason: 'Item looks unsafe', detail: 'The height lever seems loose.', ago: '10 hours ago', status: 'open' },
+    { id: 'p2', listing: 'l6', by: 'dana', reason: 'Wrong category', detail: '', ago: '2 days ago', status: 'open' },
+    { id: 'p3', listing: 'l2', by: 'ava', reason: 'Not allowed on Family Exchange', detail: 'Please check the rules.', ago: '1 hour ago', status: 'open' }
   ];
   window.ExchangeSample = { PHOTOS: PHOTOS, VIEWERS: VIEWERS, LISTINGS: LISTINGS, REQUESTS: REQUESTS, REPORTS: REPORTS, FAMILY: 'Rowan family (sample)' };
 })();

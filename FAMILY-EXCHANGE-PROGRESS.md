@@ -7,7 +7,7 @@ Update this file at every step. Continue by step number. Nothing here enables Ex
 - [x] Step 1: merged as 39a103e; her manual checks passed (reported 2026-11-18). Dialog-title contrast fix confirmed in Step 2 build. Path: /FamilyCircle/exchange-preview/
 - [x] Step 2: listing lifecycle merged as c16cef8; her manual checks passed (reported 2026-11-18)
 - [x] Step 3: merged as 931ac3d; her manual checks passed (reported 2026-11-19). Sample rules only, see "Step 3" below.
-- [ ] Step 4: safety and access simulation
+- [~] Step 4: safety and access simulation built on branch `exchange-step4`, NOT merged; needs her approval of the exact commit
 - [ ] Step 5: real backend design gate (needs approval)
 - [ ] Step 6: approved backend implementation (branch only, production disabled)
 - [ ] Step 7: external changes and dedicated live tests (each needs separate approval)
@@ -58,3 +58,11 @@ Lending, due dates, deposits, returns; optional priced listings; priced family-s
 - New "My activity" tab: Needs your reply, Reserved by you, Your requests.
 - Every action re-reads current state first (stale-screen guard). Nothing is sent: no notifications, no messages.
 - Still undecided for production: re-request after decline, notifications, timeouts for unanswered requests, what Messages integration looks like.
+
+## Step 4 (2026-11-19), preview only, sample rules, not production policy
+- Simulated moderator (Dana) can Keep or Hide a reported listing, and Restore a hidden one. Never on her own listing (existing rule kept).
+- Hidden: leaves Browse; only the owner and moderators can open it; a direct link looks identical to a missing listing; requests go on hold; a reserved listing keeps its reservation data and returns to Reserved on restore; the owner sees "hidden by a moderator" and is never told who reported it; no editing or lifecycle buttons while hidden.
+- Reported-listing state shown on each report: Open, Kept, Hidden. Keep and Hide re-read state first (stale guard).
+- Access cases: ineligible accounts see only "not available for this account" on any link, with no reason; non-moderators cannot open Reports; "server says no access" shows a calm denied state and changes nothing.
+- Sample quirk: report p2 was filed by Dana, who is also the simulated moderator. Real reporter/handler separation is undecided.
+- Still undecided for production: who moderates, escalation when the owner is the handler, how long moderation records are kept, removed-member data, whether owners get a way to appeal.
