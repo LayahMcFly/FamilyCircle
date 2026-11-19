@@ -46,10 +46,10 @@ export const EXCHANGE_SCHEMA = {
   exchangeListings: { columns: { familyId: 'string(36)', ownerId: 'string(36)', ownerMembership: 'string(36)', kind: 'string(8)', ended: 'boolean' }, unique: [], indexes: [['familyId', 'ended'], ['ownerMembership', 'ended']], note: 'row id = listingId. Create-only hint row. `ended` only ever goes false -> true, after a terminal snapshot exists.' },
   exchangeRequests: { columns: { familyId: 'string(36)', listingId: 'string(36)', requesterId: 'string(36)', requesterMembership: 'string(36)', requestKey: 'string(80)' }, unique: [['requestKey']], indexes: [['listingId'], ['familyId', 'requesterId']], note: 'create-only hint row; requestKey = listingId_membershipId. The request itself lives in the snapshot.' },
   exchangeReports: { columns: { familyId: 'string(36)', listingId: 'string(36)', reporterId: 'string(36)', reporterMembership: 'string(36)', reportKey: 'string(80)' }, unique: [['reportKey']], indexes: [['familyId'], ['familyId', 'reporterId']], note: 'create-only hint row; reportKey = listingId_membershipId. The report itself lives in the snapshot.' },
-  exchangeEvents: { columns: { familyId: 'string(36)', listingId: 'string(36)', seq: 'integer', claimKey: 'string(80)', opKey: 'string(80)', actorId: 'string(36)', kind: 'string(24)', state: 'text(65535 bytes; the code refuses snapshots over 60000 bytes)' }, unique: [['claimKey'], ['opKey']], indexes: [['listingId', 'seq']], note: 'append-only: rows are never updated or deleted. This is the authoritative state.' },
+  exchangeEvents: { columns: { familyId: 'string(36)', listingId: 'string(36)', seq: 'integer', claimKey: 'string(80)', opKey: 'string(80)', actorId: 'string(36)', kind: 'string(24)', state: 'text(65535 bytes; the code refuses snapshots over 60000 bytes)' }, unique: [['claimKey'], ['opKey']], indexes: [['listingId', 'seq'], ['familyId', 'actorId']], note: 'append-only while in use. Rows are never deleted. Only the retention job (not wired to any action, no period set) may blank the state and actorId of rows BELOW the head; the head and every claimKey/opKey stay.' },
   exchangeState: { columns: { familyId: 'string(36)', enabled: 'boolean', enabledBy: 'string(36)', enabledAt: 'string(32)' }, unique: [], indexes: [], note: 'row id = familyId' }
 };
-export const EXCHANGE_LIMITS = { ...R.LIMITS, rawFactor: 2, perMinute: 60, reportsPerDay: 10, reportsPerListing: 20, requestsPerListing: 40, requestEntriesMax: 100, listingsPerMember: 50, homeMax: 300, stateBytesMax: 60000, membershipPagesMax: 50 };
+export const EXCHANGE_LIMITS = { ...R.LIMITS, rawFactor: 2, perMinute: 60, reportsPerDay: 10, reportsPerListing: 20, requestsPerListing: 40, requestEntriesMax: 100, listingsPerMember: 50, homeMax: 300, stateSoftMax: 40000, stateBytesMax: 60000, membershipPagesMax: 50 };
 export const REPORT_REASONS = ['Item looks unsafe or recalled', 'Not allowed on Family Exchange', 'Wrong category', 'Looks like spam or a scam', 'Other'];
 const LIVE = ['available', 'open', 'reserved'];
 const FINISHED = ['gone', 'fulfilled', 'closed'];
@@ -57,7 +57,7 @@ const TERMINAL = [...FINISHED, 'withdrawn'];   // after one of these nothing abo
 const DAY = 864e5;
 
 export function createExchange(deps) {
-  const { teams, listRows, createRow, updateRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, ApiError, sdkCode, now, profilesTable } = deps;
+  const { teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, ApiError, sdkCode, now, profilesTable } = deps;
   /* Fail closed. A missing hook means nobody is eligible, nobody moderates, and persistence has not been verified. */
   const eligibility = typeof deps.eligibility === 'function' ? deps.eligibility : async () => false;
   const moderators = typeof deps.moderators === 'function' ? deps.moderators : async () => [];
@@ -164,21 +164,21 @@ export function createExchange(deps) {
     if (!row) return null;
     const s = parse(row.state);
     if (!s || s.v !== 1 || !Array.isArray(s.reqs) || !Array.isArray(s.reps)) return null;
-    return { ...s, $id: listingId, seq: row.seq };
+    return { ...s, $id: listingId, seq: row.seq, bytes: Buffer.byteLength(row.state) };
   }
   async function headsOf(ids) {
     const uniq = [...new Set(ids)], out = new Map();
     for (let i = 0; i < uniq.length; i += 8) await Promise.all(uniq.slice(i, i + 8).map(async (id) => { out.set(id, await head(id)); }));
     return out;
   }
-  const snapshot = (s) => { const { $id, seq, ...rest } = s; return JSON.stringify(rest); };
+  const snapshot = (s) => { const { $id, seq, bytes, ...rest } = s; return JSON.stringify(rest); };
   async function noteEnded(s) {
     if (!TERMINAL.includes(s.status)) return;
     try { await updateRow(T.listings, s.id, { ended: true }); } catch (e) { /* a hint only; a missing flag over-counts, never under-counts, and is repaired when next counted */ }
   }
   /** build(head) validates against the FRESH head and returns { state, info }. It must throw instead of returning when the change is not allowed.
    *  The only write is the claim: one atomic insert. There is nothing to apply, repair or fence afterwards. */
-  async function mutate(c, listingId, opId, kind, build) {
+  async function mutate(c, listingId, opId, kind, build, { grows = false } = {}) {
     const opKey = listingId + '_' + opId;
     for (let attempt = 0; attempt < 5; attempt++) {
       const dup = await firstRow(T.events, [Query.equal('opKey', [opKey])]);
@@ -187,7 +187,11 @@ export function createExchange(deps) {
       if (!h || h.familyId !== c.familyId) throw NA();
       const out = await build(h);
       const next = out.state, seq = h.seq + 1, body = snapshot({ ...next, v: 1, id: listingId, familyId: c.familyId });
-      if (Buffer.byteLength(body) > L.stateBytesMax) throw new ApiError(409, 'limit', 'This listing has grown too large to change.');
+      /* Size policy. A change that ADDS content (a request, a report, a longer edit) is admitted only up to the soft cap, which leaves headroom below the hard cap
+       * for the safety actions (withdraw, close, release, decline, cancel, moderate, discard). Those change only short status words, so they stay far below the headroom.
+       * A change that does not make the snapshot larger is never refused for size. */
+      const bytes = Buffer.byteLength(body), cap = grows ? L.stateSoftMax : L.stateBytesMax;
+      if (bytes > cap && bytes > h.bytes) throw new ApiError(409, 'limit', grows ? 'This listing is too full to add to. Existing items can still be changed or ended.' : 'This listing has grown too large to change.');
       try {
         await createRow(T.events, newId(), { familyId: c.familyId, listingId, seq, claimKey: listingId + '_' + seq, opKey, actorId: c.me, kind, state: body }, []);
       } catch (e) {
@@ -237,15 +241,14 @@ export function createExchange(deps) {
   }
   async function fresh(c, listingId) { const { s, mine, myReq } = await reachable(c, listingId); return { listing: detail(c, s, mine, myReq) }; }
 
-  /** Create-only hint rows. Getting one that already exists is not an error: the hint can only point at a listing, it never grants a right. */
-  async function ensureHint(table, key, keyField, row, preferredId) {
-    try { return await createRow(table, preferredId, { ...row, [keyField]: key }, []); }
-    catch (e) {
-      if (sdkCode(e) !== 409) throw e;
-      const existing = await firstRow(table, [Query.equal(keyField, [key])]);
-      if (existing) return existing;
-      return createRow(table, newId(), { ...row, [keyField]: key }, []);
-    }
+  /** Create-only hint rows with DETERMINISTIC ids (a hash of the key), so a hint that was swept or lost is recreated with the same id and a retry always lines up with its snapshot entry.
+   *  A hint can only point at a listing. It never grants a right: every right is read from the snapshot. */
+  const hintId = (prefix, key) => prefix + createHash('sha256').update(key).digest('hex').slice(0, 34);
+  async function ensureHint(table, key, keyField, row, prefix) {
+    const id = hintId(prefix, key);
+    try { await createRow(table, id, { ...row, [keyField]: key }, []); }
+    catch (e) { if (sdkCode(e) !== 409) throw e; }
+    return { $id: id };
   }
   /** Live listings this membership still owns. Counts the real state, so finishing or withdrawing a listing frees a place at once. Soft under simultaneous creates. */
   async function activeCount(c) {
@@ -255,7 +258,7 @@ export function createExchange(deps) {
     let n = 0;
     for (const r of rows) {
       const s = heads.get(r.$id);
-      if (!s) continue;                                   // a hint with no snapshot is not a listing
+      if (!s || s.ownerId !== c.me || s.ownerM !== c.mid) continue;   // a hint with no snapshot, or one that does not match the snapshot's owner, is not a listing of mine
       if (TERMINAL.includes(s.status)) { await noteEnded(s); continue; }
       n++;
     }
@@ -305,7 +308,9 @@ export function createExchange(deps) {
           catch (e) { if (sdkCode(e) !== 409) throw e; }
         }
         const first = { v: 1, id, familyId: c.familyId, ownerId: c.me, ownerM: c.mid, kind, status: publish ? initialStatus(kind) : 'draft', rev: 1, hiddenFrom: '', data: d, pending: null, reqs: [], resv: null, reps: [] };
-        try { await createRow(T.events, newId(), { familyId: c.familyId, listingId: id, seq: 1, claimKey: id + '_1', opKey: id + '_' + opId, actorId: c.me, kind: 'create', state: snapshot(first) }, []); }
+        const firstBody = snapshot(first);
+        if (Buffer.byteLength(firstBody) > L.stateSoftMax) throw bad('That listing is too large.');
+        try { await createRow(T.events, newId(), { familyId: c.familyId, listingId: id, seq: 1, claimKey: id + '_1', opKey: id + '_' + opId, actorId: c.me, kind: 'create', state: firstBody }, []); }
         catch (e) { if (sdkCode(e) !== 409) throw e; }
         return { ...(await fresh(c, id)), saved: publish ? 'published' : 'draft' };
       }
@@ -323,7 +328,7 @@ export function createExchange(deps) {
           return { state: s, info: { saved: 'private', blocked: publish, materialChanges: material } };
         }
         throw new ApiError(409, 'not_editable', 'This listing cannot be edited now.');
-      });
+      }, { grows: true });
       return { ...(await fresh(c, s0.id)), ...(res.info || {}) };
     },
     async exchangeListingDiscardPending({ user, body }) {
@@ -352,7 +357,7 @@ export function createExchange(deps) {
       const c = await context(user, body.familyId), opId = opIdOf(body), { s: s0, mine } = await reachable(c, body.listingId);
       if (mine) throw bad('You cannot ask for your own listing.');
       const note = noteOf(body.note);
-      const hint = await ensureHint(T.requests, s0.id + '_' + c.mid, 'requestKey', { familyId: c.familyId, listingId: s0.id, requesterId: c.me, requesterMembership: c.mid }, 'q' + opId);
+      const hint = await ensureHint(T.requests, s0.id + '_' + c.mid, 'requestKey', { familyId: c.familyId, listingId: s0.id, requesterId: c.me, requesterMembership: c.mid }, 'q');
       await mutate(c, s0.id, opId, 'ask', async (s) => {
         if (!ownerValid(c, s) || s.ownerId === c.me) throw NA();
         if (!LIVE.includes(s.status)) throw changed();
@@ -367,7 +372,7 @@ export function createExchange(deps) {
         if (open >= L.requestsPerListing || s.reqs.length >= L.requestEntriesMax) throw new ApiError(409, 'limit', 'This listing has reached the most requests it can take.');
         s.reqs.push({ id: hint.$id, uid: c.me, m: c.mid, st: 'waiting', note, at: iso() });
         return { state: s };
-      });
+      }, { grows: true });
       return fresh(c, s0.id);
     },
     async exchangeRequestCancel({ user, body }) {
@@ -480,7 +485,7 @@ export function createExchange(deps) {
         const today = (await inFamily(T.reports, c.familyId, [Query.equal('reporterId', [c.me])], 300)).filter((r) => Date.parse(r.$createdAt) > now() - DAY).length;
         if (today >= L.reportsPerDay) throw new ApiError(429, 'rate_limited', 'You have sent the most reports allowed for today.');
       }
-      const hint = had || await ensureHint(T.reports, key, 'reportKey', { familyId: c.familyId, listingId: s.id, reporterId: c.me, reporterMembership: c.mid }, newId());
+      const hint = await ensureHint(T.reports, key, 'reportKey', { familyId: c.familyId, listingId: s.id, reporterId: c.me, reporterMembership: c.mid }, 'p');
       const opId = 'r' + createHash('sha256').update(c.mid).digest('hex').slice(0, 20);   // one report per membership per listing, however many times it is sent
       const res = await mutate(c, s.id, opId, 'report', async (h) => {
         if (!ownerValid(c, h) || h.ownerId === c.me) throw NA();
@@ -488,7 +493,7 @@ export function createExchange(deps) {
         if (h.reps.length >= L.reportsPerListing) throw new ApiError(409, 'limit', 'This listing has already been reported by several people.');
         h.reps.push({ id: hint.$id, uid: c.me, m: c.mid, reason: body.reason, detail, st: 'open', by: '', at: iso() });
         return { state: h };
-      }).catch((e) => { if (e && e.code === 'already') return { replay: true }; throw e; });
+      }, { grows: true }).catch((e) => { if (e && e.code === 'already') return { replay: true }; throw e; });
       return res.replay ? { sent: true, already: true } : { sent: true };
     },
     async exchangeReportList({ user, body }) {
@@ -526,5 +531,74 @@ export function createExchange(deps) {
       return { ok: true };
     }
   };
-  return { actions, EXCHANGE_TABLES, context };
+
+  /* ---------- retention primitives: NOT wired to any action, NO period is set here, nothing runs by itself ----------
+   * Until a person decides retention and triggers these, every snapshot is kept. See EXCHANGE-SCHEMA-PROPOSAL.md "Retention and deletion". */
+  const SYSTEM = (familyId) => ({ familyId, me: 'system' });
+  const blank = (s) => { s.data = { title: '', category: '', condition: '', description: '', area: '' }; s.pending = null; };
+  /** Append a snapshot that removes personal content, closing the listing if it is still live. Goes through the same claim as everything else. */
+  async function erase(familyId, listingId, opId) {
+    return mutate(SYSTEM(familyId), listingId, opId, 'erase', async (s) => {
+      for (const r of s.reqs) { r.note = ''; if (r.st === 'waiting' || r.st === 'reserved') r.st = 'closed'; }
+      for (const r of s.reps) { r.detail = ''; r.reason = ''; }
+      s.resv = null; s.hiddenFrom = ''; blank(s);
+      if (!TERMINAL.includes(s.status)) s.status = 'withdrawn';
+      s.rev++;
+      return { state: s };
+    });
+  }
+  /** Blank the state of every row BELOW the head. The head, and every claimKey and opKey, stay, so a stale writer is still refused and a replayed opId is still a no-op. */
+  async function blankHistory(familyId, listingId, { actorId = '' } = {}) {
+    const h = await head(listingId);
+    if (!h || h.familyId !== familyId) return 0;
+    const rows = await all(T.events, [Query.equal('listingId', [listingId])], 100000);
+    let n = 0;
+    for (const r of rows) {
+      if (r.seq >= h.seq) continue;
+      const patch = {}; if (r.state !== '{}') patch.state = '{}'; if (actorId && r.actorId === actorId) patch.actorId = 'erased';
+      if (Object.keys(patch).length) { await updateRow(T.events, r.$id, patch); n++; }
+    }
+    return n;
+  }
+  /** Remove one person's content everywhere in a family: their listings are erased, their notes and report details are blanked and their account id replaced, then history is blanked. */
+  async function redactMember(familyId, userId, opTag) {
+    if (typeof opTag !== 'string' || !/^[A-Za-z0-9]{6,12}$/.test(opTag)) throw bad('opTag is not valid.');
+    const hintRows = [
+      ...(await inFamily(T.listings, familyId, [Query.equal('ownerId', [userId])], 5000)).map((r) => r.$id),
+      ...(await inFamily(T.requests, familyId, [Query.equal('requesterId', [userId])], 5000)).map((r) => r.listingId),
+      ...(await inFamily(T.reports, familyId, [Query.equal('reporterId', [userId])], 5000)).map((r) => r.listingId),
+      ...(await inFamily(T.events, familyId, [Query.equal('actorId', [userId])], 20000)).map((r) => r.listingId)
+    ];
+    const done = [];
+    for (const id of new Set(hintRows)) {
+      const h = await head(id);
+      if (!h || h.familyId !== familyId) continue;
+      const opId = 'x' + createHash('sha256').update(opTag + id).digest('hex').slice(0, 20);
+      if (h.ownerId === userId) { await erase(familyId, id, opId); await mutate(SYSTEM(familyId), id, opId + 'o', 'erase-owner', async (s) => { s.ownerId = 'erased'; s.ownerM = 'erased'; return { state: s }; }); }
+      else await mutate(SYSTEM(familyId), id, opId, 'erase-member', async (s) => {
+        for (const r of s.reqs) if (r.uid === userId) { r.note = ''; r.uid = 'erased'; if (r.st === 'waiting') r.st = 'cancelled'; if (r.st === 'reserved') { r.st = 'cancelled'; s.resv = null; s.status = initialStatus(s.kind); } }
+        for (const r of s.reps) if (r.uid === userId) { r.detail = ''; r.uid = 'erased'; }
+        if (s.resv && s.resv.uid === userId) { s.resv = null; if (s.status === 'reserved') s.status = initialStatus(s.kind); }
+        s.rev++;
+        return { state: s };
+      });
+      await blankHistory(familyId, id, { actorId: userId });
+      done.push(id);
+    }
+    for (const t of [T.requests, T.reports]) for (const r of await inFamily(t, familyId, [Query.equal(t === T.requests ? 'requesterId' : 'reporterId', [userId])], 5000)) { try { await deleteRow(t, r.$id); } catch (e) { if (sdkCode(e) !== 404) throw e; } }
+    for (const r of await inFamily(T.listings, familyId, [Query.equal('ownerId', [userId])], 5000)) { try { await updateRow(T.listings, r.$id, { ownerId: 'erased', ownerMembership: 'erased', ended: true }); } catch (e) { /* hint only */ } }
+    return { listings: done.length };
+  }
+  /** Delete hints that never reached a snapshot. A window is REQUIRED (no default) and may not be under an hour, so a retry that is still in flight is never undone. */
+  async function sweepHints(familyId, olderThanMs) {
+    if (!Number.isFinite(olderThanMs) || olderThanMs < 3600000) throw bad('olderThanMs must be at least one hour and is never defaulted.');
+    const cutoff = now() - olderThanMs, removed = { listings: 0, requests: 0, reports: 0 };
+    const old = async (t) => (await inFamily(t, familyId, [], 20000)).filter((r) => Date.parse(r.$createdAt) < cutoff);
+    const gone = async (t, id) => { try { await deleteRow(t, id); return 1; } catch (e) { if (sdkCode(e) === 404) return 0; throw e; } };
+    for (const r of await old(T.listings)) if (!(await head(r.$id))) removed.listings += await gone(T.listings, r.$id);
+    for (const r of await old(T.requests)) { const s = await head(r.listingId); if (!s || !s.reqs.some((x) => x.id === r.$id)) removed.requests += await gone(T.requests, r.$id); }
+    for (const r of await old(T.reports)) { const s = await head(r.listingId); if (!s || !s.reps.some((x) => x.id === r.$id)) removed.reports += await gone(T.reports, r.$id); }
+    return removed;
+  }
+  return { actions, EXCHANGE_TABLES, context, retention: { erase, blankHistory, redactMember, sweepHints } };
 }

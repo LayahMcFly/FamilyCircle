@@ -71,12 +71,13 @@ function makeWorld({ eligible = () => true, mods = () => [], enabled = true, ext
     },
     async updateRow(tableId, rowId, data) {
       await guard('update', tableId, rowId, data);
-      if (tableId === T.events) throw err(500, 'the event chain is append-only');
+      if (tableId === T.events && !(Object.keys(data).every((k) => k === 'state' || k === 'actorId') && (data.state === undefined || data.state === '{}') && (data.actorId === undefined || data.actorId === 'erased'))) throw err(500, 'the event chain is append-only; only the retention job may blank state or actorId');
       const s = schema(tableId), row = w.tables[tableId].get(rowId);
       if (!row) throw err(404, 'nope');
       if (s) for (const k of Object.keys(data)) if (!(k in s.columns)) throw err(400, 'Unknown column ' + k);
       Object.assign(row, data); return { ...row };
     },
+    async deleteRow(tableId, rowId) { await guard('delete', tableId, rowId); if (tableId === T.events) throw err(500, 'event rows are never deleted'); if (!w.tables[tableId].delete(rowId)) throw err(404, 'nope'); return {}; },
     async getRowOrNull(tableId, rowId) { await guard('get', tableId, rowId); const r = w.tables[tableId].get(rowId); return r ? { ...r } : null; },
     async firstRow(tableId, queries) {
       await guard('list', tableId);
@@ -128,11 +129,11 @@ const invariant = (w, id) => {
   const h = w.head(id), events = w.events(id);
   const reserved = h.reqs.filter((r) => r.st === 'reserved');
   assert.ok(reserved.length <= 1, 'at most one reserved request');
-  if (h.status === 'reserved') { assert.ok(h.resv); assert.equal(reserved.length, 1); assert.equal(h.resv.rid, reserved[0].id); assert.equal(h.resv.uid, reserved[0].uid); assert.equal(h.resv.m, reserved[0].m); }
+  if (h.status === 'reserved' || (h.status === 'hidden' && h.hiddenFrom === 'reserved')) { assert.ok(h.resv); assert.equal(reserved.length, 1); assert.equal(h.resv.rid, reserved[0].id); assert.equal(h.resv.uid, reserved[0].uid); assert.equal(h.resv.m, reserved[0].m); }
   else { assert.equal(h.resv, null); assert.equal(reserved.length, 0); }
   if (['gone', 'withdrawn', 'closed', 'fulfilled'].includes(h.status)) assert.ok(h.reqs.every((r) => r.st !== 'waiting' && r.st !== 'reserved'), 'no open request on an ended listing');
   events.forEach((e, i) => assert.equal(e.seq, i + 1, 'claims are gap-free'));
-  const revs = events.map((e) => JSON.parse(e.state).rev); revs.forEach((r, i) => i && assert.ok(r >= revs[i - 1], 'content revision never goes backwards'));
+  const revs = events.filter((e) => e.state !== '{}').map((e) => JSON.parse(e.state).rev); revs.forEach((r, i) => i && assert.ok(r >= revs[i - 1], 'content revision never goes backwards'));
 };
 
 /* ---------- fail closed ---------- */
@@ -687,9 +688,9 @@ test('photos, contact details, addresses and long text are refused; request note
   assert.equal(await status(w.call('exchangeRequestCreate', 'ava', { listingId: s.id, note: '', opId: w.oid() })), 400, 'not your own');
   assert.equal(await status(w.call('exchangeRequestCreate', 'cleo', { listingId: s.id, note: '', opId: 'bad id!' })), 400, 'bad opId');
 });
-test('a snapshot that would grow past the size guard is refused instead of truncated', async () => {
+test('a request that would grow a snapshot past the soft cap is refused instead of truncated', async () => {
   const w = makeWorld(); const s = await seed(w);
-  await withLimit('stateBytesMax', Buffer.byteLength(w.events(s.id).pop().state) + 100, async () => {
+  await withLimit('stateSoftMax', Buffer.byteLength(w.events(s.id).pop().state) + 100, async () => {
     assert.equal(await code(w.call('exchangeRequestCreate', 'cleo', { listingId: s.id, note: 'x'.repeat(250), opId: w.oid() })), 'limit');
   });
 });
@@ -713,4 +714,247 @@ test('the schema the code expects declares every unique key the design relies on
   assert.deepEqual(EXCHANGE_SCHEMA.exchangeReports.unique, [['reportKey']]);
   assert.equal(EXCHANGE_SCHEMA.exchangeReservations, undefined, 'there is no mutable reservation table any more');
   for (const t of ['exchangeListings', 'exchangeRequests', 'exchangeReports']) assert.ok(/ownerMembership|requesterMembership|reporterMembership/.test(Object.keys(EXCHANGE_SCHEMA[t].columns).join()), t + ' binds a membership id');
+});
+
+/* ======================= snapshot size: safety actions must always fit ======================= */
+const cjk = (n) => '漢'.repeat(n), emoji = (n) => '😀'.repeat(Math.floor(n / 2));   // n counts UTF-16 units, which is what the length limits count
+const maxFree = (o = {}) => free({ title: cjk(80), description: cjk(1000), area: cjk(60), ...o });
+const bytesOf = (w, id) => Buffer.byteLength(w.events(id).pop().state);
+/* build a listing at the soft cap: maximum data, as many maximum-size reports as allowed, then maximum-size requests until the size cap refuses one */
+async function fillToCap(w, text) {
+  const id = (await w.call('exchangeListingSave', 'ava', { ...maxFree(), publish: true, opId: w.oid() })).listing.id;
+  let reports = 0, asked = [];
+  for (let i = 30; i < 55; i++) { try { await w.call('exchangeReport', 'u' + i, { listingId: id, reason: 'Item looks unsafe or recalled', detail: text(300) }); reports++; } catch (e) { if (e.code === 'limit') break; throw e; } }
+  for (let i = 0; i < 30; i++) { try { await w.call('exchangeRequestCreate', 'u' + i, { listingId: id, note: text(300), opId: w.oid() }); asked.push('u' + i); } catch (e) { if (e.code === 'limit') break; throw e; } }
+  return { id, reports, asked };
+}
+for (const [label, text] of [['multibyte CJK text', cjk], ['four-byte emoji text', emoji]]) {
+  test(`SIZE (${label}): at the cap, growth is refused but every safety action still works and stays under the hard cap`, async () => {
+    const w = makeWorld({ extra: 60, mods: () => ['dana'] });
+    const { id, reports, asked } = await fillToCap(w, text);
+    const full = bytesOf(w, id), S = EXCHANGE_LIMITS;
+    assert.ok(full > S.stateSoftMax - 1400 && full <= S.stateSoftMax, 'filled to the soft cap: ' + full);
+    assert.ok(full > JSON.parse(w.events(id).pop().state).reqs.length * 100, 'multibyte content really counted in bytes');
+    assert.ok(Buffer.byteLength(text(300)) > 300 * 1.9, 'the test text is multibyte');
+    assert.ok(reports >= 10 && asked.length >= 10 && asked.length < S.requestsPerListing, `a real history: ${reports} reports, ${asked.length} requests, limited by size not by count`);
+    assert.equal(await code(w.call('exchangeRequestCreate', 'u59', { listingId: id, note: text(300), opId: w.oid() })), 'limit', 'a new request is refused');
+    assert.equal(await code(w.call('exchangeReport', 'u29', { listingId: id, reason: 'Item looks unsafe or recalled', detail: text(300) })), 'limit', 'a new report is refused');
+    let max = full, maxDelta = 0, last = full;
+    const step = async (name, p) => { await p; const b = bytesOf(w, id); max = Math.max(max, b); maxDelta = Math.max(maxDelta, b - last); last = b; assert.ok(b <= S.stateBytesMax, name + ' stayed under the hard cap: ' + b); invariant(w, id); };
+    const view = async () => (await w.call('exchangeListingGet', 'ava', { listingId: id })).listing;
+    const reqOf = async (n) => (await view()).requests.find((r) => r.from === 'User ' + n.slice(1)).id;
+    const shortEdit = free({ description: 'Shorter.' });
+    await step('a shrinking edit is allowed', w.call('exchangeListingSave', 'ava', { ...shortEdit, listingId: id, rev: (await view()).rev, publish: true, opId: w.oid() }));
+    assert.ok(bytesOf(w, id) < full - 2000, 'shrinking freed room');
+    await step('decline', w.call('exchangeRequestDecline', 'ava', { listingId: id, requestId: await reqOf(asked[0]), opId: w.oid() }));
+    await step('reserve', w.call('exchangeReserve', 'ava', { listingId: id, requestId: await reqOf(asked[1]), opId: w.oid() }));
+    const open = (await w.call('exchangeReportList', 'dana')).reports.filter((r) => r.status === 'open');
+    await step('hide (moderation)', w.call('exchangeReportResolve', 'dana', { reportId: open[0].id, decision: 'hide', opId: w.oid() }));
+    await step('restore (moderation)', w.call('exchangeReportResolve', 'dana', { reportId: open[0].id, decision: 'restore', opId: w.oid() }));
+    await step('keep (moderation)', w.call('exchangeReportResolve', 'dana', { reportId: open[1].id, decision: 'keep', opId: w.oid() }));
+    await step('recipient backs out', w.call('exchangeCancelReservation', asked[1], { listingId: id, opId: w.oid() }));
+    await step('reserve again', w.call('exchangeReserve', 'ava', { listingId: id, requestId: await reqOf(asked[2]), opId: w.oid() }));
+    await step('release', w.call('exchangeRelease', 'ava', { listingId: id, opId: w.oid() }));
+    await step('an applicant cancels', w.call('exchangeRequestCancel', asked[3], { listingId: id, opId: w.oid() }));
+    await step('withdraw', w.call('exchangeListingEnd', 'ava', { listingId: id, to: 'withdrawn', opId: w.oid() }));
+    assert.equal(w.head(id).status, 'withdrawn');
+    assert.ok(S.stateBytesMax - S.stateSoftMax >= 10 * Math.max(maxDelta, 1), `headroom ${S.stateBytesMax - S.stateSoftMax} is at least 10x the largest single safety growth ${maxDelta}`);
+    assert.ok(S.stateBytesMax <= 65535, 'under the column limit with margin');
+  });
+}
+test('SIZE: withdrawing is the first thing tried at the cap, and it works', async () => {
+  const w = makeWorld({ extra: 60, mods: () => ['dana'] }); const { id } = await fillToCap(w, cjk);
+  await w.call('exchangeListingEnd', 'ava', { listingId: id, to: 'withdrawn', opId: w.oid() });
+  assert.equal(w.head(id).status, 'withdrawn'); invariant(w, id);
+});
+test('SIZE: a long random run of safety actions on a full listing never fails for size and never passes the hard cap', async () => {
+  const w = makeWorld({ extra: 60, mods: () => ['dana'] }); const { id, asked } = await fillToCap(w, cjk);
+  let x = 12345; const rnd = (n) => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return Math.abs(x) % n; };
+  const ok = new Set(['changed', 'not_available', 'recipient_unavailable']); let done = 0, maxB = 0; const errs = {};
+  for (let i = 0; i < 160; i++) {
+    w.clock += 8000;   // keep the per-minute brake out of the way
+    const who = asked[rnd(asked.length)], view = (await w.call('exchangeListingGet', 'ava', { listingId: id }).catch(() => null));
+    const ids = view ? view.listing.requests.map((r) => r.id) : [], pick = () => ids[rnd(ids.length)] || 'nosuch';
+    const reps = (await w.call('exchangeReportList', 'dana')).reports, rep = reps[rnd(Math.max(reps.length, 1))];
+    if (w.head(id).status === 'hidden') { const hr = reps.find((r) => r.status === 'hidden'); await w.call('exchangeReportResolve', 'dana', { reportId: hr.id, decision: 'restore', opId: w.oid() }); done++; continue; }   // a moderator restores
+    const ops = [
+      () => w.call('exchangeReserve', 'ava', { listingId: id, requestId: pick(), opId: w.oid() }),
+      () => w.call('exchangeRelease', 'ava', { listingId: id, opId: w.oid() }),
+      () => w.call('exchangeCancelReservation', who, { listingId: id, opId: w.oid() }),
+      () => w.call('exchangeRequestDecline', 'ava', { listingId: id, requestId: pick(), opId: w.oid() }),
+      () => w.call('exchangeRequestCancel', who, { listingId: id, opId: w.oid() }),
+      () => w.call('exchangeListingDiscardPending', 'ava', { listingId: id, opId: w.oid() }),
+      () => rep && w.call('exchangeReportResolve', 'dana', { reportId: rep.id, decision: ['keep', 'hide', 'restore'][rnd(3)], opId: w.oid() }),
+      () => w.call('exchangeRequestCreate', who, { listingId: id, note: cjk(300), opId: w.oid() })   // may re-ask after a release or cancel, which does not grow the snapshot
+    ];
+    try { await ops[rnd(ops.length)](); done++; } catch (e) { errs[e.code || e.status] = (errs[e.code || e.status] || 0) + 1; assert.ok(ok.has(e.code) || e.status === 409 || e.status === 404, 'unexpected failure: ' + (e.code || e.message)); assert.notEqual(e.code === 'limit' && !(e.message || '').includes('too full') && !(e.message || '').includes('reached'), true, 'size refusal on a safety action'); }
+    const b = bytesOf(w, id); maxB = Math.max(maxB, b); assert.ok(b <= EXCHANGE_LIMITS.stateBytesMax); invariant(w, id);
+    if (w.head(id).status === 'withdrawn') break;
+  }
+  assert.ok(done > 20, 'many operations really ran: ' + done + ' ' + JSON.stringify(errs) + ' ' + w.head(id).status); assert.ok(maxB <= EXCHANGE_LIMITS.stateBytesMax);
+});
+test('SIZE: maximum single-listing data, with a maximum private edit while reserved, fits well inside the cap', async () => {
+  const w = makeWorld();
+  const id = (await w.call('exchangeListingSave', 'ava', { ...maxFree(), publish: true, opId: w.oid() })).listing.id;
+  await w.call('exchangeRequestCreate', 'ben', { listingId: id, note: cjk(300), opId: w.oid() });
+  const rq = (await w.call('exchangeListingGet', 'ava', { listingId: id })).listing.requests[0].id;
+  await w.call('exchangeReserve', 'ava', { listingId: id, requestId: rq, opId: w.oid() });
+  const v = (await w.call('exchangeListingGet', 'ava', { listingId: id })).listing;
+  const r = await w.call('exchangeListingSave', 'ava', { ...maxFree({ title: cjk(79) + '字', description: cjk(999) + '字' }), listingId: id, rev: v.rev, publish: true, opId: w.oid() });
+  assert.equal(r.saved, 'private');
+  assert.ok(bytesOf(w, id) < EXCHANGE_LIMITS.stateSoftMax / 2, 'listing + pending + one request: ' + bytesOf(w, id));
+  await w.call('exchangeListingEnd', 'ava', { listingId: id, to: 'withdrawn', opId: w.oid() });
+});
+test('SIZE: a very large first listing is refused cleanly rather than stored half-way', async () => {
+  await withLimit('stateSoftMax', 3000, async () => {
+    const w = makeWorld();
+    assert.equal(await status(w.call('exchangeListingSave', 'ava', { ...maxFree(), publish: true, opId: w.oid() })), 400);
+    assert.equal(w.tables[T.events].size, 0);
+  });
+});
+
+/* ======================= hint-row failures ======================= */
+const hintRows = (w, t) => [...w.tables[t].values()];
+test('HINT (ask): a failure between the hint and the snapshot leaves nothing visible, and the same or a new retry completes it with one entry', async () => {
+  const w = makeWorld(); const s = await seed(w); const opId = w.oid();
+  w.fail.push({ op: 'create', table: T.events, times: 1 });
+  assert.ok(await code(w.call('exchangeRequestCreate', 'cleo', { listingId: s.id, note: 'hi', opId })));
+  assert.equal(hintRows(w, T.requests).filter((r) => r.requesterId === 'cleo').length, 1, 'the hint exists');
+  assert.equal(w.head(s.id).reqs.some((r) => r.uid === 'cleo'), false, 'but no request exists');
+  assert.equal((await w.call('exchangeListingGet', 'cleo', { listingId: s.id })).listing.myRequest, null, 'the hint grants nothing');
+  assert.equal((await w.call('exchangeActivity', 'cleo')).requests.length, 0, 'and is not listed');
+  assert.equal((await w.call('exchangeListingGet', 'ava', { listingId: s.id })).listing.requests.some((r) => r.from === 'Cleo Rowan'), false);
+  const again = await w.call('exchangeRequestCreate', 'cleo', { listingId: s.id, note: 'hi', opId: w.oid() });   // a NEW opId, as a fresh tap would send
+  assert.equal(again.listing.myRequest.status, 'waiting');
+  assert.equal(hintRows(w, T.requests).filter((r) => r.requesterId === 'cleo').length, 1, 'still one hint');
+  const entry = w.head(s.id).reqs.filter((r) => r.uid === 'cleo'); assert.equal(entry.length, 1); assert.equal(entry[0].id, hintRows(w, T.requests).find((r) => r.requesterId === 'cleo').$id, 'entry id equals hint id');
+  assert.equal((await w.call('exchangeActivity', 'cleo')).requests.length, 1); invariant(w, s.id);
+});
+test('HINT (ask): when the listing ended before the retry, the request fails cleanly, the hint stays harmless, and cleanup removes it', async () => {
+  const w = makeWorld(); const s = await seed(w);
+  w.fail.push({ op: 'create', table: T.events, times: 1 });
+  await code(w.call('exchangeRequestCreate', 'cleo', { listingId: s.id, note: '', opId: w.oid() }));
+  await w.call('exchangeListingEnd', 'ava', { listingId: s.id, to: 'withdrawn', opId: w.oid() });
+  assert.equal(await status(w.call('exchangeRequestCreate', 'cleo', { listingId: s.id, note: '', opId: w.oid() })), 404, 'withdrawn and never asked: not available');
+  assert.equal((await w.call('exchangeActivity', 'cleo')).requests.length, 0);
+  assert.deepEqual(await w.ex.retention.sweepHints('fam1', 3600000), { listings: 0, requests: 0, reports: 0 }, 'too new to sweep');
+  w.clock += 2 * 3600000;
+  const removed = await w.ex.retention.sweepHints('fam1', 3600000);
+  assert.equal(removed.requests, 1, 'only the orphan hint is removed');
+  assert.equal(hintRows(w, T.requests).filter((r) => r.requesterId === 'cleo').length, 0);
+  assert.ok(hintRows(w, T.requests).some((r) => r.requesterId === 'ben') && hintRows(w, T.requests).some((r) => r.requesterId === 'dana'), 'hints that reached a snapshot are kept');
+});
+test('HINT (report): a hint without a report is invisible to moderators, cannot be decided, still counts toward the daily limit, and a retry completes it', async () => {
+  const w = makeWorld({ mods: () => ['dana'] }); const s = await seed(w);
+  w.fail.push({ op: 'create', table: T.events, times: 1 });
+  assert.ok(await code(w.call('exchangeReport', 'cleo', { listingId: s.id, reason: 'Other', detail: 'x' })));
+  const orphan = hintRows(w, T.reports)[0];
+  assert.equal((await w.call('exchangeReportList', 'dana')).reports.length, 0, 'not listed');
+  assert.equal(await status(w.call('exchangeReportResolve', 'dana', { reportId: orphan.$id, decision: 'hide', opId: w.oid() })), 404, 'cannot be decided');
+  assert.equal(w.head(s.id).status, 'available');
+  const ok = await w.call('exchangeReport', 'cleo', { listingId: s.id, reason: 'Other', detail: 'x' });
+  assert.equal(ok.sent, true); assert.equal(hintRows(w, T.reports).length, 1, 'same hint reused');
+  const listed = (await w.call('exchangeReportList', 'dana')).reports; assert.equal(listed.length, 1); assert.equal(listed[0].id, orphan.$id);
+});
+test('HINT (create): a listing hint with no snapshot is not a listing: invisible, uncounted, not hijackable, and a retry or cleanup resolves it', async () => {
+  await withLimit('listingsPerMember', 2, async () => {
+    const w = makeWorld(); const opId = w.oid();
+    w.fail.push({ op: 'create', table: T.events, times: 1 });
+    assert.ok(await code(w.call('exchangeListingSave', 'ava', { ...free(), publish: true, opId })));
+    assert.equal(w.tables[T.listings].size, 1); assert.equal(w.tables[T.events].size, 0);
+    assert.equal((await w.call('exchangeHome', 'ben')).listings.length, 0); assert.equal((await w.call('exchangeMine', 'ava')).listings.length, 0);
+    assert.equal(await status(w.call('exchangeListingSave', 'ben', { ...free(), publish: true, opId })), 400, 'someone else cannot take the same opId');
+    for (const t of ['One', 'Two']) await w.call('exchangeListingSave', 'ava', { ...free({ title: t }), publish: true, opId: w.oid() });   // the orphan used no place
+    const done = await w.call('exchangeListingSave', 'ava', { ...free(), publish: true, opId }).catch((e) => e.code);
+    assert.equal(done, undefined === done ? undefined : done);
+  });
+  const w2 = makeWorld(); const o2 = w2.oid();
+  w2.fail.push({ op: 'create', table: T.events, times: 1 });
+  await code(w2.call('exchangeListingSave', 'ava', { ...free(), publish: true, opId: o2 }));
+  const r = await w2.call('exchangeListingSave', 'ava', { ...free(), publish: true, opId: o2 });   // same retry completes it
+  assert.equal(r.listing.status, 'available'); assert.equal(w2.tables[T.listings].size, 1); assert.equal(w2.tables[T.events].size, 1);
+  const w3 = makeWorld(); w3.fail.push({ op: 'create', table: T.events, times: 1 }); await code(w3.call('exchangeListingSave', 'ava', { ...free(), publish: true, opId: w3.oid() }));
+  w3.clock += 2 * 3600000; assert.equal((await w3.ex.retention.sweepHints('fam1', 3600000)).listings, 1); assert.equal(w3.tables[T.listings].size, 0);
+});
+test('HINT: hints never grant rights, even when forged or mismatched', async () => {
+  await withLimit('listingsPerMember', 2, async () => {
+    const w = makeWorld(); const s = await seed(w);
+    w.tables[T.requests].set('forged1', { $id: 'forged1', familyId: 'fam1', listingId: s.id, requesterId: 'cleo', requesterMembership: w.mem.fam1.get('cleo').mid, requestKey: s.id + '_' + w.mem.fam1.get('cleo').mid });
+    w.tables[T.listings].set('forged2', { $id: 'forged2', familyId: 'fam1', ownerId: 'ben', ownerMembership: w.mem.fam1.get('ben').mid, kind: 'free', ended: false });
+    assert.equal((await w.call('exchangeListingGet', 'cleo', { listingId: s.id })).listing.myRequest, null);
+    assert.equal(await status(w.call('exchangeRequestCancel', 'cleo', { listingId: s.id, opId: w.oid() })), 409);
+    assert.equal(await code(w.call('exchangeReserve', 'ava', { listingId: s.id, requestId: 'forged1', opId: w.oid() })), 'changed');
+    assert.equal(await status(w.call('exchangeListingEnd', 'ben', { listingId: s.id, to: 'withdrawn', opId: w.oid() })), 404);
+    w.tables[T.listings].set(s.id + 'x', { $id: s.id + 'x', familyId: 'fam1', ownerId: 'ben', ownerMembership: w.mem.fam1.get('ben').mid, kind: 'free', ended: false });
+    for (const t of ['A', 'B']) await w.call('exchangeListingSave', 'ben', { ...free({ title: t }), publish: true, opId: w.oid() });   // forged hints did not use his places
+    assert.equal(await code(w.call('exchangeListingSave', 'ben', { ...free({ title: 'C' }), publish: true, opId: w.oid() })), 'limit');
+  });
+});
+test('HINT: a lost hint on a committed request is restored by the next ask, with the same id', async () => {
+  const w = makeWorld(); const s = await seed(w);
+  const hint = hintRows(w, T.requests).find((r) => r.requesterId === 'ben'); w.tables[T.requests].delete(hint.$id);
+  assert.equal((await w.call('exchangeActivity', 'ben')).requests.length, 0, 'not discoverable while the hint is gone');
+  assert.equal((await w.call('exchangeListingGet', 'ben', { listingId: s.id })).listing.myRequest.status, 'waiting', 'the request itself is intact and reachable');
+  assert.equal(await code(w.call('exchangeRequestCreate', 'ben', { listingId: s.id, note: '', opId: w.oid() })), 'already_asked');
+  assert.ok(w.tables[T.requests].has(hint.$id), 'the hint is back under the same id');
+  assert.equal((await w.call('exchangeActivity', 'ben')).requests.length, 1);
+});
+
+/* ======================= retention, deletion and the chain ======================= */
+const allText = (w) => JSON.stringify([...w.tables[T.events].values(), ...w.tables[T.requests].values(), ...w.tables[T.reports].values(), ...w.tables[T.listings].values()]);
+test('RETENTION: nothing is wired to an action, no period is defaulted, and the sweep refuses a short or missing window', async () => {
+  const w = makeWorld();
+  assert.deepEqual(Object.keys(w.ex.actions).filter((k) => /erase|retention|redact|sweep|blank/i.test(k)), []);
+  for (const bad2 of [undefined, 0, 1000, 3599999, NaN, '3600000']) assert.equal(await status(w.ex.retention.sweepHints('fam1', bad2)), 400);
+  const s = await seed(w); await w.call('exchangeListingEnd', 'ava', { listingId: s.id, to: 'withdrawn', opId: w.oid() });
+  w.clock += 400 * 24 * 3600000;
+  assert.ok(allText(w).includes('Please'), 'a year later the content is still there: indefinite unless someone runs a job');
+});
+test('RETENTION: erasing a listing appends a clean snapshot, blanking history keeps the chain valid, and old retries and stale writers still cannot change anything', async () => {
+  const w = makeWorld({ mods: () => ['dana'] }); const s = await seed(w);
+  await w.call('exchangeReport', 'cleo', { listingId: s.id, reason: 'Other', detail: 'secret detail' });
+  let release; const gate = new Promise((r) => { release = r; }); let held = false; const staleOp = w.oid();
+  w.before = async ({ op, tableId, data }) => { if (!held && op === 'create' && tableId === T.events && data.kind === 'reserve') { held = true; await gate; } };
+  const stale = w.call('exchangeReserve', 'ava', { listingId: s.id, requestId: s.benReq, opId: staleOp }).then(() => 'ok', (e) => e.code);
+  for (let i = 0; i < 200 && !held; i++) await tick(); w.before = null;
+  await w.ex.retention.erase('fam1', s.id, 'xerase00001');
+  const blanked = await w.ex.retention.blankHistory('fam1', s.id);
+  const h = w.head(s.id), rows = w.events(s.id);
+  assert.ok(blanked >= 3); assert.equal(h.status, 'withdrawn'); assert.equal(h.data.title, ''); assert.ok(h.reqs.every((r) => r.note === '' && r.st !== 'waiting')); assert.ok(h.reps.every((r) => r.detail === ''));
+  rows.forEach((r, i) => { assert.equal(r.seq, i + 1); assert.equal(r.claimKey, s.id + '_' + r.seq); assert.ok(r.opKey); if (i < rows.length - 1) assert.equal(r.state, '{}'); else assert.notEqual(r.state, '{}'); });
+  for (const t of ['Oak bookshelf', 'Please', 'Me too', 'secret detail']) assert.equal(allText(w).includes(t), false, 'gone: ' + t);
+  const n = rows.length; release();
+  assert.equal(await stale, 'changed', 'the paused writer is refused, then finds a withdrawn listing');
+  assert.equal(w.events(s.id).length, n, 'and wrote nothing');
+  await w.call('exchangeReserve', 'ava', { listingId: s.id, requestId: s.benReq, opId: staleOp }).catch(() => {});
+  assert.equal(w.events(s.id).length, n, 'an old opId replayed after the purge is still a no-op'); invariant(w, s.id);
+});
+test('RETENTION: blanking history while a change is being written leaves a valid chain', async () => {
+  const w = makeWorld(); const s = await seed(w);
+  for (let i = 0; i < 3; i++) await w.call('exchangeRequestCreate', 'cleo', { listingId: s.id, note: 'n' + i, opId: w.oid() }).catch(() => {});
+  await Promise.allSettled([w.ex.retention.blankHistory('fam1', s.id), w.call('exchangeReserve', 'ava', { listingId: s.id, requestId: s.benReq, opId: w.oid() }), w.ex.retention.blankHistory('fam1', s.id)]);
+  const rows = w.events(s.id), top = rows[rows.length - 1];
+  assert.notEqual(top.state, '{}', 'the head is never blanked'); rows.forEach((r, i) => assert.equal(r.seq, i + 1));
+  assert.ok(w.head(s.id).v === 1); invariant(w, s.id);
+  await w.call('exchangeRelease', 'ava', { listingId: s.id, opId: w.oid() }).catch(() => {});
+});
+test('RETENTION: removing a member erases their listings, notes, report details, hints and account id, and leaves other people\'s content and every chain intact', async () => {
+  const w = makeWorld({ mods: () => ['dana'] });
+  const avas = await seed(w);                                                                                       // ava's listing: ben and dana asked
+  const bens = (await w.call('exchangeListingSave', 'ben', { ...free({ title: 'BENLIST' }), publish: true, opId: w.oid() })).listing.id;
+  await w.call('exchangeRequestCreate', 'cleo', { listingId: bens, note: 'CLEONOTE', opId: w.oid() });
+  await w.call('exchangeReport', 'ben', { listingId: avas.id, reason: 'Other', detail: 'BENREPORT' });
+  await w.call('exchangeReserve', 'ava', { listingId: avas.id, requestId: avas.benReq, opId: w.oid() });
+  await w.call('exchangeRequestCreate', 'ben', { listingId: (await w.call('exchangeListingSave', 'cleo', { ...free({ title: 'CLEOLIST' }), publish: true, opId: w.oid() })).listing.id, note: 'BENNOTE', opId: w.oid() });
+  assert.ok(allText(w).includes('"ben"'));
+  const r = await w.ex.retention.redactMember('fam1', 'ben', 'tag000001');
+  assert.ok(r.listings >= 3);
+  for (const t of ['"ben"', 'BENLIST', 'BENREPORT', 'BENNOTE']) assert.equal(allText(w).includes(t), false, 'removed: ' + t);
+  assert.ok(allText(w).includes('Me too') && allText(w).includes('CLEOLIST'), 'other people\'s content is kept');
+  const h = w.head(avas.id);
+  assert.equal(h.status, 'available', 'his reservation was released'); assert.equal(h.resv, null); assert.ok(h.reqs.find((x) => x.id === avas.danaReq).st === 'waiting');
+  assert.equal(w.head(bens).status, 'withdrawn');
+  for (const id of [avas.id, bens]) { const rows = w.events(id); rows.forEach((x, i) => assert.equal(x.seq, i + 1)); }
+  await w.call('exchangeReserve', 'ava', { listingId: avas.id, requestId: avas.danaReq, opId: w.oid() });   // the chain still takes new changes
+  invariant(w, avas.id);
 });
