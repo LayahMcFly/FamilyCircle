@@ -18,6 +18,7 @@ import dnsp from 'node:dns/promises';
 import { fetchLinkPicture, get as realGet } from './link-picture.js';
 import { etsyListingId, fetchEtsyPicture, makeEtsyCache, realGetApi, ETSY_NOTICE } from './etsy.js';
 import { createGiving } from './giving.js';
+import { createExchange } from './exchange.js';
 import { createRecipes } from './recipes.js';
 
 export const TABLES = {
@@ -551,11 +552,16 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
   const recipes = createRecipes({ storage, photoBucket: cfg.givingBucketId || 'family-media', teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, requireMember, idOf, bad, forbidden, ApiError, sdkCode, now });
   const giving = createGiving({ etsy, linkPicture: cfg.linkPicture === undefined ? fetchLinkPicture : cfg.linkPicture, storage, photoBucket: cfg.givingBucketId || 'family-media', teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, missing, ApiError, sdkCode, now, profilesTable: TABLES.profiles });
 
+  // Family Exchange (free items and Wanted posts). Code only: OFF for every family, no tables yet, and nobody is eligible until an eligibility hook is supplied.
+  // cfg.exchangeEligibility and cfg.exchangeModerators are deliberately NOT set anywhere, so the defaults apply: nobody is eligible and nobody moderates. See exchange.js.
+  const exchange = createExchange({ teams, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, idOf, bad, forbidden, ApiError, sdkCode, now, profilesTable: TABLES.profiles, eligibility: cfg.exchangeEligibility, moderators: cfg.exchangeModerators });
+
   const actions = {
     addressGet, addressSave, addressDelete, addressView,
     ...chat.actions,
     ...board.actions,
     ...giving.actions,
+    ...exchange.actions,
     ...recipes.actions,
     /** Lists the caller's confirmed, registered families. Also keeps the `family` label in sync. */
     async listFamilies({ user }) {
