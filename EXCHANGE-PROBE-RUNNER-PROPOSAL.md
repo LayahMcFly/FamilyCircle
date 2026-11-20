@@ -1,6 +1,6 @@
 # Family Exchange probe: browser-operated GitHub Actions runner (proposal only, revision 2)
 
-Status: PROPOSAL. Nothing in this file has been created, pushed to another repository, or run. No Appwrite request, key, project or schema exists. The offline candidate is pinned at commit `99727352f52d5c3a0ed9cc900b3d7e9dce268055` (tree of `exchange-probe/` = `88462972edfdae9fe8d0c8d5d5e81b3a737849ca`). The workflow files below are inert text here: they live in a Markdown file, not under `.github/`.
+Status: PROPOSAL. Nothing in this file has been created, pushed to another repository, or run. No key, project or schema exists. One mistaken, keyless GET to the Appwrite health endpoint was attempted on 2026-11-19 while checking the connectivity command; it failed locally with no response, and whether it reached Appwrite is unknown. The candidate below is reported, pending independent review, and is not approval to merge or execute it; probe work is paused. The offline candidate is pinned at commit `99727352f52d5c3a0ed9cc900b3d7e9dce268055` (tree of `exchange-probe/` = `88462972edfdae9fe8d0c8d5d5e81b3a737849ca`). The workflow files below are inert text here: they live in a Markdown file, not under `.github/`.
 
 ## 1. Feasibility
 Feasible, with one constraint that shapes everything: GitHub only lets you require a human approval before a job can use environment secrets in public repositories on Free, Pro and Team plans. So the runner must be a separate public repository that holds only probe material, and its logs will be world-readable, so they must contain nothing but sanitized results.
@@ -298,7 +298,7 @@ jobs:
 ## 9. Offline evidence
 - YAML parses; each file's only trigger is `workflow_dispatch`; no file contains `uses:`; each of the three jobs references its own environment (`probe-connectivity`, `probe-schema`, `probe-run`); only `probe-schema` and `probe-run` read a secret; the only file that prints a result prints `out/summary-*.json` (the allowlisted files), never `created.json` or `run-*.json`.
 - The shell steps that guard dispatch and verify the source (now present in all three files) were extracted from the YAML and run against a local repository holding the reviewed commit plus two tampered commits (edited manifest, edited lockfile): re-run on this revision's text: `probe-1-create-schema` and `probe-2-run` 13 cases of 13 as expected; `probe-0-connectivity` 11 of 11 applicable cases as expected (its guard takes no project id, so the two project-id cases do not apply). Every tampered or different commit and every wrong pin is refused.
-- `node run.js connectivity` needs no `node_modules` (checked offline with a fake fetch in the probe tests; the real endpoint was not contacted).
+- `node run.js connectivity` needs no `node_modules` (checked with a fake fetch in the probe tests; separately, one mistaken real attempt failed locally with no response, see the status line).
 - Not tested, because they need GitHub or Appwrite: environment approval screens, secret injection, masking, the Appwrite calls themselves, and runner-side Node availability (the first step refuses a Node older than 20). Nothing here shows that the workflows run on GitHub.
 
 ## Sources
