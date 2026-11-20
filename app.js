@@ -19,6 +19,7 @@
   var L = CFG.limits || {};
   var T = CFG.tables || {};
   var root = document.getElementById('app');
+  if (window.FCRelease) window.FCRelease.attach({ confirm: function (t, m, l) { return confirmDialog(t, m, l); }, toast: function (m) { toast(m); } });
   (function footer() {
     var f = document.getElementById('site-footer'); if (!f) return;
     var C = window.FAMILY_CONFIG || {};
@@ -5040,6 +5041,7 @@
       h('div', null, h('label', { for: 'pe-addr', text: 'Address (optional)' }), addrIn, h('div', { class: 'hint', text: 'Family members can see this on the family tree. Leave it empty to keep it private.' })),
       pmsg, h('div', { class: 'stack' }, saveBtn));
     var ed = aboutEditor(visibleAbout(S.profile));
+    if (window.FCRelease) window.FCRelease.registerUnsaved('about-me', function () { return ed.el.isConnected && ed.isDirty(); });
     if (S.aboutPending) { ed.addCategory(S.aboutPending); S.aboutPending = null; }
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile details' }, h('h2', { text: 'Profile' }),
       avatarBox,
@@ -5276,6 +5278,7 @@
     function copyState(s) { return JSON.parse(JSON.stringify(s)); }
     function draftState() { if (!lookDraft) lookDraft = copyState(appearance); return lookDraft; }
     function isDirty() { return !!lookDraft && (JSON.stringify(lookDraft.per) + lookDraft.theme) !== base; }
+    if (window.FCRelease) window.FCRelease.registerUnsaved('appearance', function () { return !!look && look.isConnected && isDirty(); });
     function setFor(st, themeId, patch) { st.per[themeId] = Object.assign({}, st.per[themeId] || {}, patch); }
     function change(fn) { fn(draftState()); applyPrefs(); paintLook(); }
     function modeLabel(m) { return m === 'system' ? 'Follow system' : m === 'dark' ? 'Dark' : 'Light'; }
