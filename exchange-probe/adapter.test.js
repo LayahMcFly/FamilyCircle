@@ -85,7 +85,7 @@ test('readiness: waits for building columns, reports missing ones, flags a non-u
 });
 
 test('verifySchema reports each kind of drift and changes nothing', async () => {
-  assert.deepEqual(await mk(createFakeTablesDb(manifest)).verifySchema(), { ok: true, problems: [] });
+  assert.deepEqual(await mk(createFakeTablesDb(manifest)).verifySchema(), { ok: true, problems: [], findings: [] });
   const drift = [
     ['wrong size', (s) => { s.tables.probeEvents.columns.find((c) => c.key === 'claimKey').size = 64; }, /size 64 not 80/],
     ['wrong type', (s) => { s.tables.probeEvents.columns.find((c) => c.key === 'seq').type = 'string'; }, /type string not integer/],
@@ -98,14 +98,14 @@ test('verifySchema reports each kind of drift and changes nothing', async () => 
     ['extra table', (s) => { s.tables.other = { columns: [], indexes: [], permissions: [], rowSecurity: false }; }, /unexpected table other/],
     ['array column', (s) => { s.tables.probeText.columns[0].array = true; }, /is an array/]
   ];
-  for (const [name, mutate, re] of drift) { const db = createFakeTablesDb(manifest); mutate(db.schema); const v = await mk(db).verifySchema(); assert.equal(v.ok, false, name); assert.ok(v.problems.some((p) => re.test(p)), name + ': ' + v.problems.join('; ')); assert.ok(db.log.every((x) => x.startsWith('list')), name + ' made only read calls'); }
+  for (const [name, mutate, re] of drift) { const db = createFakeTablesDb(manifest); mutate(db.schema); const v = await mk(db).verifySchema(); assert.equal(v.ok, false, name); assert.ok(v.problems.some((p) => re.test(p)), name + ': ' + v.problems.join('; ')); assert.equal(v.findings.length, v.problems.length, name + ' findings match problems'); for (const f of v.findings) { if (f.kind.startsWith('unexpected_')) assert.deepEqual([f.table, f.key], [null, null], 'names from the server are never carried'); else if (f.table !== null) assert.ok(manifest.tables[f.table] && (f.key === null || manifest.tables[f.table].columns.some((c) => c.key === f.key) || manifest.tables[f.table].indexes.some((i) => i.key === f.key)), 'names come from the manifest'); } assert.ok(db.log.every((x) => x.startsWith('list')), name + ' made only read calls'); }
   const none = createFakeTablesDb(manifest, { prebuilt: false }); assert.equal((await mk(none).verifySchema()).ok, false);
 });
 
 test('createSchema builds exactly the manifest, within its call count, waits for columns, and never touches what exists', async () => {
   const db = createFakeTablesDb(manifest, { prebuilt: false }), a = mk(db); const r = await a.createSchema();
   const n = schemaCallCounts(manifest); assert.ok(a.stats().calls <= n.createSchema);
-  assert.equal(r.created, 1 + 3 + 14 + 7); assert.deepEqual(await mk(db).verifySchema(), { ok: true, problems: [] });
+  assert.equal(r.created, 1 + 3 + 14 + 7); assert.deepEqual(await mk(db).verifySchema(), { ok: true, problems: [], findings: [] });
   const again = mk(db); await assert.rejects(again.createSchema(), (e) => e.code === 409); assert.equal(again.stopReason(), 'exists'); assert.equal(db.log.filter((x) => x === 'create').length, 2, 'one create per attempt, nothing updated or deleted');
   assert.ok(!db.log.some((x) => /delete|update/i.test(x) && !/Row/.test(x)));
   const slow = createFakeTablesDb(manifest, { prebuilt: false, slowColumns: true }), s = mk(slow);

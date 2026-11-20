@@ -4,7 +4,7 @@
   "description": "Disposable Appwrite unique-index probe for Family Exchange (offline-tested; not run)",
   "main": "probe.js",
   "scripts": {
-    "test": "node --test manifest.test.js adapter.test.js runner.test.js probe.test.js"
+    "test": "node --test manifest.test.js adapter.test.js runner.test.js probe.test.js public-output.test.js"
   },
   "private": true,
   "dependencies": {

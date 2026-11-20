@@ -47,7 +47,7 @@ test('secret intake: one source, file outside the repo, owner-only, not inherite
 
 test('budget command needs no key, no network and builds no client', async () => {
   const s = setup({ env: { PROBE_KEY_FILE: undefined } }); const r = await main(['budget'], {}, s.deps);
-  assert.equal(r.code, 0); assert.equal(s.made.length, 0); assert.match(s.out.join('\n'), /run 6015/);
+  assert.equal(r.code, 0); assert.equal(s.made.length, 0); assert.match(s.out.join('\n'), /budget name=run calls=6015/);
 });
 
 test('the target guard refuses before a key is read or a client is built', async () => {
@@ -65,7 +65,7 @@ test('end to end: verify, run, cleanup. No key anywhere in output or files, even
   r = await s.go('run'); assert.equal(r.code, 0, s.out.join('\n'));
   const created = JSON.parse(fs.readFileSync(path.join(s.dir, 'out', 'created.json'), 'utf8')); assert.ok(created.length > 20);
   const rows = () => Object.values(s.db.tables).reduce((n, t) => n + t.size, 0); assert.equal(rows(), created.length);
-  const rep = JSON.parse(fs.readFileSync(path.join(s.dir, 'out', fs.readdirSync(path.join(s.dir, 'out')).find((f) => f.startsWith('run-'))), 'utf8'));
+  const rep = JSON.parse(fs.readFileSync(path.join(s.dir, 'out', 'summary-run.json'), 'utf8'));
   assert.match(rep.note, /not production verification/i); assert.equal(rep.pass, true);
   await s.db.createRow({ databaseId: 'exchange_probe', tableId: 'probeText', rowId: 'unrecorded1', data: { state: 'x' }, permissions: [] });
   r = await s.go('cleanup'); assert.equal(r.code, 0);
@@ -76,7 +76,7 @@ test('end to end: verify, run, cleanup. No key anywhere in output or files, even
 
 test('a second run is refused until cleanup, and an unclean project is refused', async () => {
   const s = setup(); assert.equal((await s.go('run')).code, 0);
-  const again = await s.go('run'); assert.equal(again.code, 1); assert.match(s.out.join('\n'), /run cleanup first/);
+  const again = await s.go('run'); assert.equal(again.code, 1); assert.match(s.out.join('\n'), /error reason=rows_recorded/);
   const dirty = setup(); await dirty.db.createRow({ databaseId: 'exchange_probe', tableId: 'probeEvents', rowId: 'old1', data: { familyId: 'f', listingId: 'l', seq: 1, claimKey: 'l_1', opKey: 'l_o', actorId: 'a', kind: 'k', state: '{}' }, permissions: [] });
   const r = await dirty.go('run'); assert.equal(r.code, 2); assert.ok(dirty.db.tables.probeEvents.has('old1'));
 });
@@ -88,7 +88,7 @@ test('run refuses when the live schema differs from the manifest, before any row
 
 test('an auth failure stops the run, exits 2, and still records the rows created so far', async () => {
   const db = createFakeTablesDb(manifest, { fail: Object.assign((n, i) => n === 'createRow' && i > 3, { code: 403 }) });
-  const s = setup({ db }); const r = await s.go('run'); assert.equal(r.code, 2); assert.match(s.out.join('\n'), /STOPPED \(auth\)/);
+  const s = setup({ db }); const r = await s.go('run'); assert.equal(r.code, 2); assert.match(s.out.join('\n'), /end command=run pass=false stopped=auth/);
   assert.equal(JSON.parse(fs.readFileSync(path.join(s.dir, 'out', 'created.json'), 'utf8')).length, Object.values(db.tables).reduce((n, t) => n + t.size, 0));
 });
 
@@ -99,7 +99,7 @@ test('create-schema on an existing schema stops without touching anything', asyn
 
 test('full-size default run on a correct store stays inside its cap and passes', async () => {
   const s = setup({ deps: { probeOpts: {} } }); const r = await s.go('run'); assert.equal(r.code, 0, s.out.slice(-6).join('\n'));
-  const used = Number(/calls used (\d+) of (\d+)/.exec(s.out.join('\n'))[1]); assert.ok(used <= 6015, 'calls ' + used);
+  const used = Number(/end command=run .*calls=(\d+) cap=(\d+)/.exec(s.out.join('\n'))[1]); assert.ok(used <= 6015, 'calls ' + used);
 });
 
 test('no key-shaped string and no argv key reading exist in the probe sources', () => {

@@ -79,39 +79,42 @@ function createAdapter({ tablesDb, Query, manifest, maxCalls, deadlineMs = null,
 
     /* Read-only comparison of the live schema with the manifest. Reports every difference; changes nothing. */
     async verifySchema() {
-      const problems = [];
+      /* problems: free-form text for local debugging and tests only, never published (it can contain names the server returned).
+       * findings: the public form. A kind from a fixed list, plus a table and key only when they come from the manifest. */
+      const problems = [], findings = [];
+      const bad = (kind, text, table = null, key = null) => { problems.push(text); findings.push({ kind, table, key }); };
       let listed;
       try { listed = (await call('listTables', () => tablesDb.listTables({ databaseId }))).tables; }
-      catch (e) { return { ok: false, problems: ['database ' + databaseId + ' could not be read (' + e.code + ')'] }; }
-      for (const t of listed) if (!tableIds.includes(t.$id)) problems.push('unexpected table ' + t.$id);
+      catch (e) { bad('database_unreadable', 'database ' + databaseId + ' could not be read (' + e.code + ')'); return { ok: false, problems, findings }; }
+      for (const t of listed) if (!tableIds.includes(t.$id)) bad('unexpected_table', 'unexpected table ' + t.$id);
       for (const t of tableIds) {
         const spec = manifest.tables[t], live = listed.find((x) => x.$id === t);
-        if (!live) { problems.push('missing table ' + t); continue; }
+        if (!live) { bad('missing_table', 'missing table ' + t, t); continue; }
         const perms = live.$permissions || [], defaults = manifest.tableDefaults;
-        if (perms.length !== defaults.permissions.length) problems.push(t + ': table permissions are not empty');
-        if (Boolean(live.rowSecurity) !== defaults.rowSecurity) problems.push(t + ': rowSecurity differs');
+        if (perms.length !== defaults.permissions.length) bad('permissions', t + ': table permissions are not empty', t);
+        if (Boolean(live.rowSecurity) !== defaults.rowSecurity) bad('row_security', t + ': rowSecurity differs', t);
         const cols = (await call('listColumns', () => tablesDb.listColumns({ databaseId, tableId: t, queries: [Query.limit(100)] }))).columns;
         const idx = (await call('listIndexes', () => tablesDb.listIndexes({ databaseId, tableId: t, queries: [Query.limit(100)] }))).indexes;
-        for (const c of cols) if (!spec.columns.some((x) => x.key === c.key)) problems.push(t + ': unexpected column ' + c.key);
-        for (const i of idx) if (!spec.indexes.some((x) => x.key === i.key)) problems.push(t + ': unexpected index ' + i.key);
+        for (const c of cols) if (!spec.columns.some((x) => x.key === c.key)) bad('unexpected_column', t + ': unexpected column ' + c.key);
+        for (const i of idx) if (!spec.indexes.some((x) => x.key === i.key)) bad('unexpected_index', t + ': unexpected index ' + i.key);
         for (const c of spec.columns) {
           const f = cols.find((x) => x.key === c.key);
-          if (!f) { problems.push(t + ': missing column ' + c.key); continue; }
-          if (f.type !== c.type) problems.push(t + '.' + c.key + ': type ' + f.type + ' not ' + c.type);
-          if (c.size !== undefined && f.size !== c.size) problems.push(t + '.' + c.key + ': size ' + f.size + ' not ' + c.size);
-          if (Boolean(f.required) !== c.required) problems.push(t + '.' + c.key + ': required differs');
-          if (f.array) problems.push(t + '.' + c.key + ': is an array');
-          if (f.status !== 'available') problems.push(t + '.' + c.key + ': status ' + f.status);
+          if (!f) { bad('missing_column', t + ': missing column ' + c.key, t, c.key); continue; }
+          if (f.type !== c.type) bad('column_type', t + '.' + c.key + ': type ' + f.type + ' not ' + c.type, t, c.key);
+          if (c.size !== undefined && f.size !== c.size) bad('column_size', t + '.' + c.key + ': size ' + f.size + ' not ' + c.size, t, c.key);
+          if (Boolean(f.required) !== c.required) bad('column_required', t + '.' + c.key + ': required differs', t, c.key);
+          if (f.array) bad('column_array', t + '.' + c.key + ': is an array', t, c.key);
+          if (f.status !== 'available') bad('column_status', t + '.' + c.key + ': status ' + f.status, t, c.key);
         }
         for (const i of spec.indexes) {
           const f = idx.find((x) => x.key === i.key);
-          if (!f) { problems.push(t + ': missing index ' + i.key); continue; }
-          if (f.type !== i.type) problems.push(t + '.' + i.key + ': type ' + f.type + ' not ' + i.type);
-          if (JSON.stringify(f.columns) !== JSON.stringify(i.columns)) problems.push(t + '.' + i.key + ': columns ' + JSON.stringify(f.columns));
-          if (f.status !== 'available') problems.push(t + '.' + i.key + ': status ' + f.status);
+          if (!f) { bad('missing_index', t + ': missing index ' + i.key, t, i.key); continue; }
+          if (f.type !== i.type) bad('index_type', t + '.' + i.key + ': type ' + f.type + ' not ' + i.type, t, i.key);
+          if (JSON.stringify(f.columns) !== JSON.stringify(i.columns)) bad('index_columns', t + '.' + i.key + ': columns ' + JSON.stringify(f.columns), t, i.key);
+          if (f.status !== 'available') bad('index_status', t + '.' + i.key + ': status ' + f.status, t, i.key);
         }
       }
-      return { ok: problems.length === 0, problems };
+      return { ok: problems.length === 0, problems, findings };
     },
 
     /* Setup path, only with a separate schema-privilege key. Creates; never updates or deletes. Any 409 stops it, so a pre-existing resource is never touched. */
