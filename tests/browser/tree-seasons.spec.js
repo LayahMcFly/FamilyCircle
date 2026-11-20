@@ -334,6 +334,10 @@ const animCount = page => page.evaluate(() => document.getAnimations().filter(a 
     check('N2 ' + label + ': on one row, bottom edges match', !m.sameRow || Math.abs(m.aB - m.bB) < 1.5, JSON.stringify(m));
     check('N3 ' + label + ': label sits above the select', m.lB <= m.aT + 1, JSON.stringify(m));
     check('N4 ' + label + ': note is on its own row below the controls', m.nT >= m.ctlB - 1, JSON.stringify(m));
+    const al = await page.evaluate(() => { const L = s => document.querySelector(s).getBoundingClientRect(), cs = s => getComputedStyle(document.querySelector(s)); const j = cs('#tree-jump'), t = cs('#tree-season'); document.activeElement && document.activeElement.blur(); return { jl: L('#tree-jump').left, sl: L('#tree-season').left, stl: L('.tree-stage').left, jr: L('#tree-jump').right, sr: L('#tree-season').right, jbg: j.backgroundColor, tbg: t.backgroundColor, jrad: j.borderRadius, trad: t.borderRadius, jh: L('#tree-jump').height, th: L('#tree-season').height }; });
+    check('N6 ' + label + ': Season lines up with Jump to and the tree box on the left', Math.abs(al.jl - al.sl) < 1.5 && Math.abs(al.stl - al.sl) < 1.5, JSON.stringify(al));
+    check('N7 ' + label + ': Season select looks like the Jump to select (same background, corner radius, height)', al.jbg === al.tbg && al.jrad === al.trad && (label.indexOf('200') !== -1 || Math.abs(al.jh - al.th) < 1.5), JSON.stringify(al));
+    check('N8 ' + label + ': on a phone Season is as wide as Jump to or wider than a half, never narrower than its row', label.indexOf('phone') !== 0 || al.sr - al.sl >= (al.jr - al.jl) * 0.95, JSON.stringify(al));
     check('N5 ' + label + ': nothing overflows horizontally', m.over <= 1 && m.scrollW <= 1, JSON.stringify(m));
     await page.evaluate(() => { document.querySelectorAll('header, .topbar, nav.bottom, .tabbar').forEach(e => e.style.setProperty('display', 'none')); document.querySelector('.tree-look').scrollIntoView({ block: 'start' }); });
     const bb = await page.locator('.tree-look').boundingBox();
