@@ -2,7 +2,7 @@
  * Run:  cd tests/browser && node giving-in-app.spec.js */
 const { chromium } = require('playwright-core');
 const http = require('http'), fs = require('fs'), path = require('path');
-const ROOT = path.resolve(__dirname, '../..'), SUB = '/FamilyCircle/';
+const ROOT = process.env.SITE_ROOT || path.resolve(__dirname, '../..'), SUB = '/FamilyCircle/';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(req.url.split('?')[0]);
