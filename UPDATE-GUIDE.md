@@ -7,7 +7,7 @@
 - "Installed" copies today are browser shortcuts (Add to Home Screen). They run the same page code, so they get the same notice. Nothing here was tested in a real installed shortcut; it was tested in Chrome.
 
 ## How a release gets its id
-The publish workflow (`.github/workflows/publish-site.yml`, runs on every push to `main`) calls `node tools/build-site.js _site`. That copies the repository files into `_site`, then `tools/stamp-release.js` hashes every shipped file there (top-level `.js/.css/.html/.svg/.ico/.png`, `fonts/`, `vendor/`) and writes into `_site` only:
+The publish workflow (`.github/workflows/publish-site.yml`, runs on every push to `main`) calls `node tools/build-site.js _site`. That copies only the website files into `_site` (an explicit list in `tools/build-site.js`: the top-level web files, `fonts/`, `vendor/`, the three preview routes and the licence files; no `function/`, `shop/`, `setup/`, tests, tools, workflows, package files or planning documents), then `tools/stamp-release.js` hashes every shipped file there (top-level `.js/.css/.html/.svg/.ico/.png`, `fonts/`, `vendor/`) and writes into `_site` only:
 - `release.json` : `{ "schema": 1, "id": "<16 hex>", "entry": "index.html" }`
 - the id in `<meta name="fc-release">` in `index.html` (this is what the running page reads)
 - the same id as the `?v=` value on every local script and stylesheet.
@@ -18,8 +18,12 @@ The id comes from the content: same files, same id. Putting older files back pro
 Nobody types a version number. In the repository the stamp is deliberately absent (`index.html` has an empty `fc-release` tag, and there is no `release.json`), so a page served straight from the source folder has the checker switched off instead of announcing anything. `config.js` `version` is only the footer label now.
 As an extra guard the page announces a new id only after it has fetched that release's `index.html` and seen the same id in it.
 
-## One-time owner setting (not applied)
-The workflow only publishes if Pages is set to build from Actions: GitHub repository **Settings > Pages > Build and deployment > Source: "GitHub Actions"**. Until that is changed, Pages keeps publishing straight from the files on `main`, nothing is stamped, and the notice stays silent. After it is changed, only this workflow publishes the site (a push to `main` no longer publishes by itself). Differences to know about: the old Pages build ran Jekyll, so `.md` files were rendered as pages and files or folders starting with `_` or `.` were skipped; the artifact is served as it is, and the top-level dotfiles and `.github` are left out of it.
+## Cutover (one-time owner setting, not applied yet)
+Pages has two publishing modes, and the mode decides what a push to `main` does:
+- **Today (publish from the branch):** a push to `main` publishes the committed files directly, with no stamp. Merging the new code under this setting can therefore put the new frontend live before any stamped deployment exists. The checker stays silent there because the source has no release id.
+- **After Settings > Pages > Build and deployment > Source is set to "GitHub Actions":** branch publishing stops. `publish-site.yml` has a push trigger, so every push to `main` still publishes automatically, but only through the workflow: build, stamp, validate, then deploy that one artifact. A failed build or validation publishes nothing.
+Exact order: (1) merge to `main`, which publishes the unstamped frontend through the old mode; (2) change the Pages Source to "GitHub Actions"; (3) run the workflow once (Actions > Publish site > Run workflow) so the stamped site goes live. Open pages begin to see release ids after step 3.
+What changes in the published site: it is now only the website files (backend, tests, tools and planning documents are no longer served), and files are served as they are (the old build ran Jekyll, which rendered `.md` files and skipped `_` and dot files).
 
 ## When it checks
 Startup, tab visible again (also back-forward cache restores), connectivity returns, and about every 5 minutes while the page is visible. Never while offline, never two at once, at least 30 seconds apart, and failures slow the 5-minute check down (1, 2, 4 ... up to 30 minutes). The request is a plain GET with `cache: "no-store"`, a throwaway query and no credentials, so neither the browser cache nor a future service worker answers it.

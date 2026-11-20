@@ -3,7 +3,7 @@
  * Proves screen behaviour and that the page makes no network request. Proves NOTHING about Appwrite or real families. */
 const { chromium } = require('playwright-core');
 const http = require('http'), fs = require('fs'), path = require('path');
-const ROOT = path.resolve(__dirname, '../..'), SUB = '/FamilyCircle/';
+const ROOT = process.env.SITE_ROOT || path.resolve(__dirname, '../..'), SUB = '/FamilyCircle/';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(req.url.split('?')[0]); if (!u.startsWith(SUB)) { res.writeHead(404); return res.end(); }

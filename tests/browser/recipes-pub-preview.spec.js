@@ -2,7 +2,7 @@
  * Run:  cd tests/browser && node recipes-pub-preview.spec.js   Proves screen behaviour and no network use. Proves NOTHING about live Appwrite. */
 const { chromium } = require('playwright-core');
 const http = require('http'), fs = require('fs'), path = require('path');
-const ROOT = path.resolve(__dirname, '../..'), SUB = '/FamilyCircle/';
+const ROOT = process.env.SITE_ROOT || path.resolve(__dirname, '../..'), SUB = '/FamilyCircle/';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 const server = http.createServer((req, res) => { const u = decodeURIComponent(req.url.split('?')[0]); if (!u.startsWith(SUB)) { res.writeHead(404); return res.end(); }
   let f = path.join(ROOT, u.slice(SUB.length) || 'index.html'); if (f.endsWith('/')) f += 'index.html';

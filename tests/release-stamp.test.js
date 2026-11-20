@@ -14,8 +14,6 @@ test('the source tree is deliberately unstamped; the build stamps and validates 
   assert.ok(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').includes('<meta name="fc-release" content="">'));
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'fc-site-')), r = build.build(out);
   assert.ok(r.ok, r.problems.join('; ')); assert.match(r.id, /^[a-f0-9]{16}$/);
-  assert.ok(!fs.existsSync(path.join(out, '.github')) && !fs.existsSync(path.join(out, '.git')));
-  assert.ok(fs.existsSync(path.join(out, 'function', 'src', 'logic.js')), 'everything else is published as before');
   assert.equal(build.build(out).id, r.id, 'same source, same id');
 });
 test('the build is refused (and so is publishing) when the stamp or the page is inconsistent', () => {

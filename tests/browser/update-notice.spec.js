@@ -8,12 +8,14 @@ const ROOT = path.resolve(__dirname, '../..'), SUB = '/FamilyCircle/';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 
 /* ---- two controlled builds ---- */
+const buildSite = require('../../tools/build-site');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'fc-builds-'));
+/* Each build is the real publish artifact (tools/build-site.js). Build B is a later release: one more line in config.js, stamped again exactly as the workflow would. */
 function makeBuild(name, extra) {
-  const dir = path.join(TMP, name); fs.mkdirSync(dir);
-  for (const f of stampLib.shippedFiles(ROOT)) { fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); fs.copyFileSync(path.join(ROOT, f), path.join(dir, f)); }
-  if (extra) fs.appendFileSync(path.join(dir, 'config.js'), extra);
-  return { dir, id: stampLib.stamp(dir) };
+  const dir = path.join(TMP, name), r = buildSite.build(dir);
+  if (!r.ok) throw new Error('build refused: ' + r.problems.join('; '));
+  if (extra) { fs.appendFileSync(path.join(dir, 'config.js'), extra); stampLib.stamp(dir); const v = buildSite.validate(dir); if (!v.ok) throw new Error(v.problems.join('; ')); return { dir, id: v.id }; }
+  return { dir, id: r.id };
 }
 const A = makeBuild('A', '\nwindow.__BUILD_MARK = "A";\n'), B = makeBuild('B', '\nwindow.__BUILD_MARK = "B";\n');
 
