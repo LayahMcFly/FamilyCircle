@@ -1,4 +1,4 @@
-# Family Exchange: unique-index probe plan (Step 7, revision 3, proposal only)
+# Family Exchange: unique-index probe plan (Step 7, revision 4, proposal only)
 
 Status: NOT approved, NOT run. Nothing here has made a request to Appwrite or any other service, created a key, project or schema, or used a credential. Stages A, B and C each need their own approval, and so do the connectivity check, the key, and the choice of runner. Revision 3 replaces revision 2 (`4199408`).
 
@@ -14,8 +14,9 @@ The commit is named in the approval request, with the tree hash of `exchange-pro
 | `schema.manifest.json` | The exact schema: database `exchange_probe`; tables `probeEvents`, `probeHints`, `probeText`; every column type, size and required flag; every index key, type and columns; table permissions `[]`, row security off. Copied here, not imported. |
 | `probe.js` | The checks P0 to P10, `budget()`, `assertTarget()`, `cleanup()`. |
 | `adapter.js` | Wraps `node-appwrite` `TablesDB` (object-parameter calls, as the production function uses). Hard call cap, wall-clock deadline, immediate stop on 401/403 and on repeated 429/5xx/unexpected network loss. Also `verifySchema` (read-only) and `createSchema` (create-only, stops on any 409). |
-| `run.js` | Command line: `budget`, `verify-schema`, `create-schema`, `run`, `cleanup`. |
-| `redact.js` | Masks the key value and key-shaped strings in everything printed or written. |
+| `run.js` | Command line: `budget`, `connectivity` (keyless), `verify-schema`, `create-schema`, `run`, `cleanup`. Everything it prints goes through `summary.js`. |
+| `summary.js`, `errors.js` | Public output. Fixed line templates, per-field validators and fixed reason codes. No SDK response, header, exception text, environment value, row or state payload can be printed or written to the summary files; a line that fails the character check (letters, digits, `_ . - =` only; no `:`) is refused, so workflow-command injection is impossible. `created.json` (the ids to clean up) is local only and never part of the public output. |
+| `redact.js` | Backup only: masks the key value and key-shaped strings after the allowlist has already run. It is not what keeps output safe. |
 | `fake-sdk.js` + `*.test.js` | Offline tests. |
 | `package.json`, `package-lock.json` | One dependency, `node-appwrite` exactly `31.1.0` (the version the production function pins), 4 packages total, every one pinned with an integrity hash. |
 Schema (all columns required; defaults, arrays, encryption, index orders and lengths are left at Appwrite's defaults and are not compared):
@@ -32,8 +33,9 @@ Setup (on whichever machine is approved as the runner, section 4):
 git clone https://github.com/LayahMcFly/FamilyCircle.git && cd FamilyCircle
 git checkout <candidate commit>
 test "$(git rev-parse HEAD:exchange-probe)" = "<tree hash from the approval>"
-cd exchange-probe && npm ci --ignore-scripts && npm test        # 37 tests, offline, no key
+cd exchange-probe && npm ci --ignore-scripts && npm test        # 47 tests, offline, no key
 node run.js budget                                              # prints the call budget, no key, no network
+node run.js connectivity                                        # keyless: one GET of <endpoint>/health/version; prints only a status number and a version (needs PROBE_ENDPOINT only)
 ```
 Key file (never an argument, never in Git or logs): `umask 077; mkdir -p ~/probe-secret; read -rs V; printf %s "$V" > ~/probe-secret/key; unset V`. `read -s` keeps it out of the screen and the shell history. Then:
 ```
@@ -41,7 +43,7 @@ export PROBE_ENDPOINT=https://nyc.cloud.appwrite.io/v1
 export PROBE_PROJECT_ID=<probe project id>
 export PROBE_KEY_FILE=$HOME/probe-secret/key
 node run.js verify-schema --expect-project <probe project id>   # Stage A check, read-only, 7 calls
-node run.js create-schema --expect-project <id>                 # only if the runner creates the schema (setup key), 114 calls at most
+node run.js create-schema --expect-project <id>                 # only if the runner creates the schema (setup key), 115 calls at most
 node run.js run           --expect-project <id>                 # Stage B, 6015 calls at most
 node run.js cleanup       --expect-project <id>                 # Stage C, rows recorded in out/created.json only
 rm -P ~/probe-secret/key || shred -u ~/probe-secret/key         # then she revokes the key and deletes the project in the Console
@@ -74,7 +76,7 @@ Console-created keys in the probe project only. Preferred: she creates the datab
 The two are never one key. Expiry: the shortest the Console offers that covers the stage (setup about 6 minutes of calls, run at most 15). The short ephemeral keys Appwrite documents (3600 seconds) are made through the key API, which needs a key with `keys.write`, so they are not used. If the shortest Console expiry is a day, I will say so, and she revokes each key right after its stage (revocation, not expiry, is the real limit). If a call returns 401 or 403 the runner stops; widening scopes is a new approval, never automatic.
 
 ## 7. Call budget and stop conditions (enforced in code, covered by tests)
-Calls per stage, worst case, with the defaults: precheck 3; P0 readiness 150; P1 3; P2 to P4 1,500; P5 3,845; P6 80; P7 160; P8 4; P9 6; P10 257. Total 6,008, plus a 7-call schema check = **6,015 cap**. `create-schema` 114 at most (24 creates plus up to 30 column-readiness polls per table), `verify-schema` 7, `cleanup` at most 491 (one per recorded row; rows created at most 491). A typical correct run is about 3,300 calls. The adapter refuses the next request once the cap is reached (a test confirms the fake sees exactly the cap and no more).
+Calls per stage, worst case, with the defaults: precheck 3; P0 readiness 150; P1 3; P2 to P4 1,500; P5 3,845; P6 80; P7 160; P8 4; P9 6; P10 257. Total 6,008, plus a 7-call schema check = **6,015 cap**. `create-schema` 115 at most (1 database, 3 tables, every column and index create, plus up to 30 column-readiness polls per table; the earlier figure of 114 was a miscount, the code and its test give 115), `verify-schema` 7, `cleanup` at most 491 (one per recorded row; rows created at most 491). A typical correct run is about 3,300 calls. The adapter refuses the next request once the cap is reached (a test confirms the fake sees exactly the cap and no more).
 The run stops, sends nothing further, records the rows created so far in `out/created.json`, and exits with status 2 on: any 401 or 403; five consecutive 429, 5xx or unexpected network failures; the call cap; the wall-clock limit (run 15 min, create-schema 6, cleanup 10, verify 1); a project that is not clean; a schema that differs from the manifest; any 409 during `create-schema` (it never touches pre-existing resources). A rate-limited run is reported inconclusive, never a pass. If the process is killed, deleting the project is the cleanup of last resort.
 
 ## 8. Checks, and what a result means
@@ -90,7 +92,9 @@ Delete only what is recorded as created for the probe; never delete or modify a 
 - Anything unexpected stops the cleanup and is reported. Nothing is deleted on a guess.
 
 ## 10. Offline test evidence (at the candidate commit)
-`cd exchange-probe && npm ci --ignore-scripts && npm test` (Node 22.23.4): 37 tests, 37 pass, 0 fail, 0 skipped, 0 cancelled. By file: `manifest.test.js` 4, `adapter.test.js` 15, `runner.test.js` 12, `probe.test.js` 6. Covered: pinned SDK and lockfile, manifest completeness and drift alarm, every probe write fits the manifest, SDK call-surface contract, full probe through the adapter within budget, hard cap, auth, throttling and deadline stops, clean-project refusal, unique-key violations caught, readiness and schema drift (10 kinds), create-only schema creation, timeouts, key containment, target and endpoint guards, cleanup boundary. Mutation checks (each made the named test fail, then reverted): redaction off, call cap off, auth stop off, key-file mode check off, cleanup widened. `cd function && npm test`: 142 of 142 (unchanged). Nothing in these runs touched the network except `npm ci`.
+`cd exchange-probe && npm ci --ignore-scripts && npm test` (Node 22.23.4, fresh clone): 47 tests, 47 pass, 0 fail. By file: `manifest.test.js` 4, `adapter.test.js` 15, `runner.test.js` 12, `probe.test.js` 6, `public-output.test.js` 10. `cd function && npm test` 142/142 and `node --test test/*.test.js` 259/259 (unchanged). Nothing was run against Appwrite or GitHub's runners.
+`public-output.test.js` feeds hostile material into every channel the runner can see: SDK errors whose message, response, headers, stack, url and type carry canary strings and `::add-mask::` / `::error::` workflow commands (statuses 401, 403, 429, 500 and none, for every command); rows and state payloads with canaries; schemas with canary-named columns and tables; environment values (including ones holding the key); hostile arguments, project ids and endpoints; and a keyless connectivity check with hostile bodies (huge, HTML, injection in the version, non-semver), a headers object that throws if read, a stream cut off at 64 KB, timeouts and network errors. It asserts that no canary or key appears in any printed line or summary file, that every line matches the safe pattern, that summary files contain only allowlisted fields, and that `run.js` has no raw print, never prints exception text and writes only the summary files plus the local `created.json`. Four mutations (printing the exception message, passing findings through, disabling the line guard, passing check detail through) each make these tests fail.
+Limits: this is offline evidence about the code. It says nothing about Appwrite's behaviour; that is what the probe itself would measure.
 
 ## 11. Decisions that block the next action
 1. Her Console checks (section 5) and whether a further project is acceptable at no charge.
