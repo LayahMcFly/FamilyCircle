@@ -19,4 +19,4 @@ To turn it OFF, change it back to `"on": false` and commit. Open pages notice wi
 The switch only hides the app's screens. It does not stop the server, so your Appwrite and Printify commands keep working.
 
 ## Releases and the update notice
-Before committing a frontend change run `node tools/stamp-release.js`; it writes `release.json` and the matching ids in `index.html`. Open pages then offer an "Update available" notice. Details, limits and rollback: see UPDATE-GUIDE.md.
+Every push to `main` is built, stamped with a release id, validated and published by `.github/workflows/publish-site.yml` (once Pages is set to publish from GitHub Actions). You do not type a version number. Open pages then offer an "Update available" notice. How it works, how to roll back, and what is verified: see UPDATE-GUIDE.md.
