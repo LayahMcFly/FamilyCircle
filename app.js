@@ -42,6 +42,50 @@
       d.addEventListener('close', function () { d.remove(); });
       document.body.appendChild(d); if (d.showModal) d.showModal(); else d.setAttribute('open', '');
     });
+    var supportBtn = document.createElement('button'); supportBtn.type = 'button'; supportBtn.className = 'foot-linkbtn'; supportBtn.id = 'foot-support-btn'; supportBtn.setAttribute('aria-haspopup', 'dialog'); supportBtn.textContent = 'Support the site';
+    supportBtn.addEventListener('click', function () {
+      var HANDLE = '$LayahMcFly', URL_CASH = 'https://cash.app/$LayahMcFly';
+      var el = function (tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; };
+      var d = el('dialog', 'foot-dialog support-dialog'); d.setAttribute('aria-labelledby', 'foot-support-h');
+      var hd = el('h2', '', 'Support FamilyCircle'); hd.id = 'foot-support-h'; d.appendChild(hd);
+      d.appendChild(el('p', '', 'Enjoying the site? Supporting it is completely optional. Here are two ways to help.'));
+      var cash = el('section', 'support-opt'); cash.setAttribute('aria-labelledby', 'foot-support-cash-h');
+      var ch = el('h3', '', 'Support with Cash App'); ch.id = 'foot-support-cash-h'; cash.appendChild(ch);
+      cash.appendChild(el('p', 'support-handle', HANDLE));
+      cash.appendChild(el('p', '', 'Choose any amount to help support the site.'));
+      var acts = el('div', 'support-actions');
+      var open = el('a', 'btn', 'Open Cash App'); open.href = URL_CASH; open.target = '_blank'; open.rel = 'noopener noreferrer'; open.id = 'foot-support-open';
+      var copy = el('button', 'btn secondary', 'Copy handle'); copy.type = 'button'; copy.id = 'foot-support-copy';
+      var status = el('p', 'support-status'); status.setAttribute('role', 'status'); status.id = 'foot-support-status';
+      var say = function (t) { status.textContent = t; clearTimeout(say.t); say.t = setTimeout(function () { status.textContent = ''; }, 3000); };
+      copy.addEventListener('click', function () {
+        var done = function () { say('Copied ' + HANDLE); }, fail = function () { say('Could not copy. The handle is ' + HANDLE); };
+        var legacy = function () { var ta = document.createElement('textarea'); ta.value = HANDLE; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; d.appendChild(ta); ta.select(); var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; } ta.remove(); copy.focus(); ok ? done() : fail(); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(HANDLE).then(done, legacy); else legacy();
+      });
+      acts.appendChild(open); acts.appendChild(copy); cash.appendChild(acts); cash.appendChild(status); d.appendChild(cash);
+      var ads = el('section', 'support-opt support-opt-off'); ads.setAttribute('aria-labelledby', 'foot-support-ads-h');
+      var ah = el('h3', '', 'Watch ads to support'); ah.id = 'foot-support-ads-h'; ads.appendChild(ah);
+      ads.appendChild(el('p', '', 'Watch a series of ads to help support the site.'));
+      ads.appendChild(el('p', 'support-soon', 'Coming soon'));
+      var watch = el('button', 'btn secondary', 'Watch ads'); watch.type = 'button'; watch.disabled = true; watch.id = 'foot-support-watch'; watch.setAttribute('aria-describedby', 'foot-support-ads-h'); ads.appendChild(watch);
+      d.appendChild(ads);
+      var ok = el('button', 'btn', 'Close'); ok.type = 'button'; ok.id = 'foot-support-close'; ok.addEventListener('click', function () { d.close(); }); d.appendChild(ok);
+      d.addEventListener('click', function (e) { if (e.target !== d) return; var r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close(); });
+      d.addEventListener('keydown', function (e) {
+        if (e.key !== 'Tab') return;
+        var items = Array.prototype.filter.call(d.querySelectorAll('a[href], button:not([disabled])'), function (n) { return n.offsetParent !== null; });
+        if (!items.length) return;
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === d)) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      });
+      var prevOverflow = document.body.style.overflow;
+      d.addEventListener('close', function () { clearTimeout(say.t); document.body.style.overflow = prevOverflow; d.remove(); supportBtn.focus(); });
+      document.body.appendChild(d); document.body.style.overflow = 'hidden';
+      if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+    });
+    about.appendChild(supportBtn); about.appendChild(document.createTextNode(' '));
     about.appendChild(aboutBtn); f.appendChild(about);
     var pp = document.createElement('p'); pp.className = 'foot-play';
     pp.appendChild(document.createTextNode('Also by LayahMcFly: '));
