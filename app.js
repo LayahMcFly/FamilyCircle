@@ -3600,7 +3600,7 @@
 
     try {
       ctl = await window.FamilyTreeChart.mount(chartEl, {
-        people: people, mainId: startId, lens: 'birth', onRendered: art ? art.refresh : null,
+        people: people, mainId: startId, lens: 'birth', onRendered: art ? art.refresh : null, onLayout: art ? art.layout : null,
         avatar: function (person) { return avatarEl(person.userId ? (S.profiles.get(person.userId) || { displayName: person.name }) : { displayName: person.name }); },
         onSelect: function (id) { select(id); },
         onUpdate: function (n) {

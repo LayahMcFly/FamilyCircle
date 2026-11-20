@@ -177,7 +177,7 @@
   }
 
   /* ---------- drawing ---------- */
-  // opts: { people, mainId, lens, avatar(person) -> element, onSelect(personId), onUpdate({shown,total}), onRendered(container) (optional: called after every redraw) }
+  // opts: { people, mainId, lens, avatar(person) -> element, onSelect(personId), onUpdate({shown,total}), onRendered(container, tree) (optional: called after every redraw), onLayout(tree) (optional: called just before each draw) }
   async function mount(container, opts) {
     await loadLibraries();
     var f3 = window.f3;
@@ -207,8 +207,8 @@
 
     function build() {
       chart = f3.createChart(container, built.data)
-        .setTransitionTime(reduce ? 0 : 500)
-        .setCardXSpacing(190).setCardYSpacing(110)
+        .setTransitionTime(opts.onLayout ? 0 : (reduce ? 0 : 500))   // with the tree art the limbs are drawn at the final positions, so cards are placed at once
+        .setCardXSpacing(opts.onLayout ? 230 : 190).setCardYSpacing(opts.onLayout ? 150 : 110)
         .setOrientationVertical()
         .setSingleParentEmptyCard(false)
         .setShowSiblingsOfMain(true)
@@ -229,7 +229,9 @@
             if (person && opts.avatar) s.appendChild(opts.avatar(person));
           }
         });
-      chart.setAfterUpdate(function () { report(); mark(); if (opts.onRendered) { try { opts.onRendered(container); } catch (e) { /* decoration only */ } } });
+      // onLayout(tree) may move the cards' coordinates before they are drawn (the tree art stands the family up, oldest at the bottom). It never touches the data.
+      if (opts.onLayout) chart.setBeforeUpdate(function () { try { opts.onLayout(chart.store.getTree()); } catch (e) { /* decoration only */ } });
+      chart.setAfterUpdate(function () { report(); mark(); if (opts.onRendered) { try { opts.onRendered(container, chart.store.getTree()); } catch (e) { /* decoration only */ } } });
       chart.updateMainId(main);
       chart.updateTree({ initial: true });
     }

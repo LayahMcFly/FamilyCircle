@@ -1,12 +1,12 @@
 /*
- * tree-art.js: the seasonal illustration around the Family Tree page.
+ * tree-art.js: draws the Family Tree as an actual tree, and owns the season / animation controls.
  *
- * What it is: original SVG and CSS artwork (no images, no network, no library). It sits BEHIND the family-chart drawing and never takes part in it.
- *   - Frame art: tapered branches in the top corners with foliage, blossom or snow, drawn once per season.
- *   - Bark under the real parent-child connectors: each connector the chart draws gets a tapered bark shape beneath it. The real connector stays on top as a thin dark line,
- *     so the relationship line is still the thing that says who is connected to whom. Partner connectors are NOT given bark: they stay a dashed gold line.
- *   - A few leaf, petal or snow particles falling in the empty space behind the people.
- * What it does not do: read or change people, relationships or permissions, call the backend, ask for a location, or save anything but three small local
+ * How it works: family-chart still places the people and handles selecting, zooming, panning and keyboard use. Just before each draw this file stands the
+ * layout up (oldest generation at the bottom, descendants above, see layout()), and after each draw it grows limbs between the cards (see tree-grow.js):
+ * a trunk under the oldest people, boughs that divide at junctions, and a tapering branch up to each child. The limbs ARE the relationship lines: a limb only
+ * joins a displayed parent (or two parents together) to their child. Partners get a separate gold dashed link. The chart's own thin connector lines are hidden
+ * while the art is on. Leaves, blossoms, snow and twigs are decoration attached to those limbs; twigs are thin and never touch a card.
+ * It does not read or change people, relationships or permissions, call the backend, ask for a location, or save anything but three small local
  * preferences (season, hemisphere, animation on or off) in this browser's localStorage. All art is aria-hidden and has pointer-events: none.
  *
  * Auto season uses the device date only (no location, no IP lookup). Meteorological months, Northern Hemisphere:
@@ -70,132 +70,200 @@
     return s;
   }
 
-  /* ---------- cubic bezier helpers for placing foliage along the frame twigs ---------- */
-  function bez(p, t) { var u = 1 - t; return [u * u * u * p[0] + 3 * u * u * t * p[2] + 3 * u * t * t * p[4] + t * t * t * p[6], u * u * u * p[1] + 3 * u * u * t * p[3] + 3 * u * t * t * p[5] + t * t * t * p[7]]; }
-  function ang(p, t) { var a = bez(p, Math.max(0, t - 0.02)), b = bez(p, Math.min(1, t + 0.02)); return Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI; }
+  var CW = 170, CH = 56, DROP = 110;
+  var Grow = function () { return window.FamilyTreeGrow; };
 
-  // Frame art for one top corner. viewBox 320 x 180; the limb enters from the top-left corner and tapers toward the middle.
-  var TWIGS = [
-    [146, 56, 170, 40, 196, 34, 226, 38], [200, 76, 214, 98, 238, 116, 266, 124], [96, 34, 112, 14, 140, 6, 172, 8],
-    [74, 120, 90, 130, 108, 132, 128, 126], [30, 40, 60, 70, 78, 108, 74, 150], [236, 94, 250, 80, 266, 76, 288, 80]
-  ];
-  function branchSvg(side) {
-    var s = el('svg', { class: 'ta-branch ta-' + side, viewBox: '0 0 320 180', 'aria-hidden': 'true', focusable: 'false', preserveAspectRatio: 'xMinYMin meet' });
-    var r = rng(hash('frame' + side));
-    // limbs: filled and tapered
-    el('path', { class: 'ta-bark', d: 'M-12,-8 L-12,42 C44,48 96,42 146,58 C190,72 226,100 270,102 L272,96 C234,94 198,66 150,46 C98,26 48,20 -12,-8 Z' }, s);
-    el('path', { class: 'ta-bark', d: 'M28,32 C58,64 82,106 76,152 L70,152 C72,110 52,74 18,44 Z' }, s);
-    el('path', { class: 'ta-barkhi', d: 'M-6,10 C44,26 96,28 146,46 C190,60 224,86 262,94' }, s);
-    el('path', { class: 'ta-barkhi', d: 'M24,48 C50,74 70,108 68,144' }, s);
-    TWIGS.forEach(function (t) { el('path', { class: 'ta-twig', d: 'M' + t[0] + ',' + t[1] + ' C' + t[2] + ',' + t[3] + ' ' + t[4] + ',' + t[5] + ' ' + t[6] + ',' + t[7] }, s); });
-    // snow resting on the upper edges (winter only, shown by CSS)
-    el('path', { class: 'ta-snow', d: 'M-4,-3 C46,20 98,24 148,41 C192,55 226,84 266,92' }, s);
-    el('path', { class: 'ta-snow', d: 'M146,52 C170,36 196,30 226,34' }, s);
-    el('path', { class: 'ta-snow', d: 'M96,30 C112,10 140,2 172,4' }, s);
-    // foliage: leaves, and blossoms for spring, placed along each twig
-    var sway = 0;
-    TWIGS.forEach(function (t, ti) {
-      var g = el('g', { class: 'ta-sway sw' + (sway++ % 3) }, s);
-      g.style.setProperty('--sl', (-r() * 6).toFixed(2) + 's');
-      var ts = [0.28, 0.44, 0.6, 0.76, 0.92];
-      ts.forEach(function (tt, i) {
-        var p = bez(t, tt), a = ang(t, tt) + (i % 2 ? 42 : -42) + (r() * 16 - 8), sc = (0.7 + r() * 0.55) * (tt > 0.8 ? 0.8 : 1);
-        var cls = 'ta-lf l' + (1 + Math.floor(r() * 3)) + (i % 2 ? ' late' : '') + (i === 2 ? ' mid' : '') + (ti < 2 && i === 1 ? ' keep' : '');
-        var u = el('use', { href: '#ta-lf', class: cls, transform: 'translate(' + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ') rotate(' + a.toFixed(0) + ') scale(' + sc.toFixed(2) + ')' }, g);
-        if (i === 1 || i === 3) {
-          var b = bez(t, tt + 0.03);
-          // the position lives on a wrapper: the bloom animation sets a CSS transform on the flower itself, which would replace a transform attribute and drop every flower at the corner
-          var bw = el('g', { transform: 'translate(' + b[0].toFixed(1) + ' ' + (b[1] - 3).toFixed(1) + ') scale(' + (0.9 + r() * 0.5).toFixed(2) + ')' }, g);
-          var bu = el('use', { href: '#ta-bl', class: 'ta-bl' }, bw);
-          bu.style.setProperty('--bd', (0.15 * (ti * 5 + i) + r() * 0.5).toFixed(2) + 's');
-        }
-        void u;
-      });
+  /* ---------- layout: stand the family up ---------- */
+  // Called by the chart just before it draws. The library puts the oldest people at the top; here they go at the bottom, on the trunk.
+  // Only the cards' screen coordinates change. People, relationships and permissions are not touched. Fit and centering use the new size.
+  function layout(tree) {
+    if (!tree || tree.__grown || !tree.data || !tree.data.length) return;
+    tree.__grown = true;
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    tree.data.forEach(function (n) {
+      n.y = -n.y;
+      minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x); minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
     });
-    return s;
+    var x0 = minX - CW / 2 - 50, x1 = maxX + CW / 2 + 50, y0 = minY - CH / 2 - 64, y1 = maxY + CH / 2 + DROP + 44;
+    tree.dim = { width: x1 - x0, height: y1 - y0, x_off: -x0, y_off: -y0 };
   }
 
-  /* ---------- falling particles (a few per season, behind the people) ---------- */
-  var PARTICLES = { winter: { flake: 12, leaf: 3 }, spring: { petal: 5 }, summer: { leaf: 4 }, autumn: { leaf: 9 } };
-  function buildParticles(layer, season) {
-    layer.textContent = '';
-    var spec = PARTICLES[season], r = rng(hash('fall' + season)), n = 0;
+  /* ---------- drawing the tree ---------- */
+  function inRect(x, y, rects, pad) {
+    for (var i = 0; i < rects.length; i++) { var r = rects[i]; if (x > r[0] - pad && x < r[0] + r[2] + pad && y > r[1] - pad && y < r[1] + r[3] + pad) return true; }
+    return false;
+  }
+  function leafAt(parent, x, y, ang, sc, cls) {
+    var g = el('g', { transform: 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') rotate(' + ang.toFixed(0) + ') scale(' + sc.toFixed(2) + ')' }, parent);
+    return el('use', { href: '#ta-lf', class: 'ta-lf ' + cls }, g);
+  }
+  function blossomAt(parent, x, y, sc, bd, still) {
+    var g = el('g', { transform: 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') scale(' + sc.toFixed(2) + ')' }, parent);
+    var u = el('use', { href: '#ta-bl', class: 'ta-bl' + (still ? ' done' : '') }, g);
+    u.style.setProperty('--bd', bd.toFixed(2) + 's');
+    return u;
+  }
+  function pathOf(pts) { return 'M' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join('L'); }
+
+  // Draws everything for the cards the chart is showing. Returns the points leaves can fall from.
+  function drawTree(view, tree, state) {
+    var G = Grow(), old = view.querySelector('g.ta-tree');
+    if (old) old.parentNode.removeChild(old);
+    var root = el('g', { class: 'ta-tree', 'aria-hidden': 'true' });
+    view.insertBefore(root, view.firstChild);
+    var nodes = tree.data.filter(function (n) { return n.data && n.data.id; });
+    var people = nodes.map(function (n) { var rl = n.data.rels || {}; return { id: n.data.id, x: n.x, y: n.y, parents: rl.parents || [], partners: rl.spouses || [] }; });
+    var pl = G.plan(people, { cardW: CW, cardH: CH, groundDrop: DROP });
+    if (!pl.ground) return { anchors: [], plan: pl, ground: null };
+    var rects = nodes.map(function (n) { return [n.x - CW / 2, n.y - CH / 2, CW, CH]; });
+    var r = G.rng(G.hash('tree' + nodes.length + (nodes[0] ? nodes[0].data.id : '')));
+
+    // ground
+    var gr = el('g', { class: 'ta-ground' }, root), gy = pl.ground.y, gx0 = pl.ground.x0, gx1 = pl.ground.x1, gmid = (gx0 + gx1) / 2;
+    el('ellipse', { class: 'ta-gshadow', cx: gmid.toFixed(1), cy: (gy + 8).toFixed(1), rx: ((gx1 - gx0) / 2 + 10).toFixed(1), ry: 16 }, gr);
+    el('path', { class: 'ta-mound', d: 'M' + (gx0 - 10) + ',' + (gy + 14) + ' Q' + gmid.toFixed(1) + ',' + (gy - 12) + ' ' + (gx1 + 10) + ',' + (gy + 14) + ' Z' }, gr);
+    var tufts = Math.min(26, Math.max(8, Math.round((gx1 - gx0) / 40)));
+    for (var gi = 0; gi < tufts; gi++) {
+      var tx = gx0 + (gx1 - gx0) * (gi + r()) / tufts, ty = gy + 6 + r() * 6, th = 7 + r() * 8;
+      el('path', { class: 'ta-grass', d: 'M' + tx.toFixed(1) + ',' + ty.toFixed(1) + ' q' + (r() * 4 - 2).toFixed(1) + ',-' + (th * 0.6).toFixed(1) + ' ' + (r() * 8 - 4).toFixed(1) + ',-' + th.toFixed(1) + ' M' + (tx + 3).toFixed(1) + ',' + ty.toFixed(1) + ' q' + (r() * 3).toFixed(1) + ',-' + (th * 0.5).toFixed(1) + ' ' + (r() * 7 - 1).toFixed(1) + ',-' + (th * 0.8).toFixed(1) }, gr);
+    }
+    el('ellipse', { class: 'ta-groundsnow', cx: gmid.toFixed(1), cy: (gy + 2).toFixed(1), rx: ((gx1 - gx0) / 2 - 8).toFixed(1), ry: 9 }, gr);
+    for (var fi = 0; fi < 12; fi++) leafAt(gr, gx0 + 20 + r() * (gx1 - gx0 - 40), gy + 2 + r() * 16, r() * 360, 0.7 + r() * 0.4, 'ta-fallen l' + (1 + Math.floor(r() * 3)));
+
+    // limbs: a soft shadow copy, the bark, then texture
+    var polys = pl.limbs.map(function (l) { return { l: l, p: G.polygon(l) }; });
+    var shadows = el('g', { class: 'ta-shadows' }, root), limbsG = el('g', { class: 'ta-limbs' }, root), bark = el('g', { class: 'ta-bark' }, root);
+    polys.forEach(function (o) { el('path', { class: 'ta-limbshadow', d: G.pathD(o.p), transform: 'translate(3 4)' }, shadows); });
+    polys.forEach(function (o) { el('path', { class: 'ta-limb ta-limb-' + o.l.kind, 'data-union': o.l.union || '', 'data-child': o.l.child || '', d: G.pathD(o.p) }, limbsG); });
+    pl.hubs.forEach(function (h) { el('circle', { class: 'ta-hub', cx: h.x.toFixed(1), cy: h.y.toFixed(1), r: (h.w * 0.52).toFixed(1) }, limbsG); });
+    pl.knots.forEach(function (k) { if (k.w > 6) el('circle', { class: 'ta-hub', cx: k.x.toFixed(1), cy: k.y.toFixed(1), r: (k.w * 0.5).toFixed(1) }, limbsG); });
+    polys.forEach(function (o) {
+      var c = o.p.center;
+      if (o.l.kind === 'feeder' || c.length < 6) return;
+      var thick = Math.max(c[0].w, c[c.length - 1].w);
+      if (thick < 6.5) return;
+      var side = o.l.flare ? -1 : -1, hi = [], k;
+      for (k = 1; k < c.length - 1; k++) hi.push([c[k].x + c[k].nx * c[k].w * 0.22 * side, c[k].y + c[k].ny * c[k].w * 0.22 * side]);
+      el('path', { class: 'ta-barkhi', d: pathOf(hi) }, bark).style.setProperty('stroke-width', Math.max(1.1, thick * 0.12).toFixed(1));
+      if (thick >= 11) {
+        for (k = 0; k < 4; k++) {
+          var i0 = 2 + Math.floor(r() * (c.length - 8)), seg = [];
+          for (var q = 0; q < 5; q++) { var cc = c[Math.min(c.length - 1, i0 + q)], off = (r() - 0.5) * cc.w * 0.6; seg.push([cc.x + cc.nx * off, cc.y + cc.ny * off]); }
+          el('path', { class: 'ta-scratch', d: pathOf(seg) }, bark);
+        }
+      }
+    });
+
+    // partner links: a separate gold dashed link between the two cards, with a small ring where a couple's knot is
+    var pr = el('g', { class: 'ta-partners' }, root);
+    pl.partnerLinks.forEach(function (p) {
+      var dx = p.bx - p.ax, dy = p.by - p.ay, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, e = CW / 2 - 2;
+      var inside = Math.abs(dy) < 6 ? 1 : 0;
+      var x1 = p.ax + (inside ? ux * e : 0), y1 = p.ay + (inside ? 0 : uy * CH / 2), x2 = p.bx - (inside ? ux * e : 0), y2 = p.by - (inside ? 0 : uy * CH / 2);
+      el('path', { class: 'ta-partner', 'data-a': p.a, 'data-b': p.b, d: 'M' + x1.toFixed(1) + ',' + y1.toFixed(1) + 'L' + x2.toFixed(1) + ',' + y2.toFixed(1) }, pr);
+      el('circle', { class: 'ta-ring', cx: ((p.ax + p.bx) / 2).toFixed(1), cy: ((p.ay + p.by) / 2).toFixed(1), r: 5 }, pr);
+    });
+
+    // decoration attached to the limbs
+    var twigs = el('g', { class: 'ta-twigs' }, root), leaves = el('g', { class: 'ta-leaves' }, root), anchors = [], blossoms = 0, nLeaves = 0;
+    var thin = polys.filter(function (o) { return o.l.kind === 'branch' || o.l.kind === 'bough'; }).sort(function (a, b) { return a.l.w1 - b.l.w1; });
+    var still = state.bloomed;
+    thin.forEach(function (o) {
+      var c = o.p.center, n = Math.max(2, Math.min(7, Math.round(c.len / 30)));
+      for (var i = 0; i < n && nLeaves < 130; i++) {
+        var pt = c[Math.round((0.28 + 0.68 * ((i + r()) / n)) * (c.length - 1))], side = nLeaves % 2 ? 1 : -1;
+        var x = pt.x + pt.nx * (pt.w / 2 + 1) * side, y = pt.y + pt.ny * (pt.w / 2 + 1) * side;
+        if (inRect(x, y, rects, 6)) continue;
+        var ang = Math.atan2(pt.ty, pt.tx) * 180 / Math.PI + side * (40 + r() * 32);
+        var u = leafAt(leaves, x, y, ang, 0.72 + r() * 0.5, 'l' + (1 + Math.floor(r() * 3)) + (nLeaves % 2 ? ' late' : '') + (nLeaves % 3 === 1 ? ' mid' : '') + (nLeaves % 7 === 0 ? ' keep' : ''));
+        if (nLeaves % 4 === 0) { u.classList.add('sw'); u.style.setProperty('--sd', (4 + r() * 4).toFixed(1) + 's'); u.style.setProperty('--sl', (-r() * 8).toFixed(1) + 's'); }
+        anchors.push([x, y]); nLeaves++;
+        if (nLeaves % 3 === 0 && blossoms < 40) { blossoms++; blossomAt(leaves, x + 4, y - 3, 0.7, 0.2 + r() * 2.2, still); }
+      }
+    });
+    var twigCount = 0;
+    thin.forEach(function (o, idx) {
+      if (twigCount >= 34 || idx % 2) return;
+      var c = o.p.center, pt = c[Math.round((0.35 + r() * 0.4) * (c.length - 1))], side = r() > 0.5 ? 1 : -1;
+      var base = Math.atan2(pt.ty, pt.tx) + side * (0.7 + r() * 0.5), len = 26 + r() * 20, x0 = pt.x + pt.nx * pt.w / 2 * side, y0 = pt.y + pt.ny * pt.w / 2 * side;
+      var dxv = Math.cos(base), dyv = Math.sin(base), curl = (r() - 0.5) * 12, x3 = x0 + dxv * len, y3 = y0 + dyv * len;
+      if (inRect(x3, y3, rects, 10) || inRect(x0 + dxv * len * 0.5, y0 + dyv * len * 0.5, rects, 4)) return;
+      var c1 = [x0 + dxv * len * 0.35 - dyv * curl, y0 + dyv * len * 0.35 + dxv * curl], c2 = [x0 + dxv * len * 0.7 + dyv * curl, y0 + dyv * len * 0.7 - dxv * curl];
+      el('path', { class: 'ta-twig', d: 'M' + x0.toFixed(1) + ',' + y0.toFixed(1) + ' C' + c1[0].toFixed(1) + ',' + c1[1].toFixed(1) + ' ' + c2[0].toFixed(1) + ',' + c2[1].toFixed(1) + ' ' + x3.toFixed(1) + ',' + y3.toFixed(1) }, twigs);
+      [0.34, 0.58, 0.8, 1].forEach(function (tt, k) {
+        var bp = G.bez([x0, y0, c1[0], c1[1], c2[0], c2[1], x3, y3], tt), a = base * 180 / Math.PI + (k % 2 ? 48 : -48) + (r() * 20 - 10);
+        leafAt(leaves, bp[0], bp[1], a, 0.6 + r() * 0.35, 'l' + (1 + Math.floor(r() * 3)) + (k === 1 ? ' late' : '') + (k === 0 ? ' mid' : ''));
+        anchors.push([bp[0], bp[1]]);
+      });
+      if (blossoms < 40) { blossoms++; blossomAt(leaves, x3, y3, 0.85, 0.1 + r() * 2.4, still); }
+      twigCount++;
+    });
+    // cards nestle in foliage: leaves tucked behind the cards (the cards sit in front of them). The outermost people, who have no children shown, get a full cluster.
+    var parentIds = {};
+    pl.unions.forEach(function (u) { u.parents.forEach(function (id) { parentIds[id] = true; }); });
+    var nested = 0;
+    nodes.slice().sort(function (a, b) { return a.y - b.y; }).forEach(function (n, i) {
+      var tip = !parentIds[n.data.id];
+      if (nested >= 26 || (!tip && i > 5)) return;
+      nested++;
+      var set = tip
+        ? [[-1, -135, 12, 'c'], [1, -45, 12, 'c'], [-1, -165, 0, 's'], [1, -15, 0, 's'], [0, -100, 44, 't'], [0, -80, 0, 't'], [0, -60, -44, 't'], [-1, 160, 0, 'b'], [1, 20, 0, 'b']]
+        : [[-1, -135, 12, 'c'], [1, -45, 12, 'c']];
+      set.forEach(function (cn, k) {
+        var x, y;
+        if (cn[3] === 'c') { x = n.x + cn[0] * (CW / 2 - cn[2]); y = n.y - CH / 2 + 4; }
+        else if (cn[3] === 's') { x = n.x + cn[0] * (CW / 2 - 2); y = n.y - 8; }
+        else if (cn[3] === 'b') { x = n.x + cn[0] * (CW / 2 - 14); y = n.y + CH / 2 - 6; }
+        else { x = n.x + cn[2]; y = n.y - CH / 2 + 3; }
+        leafAt(leaves, x, y, cn[1] + (r() * 26 - 13), 0.95 + r() * 0.5, 'l' + (1 + Math.floor(r() * 3)) + ((i + k) % 2 ? ' late' : '') + ((i + k) % 3 === 0 ? ' mid' : '') + ((i + k) % 6 === 0 ? ' keep' : ''));
+        if (k < 2) anchors.push([x + cn[0] * 8, y - 8]);
+      });
+    });
+
+    // winter: snow resting along the upper edge of the thicker, mostly horizontal limbs
+    var snow = el('g', { class: 'ta-snows' }, root), sn = 0;
+    polys.forEach(function (o) {
+      if (sn >= 16 || o.l.kind === 'feeder') return;
+      var c = o.p.center, mid = c[Math.floor(c.length / 2)];
+      if (Math.abs(mid.ty) > 0.82 || mid.w < 4.5) return;
+      var s = mid.ny < 0 ? 1 : -1, pts = [];
+      for (var k = Math.floor(c.length * 0.12); k < c.length * 0.88; k++) pts.push([c[k].x + c[k].nx * c[k].w * 0.5 * s, c[k].y + c[k].ny * c[k].w * 0.5 * s - 0.6]);
+      if (pts.length > 3) { el('path', { class: 'ta-snow', d: pathOf(pts) }, snow); sn++; }
+    });
+    return { anchors: anchors, plan: pl, ground: pl.ground, extent: { x0: gx0, x1: gx1, y0: Math.min.apply(null, nodes.map(function (n) { return n.y; })) - 60 } };
+  }
+
+  /* ---------- falling leaves, petals and snow (a few, from the tree itself) ---------- */
+  var FALL = { winter: { flake: 12, leaf: 3 }, spring: { petal: 5 }, summer: { leaf: 4 }, autumn: { leaf: 9 } };
+  function buildFall(view, season, info) {
+    var old = view.querySelector('g.ta-fall');
+    if (old) old.parentNode.removeChild(old);
+    if (!info || !info.ground) return 0;
+    var g = el('g', { class: 'ta-fall', 'aria-hidden': 'true' });
+    var tree = view.querySelector('g.ta-tree');
+    tree.appendChild(g);
+    var spec = FALL[season], r = Grow().rng(Grow().hash('fall' + season + info.anchors.length)), n = 0, gy = info.ground.y;
     Object.keys(spec).forEach(function (kind) {
       for (var i = 0; i < spec[kind]; i++) {
-        var p = div('ta-p k-' + kind + ' c' + (1 + Math.floor(r() * 3)), layer);
-        var inner = div('ta-pi', p);
-        var sz = kind === 'flake' ? 4 + r() * 5 : 12 + r() * 12;
-        p.style.setProperty('--x', (4 + r() * 92).toFixed(1) + '%');
-        p.style.setProperty('--dur', (kind === 'flake' ? 15 + r() * 14 : 18 + r() * 16).toFixed(1) + 's');
-        p.style.setProperty('--del', (-r() * 26).toFixed(1) + 's');
-        p.style.setProperty('--dx', ((r() - 0.5) * 120).toFixed(0) + 'px');
-        inner.style.setProperty('--sd', (3.5 + r() * 4).toFixed(1) + 's');
-        inner.style.setProperty('--r0', (-30 + r() * 60).toFixed(0) + 'deg');
-        inner.style.setProperty('--r1', (-80 + r() * 160).toFixed(0) + 'deg');
-        var sv = el('svg', { viewBox: '-12 -12 36 24', width: sz.toFixed(0), height: (sz * 0.67).toFixed(0), 'aria-hidden': 'true', focusable: 'false' }, inner);
-        el('use', { href: kind === 'flake' ? '#ta-fk' : kind === 'petal' ? '#ta-pt' : '#ta-lf' }, sv);
+        var o, x, y, dy, sc;
+        if (kind === 'flake') { x = info.extent.x0 + r() * (info.extent.x1 - info.extent.x0); y = info.extent.y0 + r() * 50; dy = (gy - y) * 0.92; sc = 0.9 + r() * 0.8; }
+        else {
+          if (!info.anchors.length) continue;
+          o = info.anchors[Math.floor(r() * info.anchors.length)]; x = o[0]; y = o[1]; dy = Math.min(gy - y - 6, 130 + r() * 230); sc = 0.8 + r() * 0.5;
+          if (!(dy > 40)) continue;
+        }
+        var w = el('g', { transform: 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') scale(' + sc.toFixed(2) + ')' }, g);
+        var u = el('use', { href: kind === 'flake' ? '#ta-fk' : kind === 'petal' ? '#ta-pt' : '#ta-lf', class: (kind === 'leaf' ? 'ta-lf ' : '') + 'ta-fl k-' + kind + ' l' + (1 + Math.floor(r() * 3)) }, w);
+        u.style.setProperty('--dx', ((r() - 0.5) * 150).toFixed(0) + 'px');
+        u.style.setProperty('--dy', dy.toFixed(0) + 'px');
+        u.style.setProperty('--r0', (r() * 90 - 45).toFixed(0) + 'deg');
+        u.style.setProperty('--r1', (150 + r() * 260).toFixed(0) + 'deg');
+        u.style.setProperty('--dur', (kind === 'flake' ? 16 + r() * 14 : 15 + r() * 14).toFixed(1) + 's');
+        u.style.setProperty('--del', (-r() * 24).toFixed(1) + 's');
         n++;
       }
     });
     return n;
-  }
-
-  /* ---------- bark under the real connectors ---------- */
-  // The chart routes parent-child links as square elbows inside the gap between two generations. Redraw each one as a
-  // soft S-curve between the SAME two end points (child and parent/couple marker), with the same vertical tangents, so
-  // it stays inside that gap and keeps meaning the same relationship. Partner links are not touched.
-  function smooth(p) {
-    var len = p.getTotalLength();
-    if (!(len > 8)) return;
-    var a = p.getPointAtLength(0), b = p.getPointAtLength(len), ym = (a.y + b.y) / 2;
-    if (Math.abs(a.x - b.x) < 1.5) { p.setAttribute('d', 'M' + a.x.toFixed(1) + ',' + a.y.toFixed(1) + 'L' + b.x.toFixed(1) + ',' + b.y.toFixed(1)); return; }
-    p.setAttribute('d', 'M' + a.x.toFixed(1) + ',' + a.y.toFixed(1) + 'C' + a.x.toFixed(1) + ',' + ym.toFixed(1) + ' ' + b.x.toFixed(1) + ',' + ym.toFixed(1) + ' ' + b.x.toFixed(1) + ',' + b.y.toFixed(1));
-  }
-  function barkFor(path, seed) {
-    var len = path.getTotalLength();
-    if (!(len > 8)) return null;
-    var n = Math.max(8, Math.min(34, Math.round(len / 10))), pts = [], i;
-    for (i = 0; i <= n; i++) { var q = path.getPointAtLength(len * i / n); pts.push([q.x, q.y]); }
-    // the parent is the end that sits higher on screen (the chart is drawn top to bottom); the bark is thickest there
-    if (pts[0][1] < pts[n][1]) pts.reverse();
-    var wThin = 2.6, wThick = 7.4, left = [], right = [], rr = rng(seed);
-    var phase = rr() * 6;
-    for (i = 0; i <= n; i++) {
-      var a = pts[Math.max(0, i - 1)], b = pts[Math.min(n, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], d = Math.sqrt(dx * dx + dy * dy) || 1;
-      var t = i / n, w = (wThin + (wThick - wThin) * Math.pow(t, 1.5) + Math.sin(t * 9 + phase) * 0.35) / 2;
-      left.push([pts[i][0] - dy / d * w, pts[i][1] + dx / d * w]); right.push([pts[i][0] + dy / d * w, pts[i][1] - dx / d * w]);
-    }
-    var dstr = 'M' + left.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join('L') + 'L' + right.reverse().map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join('L') + 'Z';
-    return { d: dstr, mid: pts[Math.floor(n * 0.5)], dir: [pts[Math.floor(n * 0.5) + 1][0] - pts[Math.floor(n * 0.5)][0], pts[Math.floor(n * 0.5) + 1][1] - pts[Math.floor(n * 0.5)][1]] };
-  }
-  var MAX_ACCENTS = 36;
-  function refreshLinks(chartEl) {
-    var view = chartEl.querySelector('svg.main_svg g.view');
-    var linksView = view && view.querySelector('g.links_view');
-    if (!linksView) return;
-    var layer = view.querySelector('g.ta-bark-layer');
-    if (!layer) { layer = el('g', { class: 'ta-bark-layer', 'aria-hidden': 'true' }); view.insertBefore(layer, linksView); }
-    layer.textContent = '';
-    var paths = [].slice.call(linksView.querySelectorAll('path.link')), parentLinks = [];
-    paths.forEach(function (p) {
-      var dat = p.__data__, spouse = !!(dat && dat.spouse);
-      p.classList.toggle('f3-partner', spouse);
-      if (!spouse) parentLinks.push(p);
-    });
-    var step = Math.max(1, Math.ceil(parentLinks.length / MAX_ACCENTS)), accents = 0;
-    parentLinks.forEach(function (p, idx) {
-      smooth(p);
-      var seed = hash((p.__data__ && p.__data__.id) || ('l' + idx)), b = barkFor(p, seed);
-      if (!b) return;
-      el('path', { class: 'ta-linkbark', d: b.d }, layer);
-      if (idx % step === 0 && accents < MAX_ACCENTS) {
-        accents++;
-        var rr = rng(seed + 1), dl = Math.sqrt(b.dir[0] * b.dir[0] + b.dir[1] * b.dir[1]) || 1, side = rr() > 0.5 ? 1 : -1;
-        var x = b.mid[0] - b.dir[1] / dl * 8 * side, y = b.mid[1] + b.dir[0] / dl * 8 * side, a = Math.atan2(b.dir[1], b.dir[0]) * 180 / Math.PI + 55 * side + (rr() * 20 - 10);
-        el('use', { href: '#ta-lf', class: 'ta-lf ta-accent l' + (1 + Math.floor(rr() * 3)), transform: 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') rotate(' + a.toFixed(0) + ') scale(' + (0.55 + rr() * 0.3).toFixed(2) + ')' }, layer);
-        if (idx % (step * 2) === 0) el('use', { href: '#ta-bl', class: 'ta-bl ta-accent' }, el('g', { transform: 'translate(' + (x + 5).toFixed(1) + ' ' + (y - 2).toFixed(1) + ') scale(.6)' }, layer));
-      }
-    });
   }
 
   /* ---------- the controller for one tree page ---------- */
@@ -210,11 +278,9 @@
     var root = div('ta', null); root.setAttribute('aria-hidden', 'true');
     root.appendChild(symbols());
     div('ta-wash', root);
-    root.appendChild(branchSvg('left')); root.appendChild(branchSvg('right')); root.appendChild(branchSvg('left')).classList.add('ta-low');
-    var fall = div('ta-fall', root);
     stage.insertBefore(root, stage.firstChild);
     stage.classList.add('ta-stage');
-    var visible = true, settle = null, io = null, dead = false, season = 'spring';
+    var visible = true, io = null, dead = false, season = 'spring', info = null, bloomed = false;
 
     function reduced() { return !!(mq && mq.matches); }
     function animating() { return prefs.anim && !reduced(); }
@@ -224,7 +290,8 @@
       stage.setAttribute('data-season', season);
       stage.classList.toggle('ta-on', animating());
       stage.classList.toggle('ta-still', !animating());
-      buildParticles(fall, season);
+      var vw = chartEl.querySelector('svg.main_svg g.view');
+      if (vw && info) buildFall(vw, season, info);
       syncControls();
     }
     function pause() { stage.classList.toggle('ta-paused', !visible || document.hidden); }
@@ -263,23 +330,27 @@
         : 'Showing ' + SEASON_LABEL[season] + '. Choose Auto to follow the date.';
     }
 
-    // the chart calls this after every redraw; the bark waits for the connectors to finish moving
-    function refresh() {
-      if (dead || !chartEl.isConnected) return;
-      stage.classList.add('ta-settling');
-      clearTimeout(settle);
-      settle = setTimeout(function () { if (dead) return; try { refreshLinks(chartEl); } catch (e) { /* the art is optional: the tree still works */ } stage.classList.remove('ta-settling'); }, reduced() ? 30 : 640);
+    // the chart calls this after every redraw, with the tree it just drew
+    function refresh(container, tree) {
+      if (dead || !chartEl.isConnected || !tree) return;
+      var vw = chartEl.querySelector('svg.main_svg g.view');
+      if (!vw) return;
+      try {
+        info = drawTree(vw, tree, { bloomed: bloomed });
+        bloomed = true;
+        buildFall(vw, season, info);
+        stage.classList.remove('ta-fallback');
+      } catch (e) { stage.classList.add('ta-fallback'); }   // the art is optional: if it fails the chart's own connectors show again
     }
     function destroy() {
-      if (dead) return; dead = true; clearTimeout(settle);
-      document.removeEventListener('visibilitychange', onVis);
+      if (dead) return; dead = true;       document.removeEventListener('visibilitychange', onVis);
       if (io) io.disconnect(); if (ro) ro.disconnect();
       if (mq && mq.removeEventListener) mq.removeEventListener('change', onMq);
       if (root.parentNode) root.parentNode.removeChild(root);
-      stage.classList.remove('ta-stage', 'ta-on', 'ta-still', 'ta-paused', 'ta-settling'); stage.removeAttribute('data-season');
+      stage.classList.remove('ta-stage', 'ta-on', 'ta-still', 'ta-paused', 'ta-fallback'); stage.removeAttribute('data-season');
       var k = instances.indexOf(api); if (k !== -1) instances.splice(k, 1);
     }
-    var api = { controls: ctlBox, refresh: refresh, destroy: destroy, stage: stage, season: function () { return season; }, state: function () { return { season: season, prefs: { season: prefs.season, hemi: prefs.hemi, anim: prefs.anim }, animating: animating() }; } };
+    var api = { controls: ctlBox, refresh: refresh, layout: layout, destroy: destroy, stage: stage, season: function () { return season; }, state: function () { return { season: season, prefs: { season: prefs.season, hemi: prefs.hemi, anim: prefs.anim }, animating: animating() }; } };
     instances.push(api);
     apply();
     return api;
