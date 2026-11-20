@@ -1,6 +1,6 @@
 # Family Exchange: unique-index probe plan (Step 7, revision 4, proposal only)
 
-Status: NOT approved, NOT run. Nothing here has made a request to Appwrite or any other service, created a key, project or schema, or used a credential. Stages A, B and C each need their own approval, and so do the connectivity check, the key, and the choice of runner. Revision 3 replaces revision 2 (`4199408`).
+Status: NOT approved, NOT run. No key, project, schema or credential exists or was used, and the probe has never been run. One mistaken, keyless connectivity GET was attempted and failed locally (see Incident below). Stages A, B and C each need their own approval, and so do the connectivity check, the key, and the choice of runner. Revision 3 replaces revision 2 (`4199408`).
 
 **Bottom line.** The probe is a self-contained, pinned package in `exchange-probe/` that runs against a separate, empty, disposable Appwrite project with its own short-lived key. It is built and tested offline against a fake that has the same call shapes as the pinned SDK. Its result, if it ever runs, is evidence about that project, that configuration and the schedules observed. It is not verification of production.
 
@@ -101,3 +101,9 @@ Limits: this is offline evidence about the code. It says nothing about Appwrite'
 2. Which runner (section 4), and her explicit agreement if it is her own computer.
 3. Whether she creates the schema by hand (preferred, one key) or allows the setup key.
 4. Separate approvals still needed, in order: the connectivity check, Stage A (project and schema), the key(s), Stage B, Stage C.
+
+## Incident and candidate status (2026-11-19)
+
+One unapproved, keyless GET to `https://nyc.cloud.appwrite.io/v1/health/version` was attempted by mistake on 2026-11-19 (Claude ran `node run.js connectivity` in a scratch copy to check it needs no `node_modules`). It failed locally with `error=network` and no response was received; whether the request reached Appwrite is unknown. No key, project or credential was involved. The rest of the probe work, including all tests, ran offline with injected fake networking; `npm install` was the only other network use.
+
+Replacement probe candidate, REPORTED, pending independent review (not approval to merge or execute): commit `99727352f52d5c3a0ed9cc900b3d7e9dce268055` (supersedes `95a05b0`; the earlier text naming `9972735` as the candidate refers to this commit, and its commit message cannot be amended). Pins: `exchange-probe/` tree `88462972edfdae9fe8d0c8d5d5e81b3a737849ca`, manifest blob `52d4606143d401a7b06050a50014b9baf379b639`, lock blob `32530cd2dea1f1d9c456a473bc157799b993ef55`. Regression test `tests/exchange-probe-offline.test.js` (with `tests/helpers/no-network.cjs`) proves that importing the modules or running the probe suite makes no network attempt and cannot invoke the real connectivity command; it fails if a probe test calls it against the real endpoint. Probe work is paused.
