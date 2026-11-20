@@ -165,7 +165,9 @@
     });
 
     // decoration attached to the limbs
-    var twigs = el('g', { class: 'ta-twigs' }, root), leaves = el('g', { class: 'ta-leaves' }, root), anchors = [], blossoms = 0, nLeaves = 0;
+    var twigs = el('g', { class: 'ta-twigs' }, root), leaves = el('g', { class: 'ta-leaves' }, root), anchors = [], blossoms = 0, nLeaves = 0, nSum = 0;
+    // big trees get a lighter hand: the number of extra leaves and blossoms stays bounded
+    var big = nodes.length > 40, BL1 = big ? 30 : 110, BL2 = big ? 40 : 140, BL3 = big ? 40 : 150, SM1 = big ? 40 : 120, SM2 = big ? 55 : 160;
     var thin = polys.filter(function (o) { return o.l.kind === 'branch' || o.l.kind === 'bough'; }).sort(function (a, b) { return a.l.w1 - b.l.w1; });
     var still = state.bloomed;
     thin.forEach(function (o) {
@@ -175,10 +177,20 @@
         var x = pt.x + pt.nx * (pt.w / 2 + 1) * side, y = pt.y + pt.ny * (pt.w / 2 + 1) * side;
         if (inRect(x, y, rects, 6)) continue;
         var ang = Math.atan2(pt.ty, pt.tx) * 180 / Math.PI + side * (40 + r() * 32);
-        var u = leafAt(leaves, x, y, ang, 0.72 + r() * 0.5, 'l' + (1 + Math.floor(r() * 3)) + (nLeaves % 2 ? ' late' : '') + (nLeaves % 3 === 1 ? ' mid' : '') + (nLeaves % 7 === 0 ? ' keep' : ''));
+        var u = leafAt(leaves, x, y, ang, 0.72 + r() * 0.5, 'l' + (1 + Math.floor(r() * 3)) + (nLeaves % 2 ? ' late' : '') + (nLeaves % 3 === 1 ? ' mid' : '') + (nLeaves % 7 === 0 ? ' keep' : '') + (nLeaves % 3 === 0 ? ' sp' : ''));
         if (nLeaves % 4 === 0) { u.classList.add('sw'); u.style.setProperty('--sd', (4 + r() * 4).toFixed(1) + 's'); u.style.setProperty('--sl', (-r() * 8).toFixed(1) + 's'); }
         anchors.push([x, y]); nLeaves++;
-        if (nLeaves % 3 === 0 && blossoms < 40) { blossoms++; blossomAt(leaves, x + 4, y - 3, 0.7, 0.2 + r() * 2.2, still); }
+        // spring: blossoms sit right on the branch, in pairs and small clusters
+        if (blossoms < BL1) { blossoms++; blossomAt(leaves, pt.x + pt.nx * (pt.w / 2 + 2) * side, pt.y + pt.ny * (pt.w / 2 + 2) * side, 1 + r() * 0.35, 0.1 + r() * 2.6, still); }
+        // summer: a second leaf on the other side makes the canopy fuller
+        if (nSum < SM1) {
+          var x2 = pt.x - pt.nx * (pt.w / 2 + 1) * side, y2 = pt.y - pt.ny * (pt.w / 2 + 1) * side;
+          if (!inRect(x2, y2, rects, 6)) {
+            var u2 = leafAt(leaves, x2, y2, Math.atan2(pt.ty, pt.tx) * 180 / Math.PI - side * (40 + r() * 40), 0.8 + r() * 0.5, 'sm l' + (1 + Math.floor(r() * 3)));
+            if (nSum % 3 === 0) { u2.classList.add('sw'); u2.style.setProperty('--sd', (5 + r() * 4).toFixed(1) + 's'); u2.style.setProperty('--sl', (-r() * 8).toFixed(1) + 's'); }
+            nSum++;
+          }
+        }
       }
     });
     var twigCount = 0;
@@ -192,10 +204,10 @@
       el('path', { class: 'ta-twig', d: 'M' + x0.toFixed(1) + ',' + y0.toFixed(1) + ' C' + c1[0].toFixed(1) + ',' + c1[1].toFixed(1) + ' ' + c2[0].toFixed(1) + ',' + c2[1].toFixed(1) + ' ' + x3.toFixed(1) + ',' + y3.toFixed(1) }, twigs);
       [0.34, 0.58, 0.8, 1].forEach(function (tt, k) {
         var bp = G.bez([x0, y0, c1[0], c1[1], c2[0], c2[1], x3, y3], tt), a = base * 180 / Math.PI + (k % 2 ? 48 : -48) + (r() * 20 - 10);
-        leafAt(leaves, bp[0], bp[1], a, 0.6 + r() * 0.35, 'l' + (1 + Math.floor(r() * 3)) + (k === 1 ? ' late' : '') + (k === 0 ? ' mid' : ''));
+        leafAt(leaves, bp[0], bp[1], a, 0.6 + r() * 0.35, 'l' + (1 + Math.floor(r() * 3)) + (k === 1 ? ' late' : '') + (k === 0 ? ' mid' : '') + (k === 2 ? ' sp' : ''));
         anchors.push([bp[0], bp[1]]);
       });
-      if (blossoms < 40) { blossoms++; blossomAt(leaves, x3, y3, 0.85, 0.1 + r() * 2.4, still); }
+      if (blossoms < BL2) { blossoms++; blossomAt(leaves, x3, y3, 1.25, 0.1 + r() * 2.4, still); }
       twigCount++;
     });
     // cards nestle in foliage: leaves tucked behind the cards (the cards sit in front of them). The outermost people, who have no children shown, get a full cluster.
@@ -209,26 +221,34 @@
       var set = tip
         ? [[-1, -135, 12, 'c'], [1, -45, 12, 'c'], [-1, -165, 0, 's'], [1, -15, 0, 's'], [0, -100, 44, 't'], [0, -80, 0, 't'], [0, -60, -44, 't'], [-1, 160, 0, 'b'], [1, 20, 0, 'b']]
         : [[-1, -135, 12, 'c'], [1, -45, 12, 'c']];
+      if (tip && nSum < SM2) { for (var q = 0; q < 6; q++) { var qx = n.x - 66 + q * 26 + r() * 8, qy = n.y - CH / 2 - 2 - r() * 9; leafAt(leaves, qx, qy, -90 + (q - 2.5) * 22 + r() * 16, 0.95 + r() * 0.4, 'sm l' + (1 + Math.floor(r() * 3))); nSum++; } }
       set.forEach(function (cn, k) {
         var x, y;
         if (cn[3] === 'c') { x = n.x + cn[0] * (CW / 2 - cn[2]); y = n.y - CH / 2 + 4; }
         else if (cn[3] === 's') { x = n.x + cn[0] * (CW / 2 - 2); y = n.y - 8; }
         else if (cn[3] === 'b') { x = n.x + cn[0] * (CW / 2 - 14); y = n.y + CH / 2 - 6; }
         else { x = n.x + cn[2]; y = n.y - CH / 2 + 3; }
-        leafAt(leaves, x, y, cn[1] + (r() * 26 - 13), 0.95 + r() * 0.5, 'l' + (1 + Math.floor(r() * 3)) + ((i + k) % 2 ? ' late' : '') + ((i + k) % 3 === 0 ? ' mid' : '') + ((i + k) % 6 === 0 ? ' keep' : ''));
+        leafAt(leaves, x, y, cn[1] + (r() * 26 - 13), 0.95 + r() * 0.5, 'l' + (1 + Math.floor(r() * 3)) + ((i + k) % 2 ? ' late' : '') + ((i + k) % 3 === 0 ? ' mid' : '') + ((i + k) % 6 === 0 ? ' keep' : '') + ((i + k) % 3 === 1 ? ' sp' : ''));
         if (k < 2) anchors.push([x + cn[0] * 8, y - 8]);
+        if (tip && k < 7 && blossoms < BL3) { blossoms++; blossomAt(leaves, x + (k % 2 ? 6 : -6), y - 5, 1.1, 0.2 + r() * 2.4, still); }
       });
     });
 
     // winter: snow resting along the upper edge of the thicker, mostly horizontal limbs
     var snow = el('g', { class: 'ta-snows' }, root), sn = 0;
     polys.forEach(function (o) {
-      if (sn >= 16 || o.l.kind === 'feeder') return;
+      if (sn >= 30 || o.l.kind === 'feeder') return;
       var c = o.p.center, mid = c[Math.floor(c.length / 2)];
-      if (Math.abs(mid.ty) > 0.82 || mid.w < 4.5) return;
+      if (Math.abs(mid.ty) > 0.93 || mid.w < 3.2) return;
+      // snow rests on whichever edge of the limb faces up
       var s = mid.ny < 0 ? 1 : -1, pts = [];
-      for (var k = Math.floor(c.length * 0.12); k < c.length * 0.88; k++) pts.push([c[k].x + c[k].nx * c[k].w * 0.5 * s, c[k].y + c[k].ny * c[k].w * 0.5 * s - 0.6]);
-      if (pts.length > 3) { el('path', { class: 'ta-snow', d: pathOf(pts) }, snow); sn++; }
+      for (var k = Math.floor(c.length * 0.08); k < c.length * 0.92; k++) pts.push([c[k].x + c[k].nx * c[k].w * 0.5 * s, c[k].y + c[k].ny * c[k].w * 0.5 * s - 0.8]);
+      if (pts.length > 3) {
+        var sw = Math.max(2.2, Math.min(5.5, mid.w * 0.42)).toFixed(1);
+        el('path', { class: 'ta-snow-edge', d: pathOf(pts) }, snow).style.setProperty('stroke-width', (+sw + 1.6).toFixed(1));
+        el('path', { class: 'ta-snow', d: pathOf(pts) }, snow).style.setProperty('stroke-width', sw);
+        sn++;
+      }
     });
     return { anchors: anchors, plan: pl, ground: pl.ground, extent: { x0: gx0, x1: gx1, y0: Math.min.apply(null, nodes.map(function (n) { return n.y; })) - 60 } };
   }
@@ -295,8 +315,12 @@
       syncControls();
     }
     function pause() { stage.classList.toggle('ta-paused', !visible || document.hidden); }
-    function onVis() { if (!stage.isConnected) { destroy(); return; } pause(); }
+    // Auto follows the device date: look again whenever the page comes back to the front, so a tab left open across a month boundary does not keep the old season
+    function recheck() { if (prefs.season === 'auto' && current() !== season) apply(); }
+    function onVis() { if (!stage.isConnected) { destroy(); return; } pause(); if (!document.hidden) recheck(); }
+    function onFront() { if (!dead && stage.isConnected) recheck(); }
     document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onFront); window.addEventListener('pageshow', onFront);
     if ('IntersectionObserver' in window) { io = new IntersectionObserver(function (e) { visible = e[e.length - 1].isIntersecting; pause(); }); io.observe(stage); }
     var onMq = function () { apply(); };
     if (mq && mq.addEventListener) mq.addEventListener('change', onMq);
@@ -343,7 +367,7 @@
       } catch (e) { stage.classList.add('ta-fallback'); }   // the art is optional: if it fails the chart's own connectors show again
     }
     function destroy() {
-      if (dead) return; dead = true;       document.removeEventListener('visibilitychange', onVis);
+      if (dead) return; dead = true;       document.removeEventListener('visibilitychange', onVis); window.removeEventListener('focus', onFront); window.removeEventListener('pageshow', onFront);
       if (io) io.disconnect(); if (ro) ro.disconnect();
       if (mq && mq.removeEventListener) mq.removeEventListener('change', onMq);
       if (root.parentNode) root.parentNode.removeChild(root);

@@ -96,6 +96,26 @@ const animCount = page => page.evaluate(() => document.getAnimations().filter(a 
     check('B6 No request leaves the machine (only blocked requests would show here) and the code never mentions geolocation', blocked.length === 0 && !/geolocation|ipapi|ipinfo/i.test(fs.readFileSync(path.join(ROOT, 'tree-art.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')), blocked.join(',') + JSON.stringify(geo));
     await ctx.close(); }
 
+  /* B2. Auto is the first-run default, keeps saved manual choices, and re-checks the date when the page comes back to the front */
+  { const { ctx, page } = await open(browser, world('u1', 'owner', cx), '#/tree', { date: '2026-11-30T23:00:00' });
+    check('B7 With nothing saved, the dropdown starts on Auto and the season follows the device month', (await page.inputValue('#tree-season')) === 'auto' && (await stageAttr(page)) === 'autumn', await page.inputValue('#tree-season'));
+    check('B8 Auto sits in the dropdown beside the four manual seasons', JSON.stringify(await page.$$eval('#tree-season option', o => o.map(x => x.value))) === JSON.stringify(['auto', 'spring', 'summer', 'autumn', 'winter']), '');
+    await page.evaluate(() => { const R = Date, ts = new R('2026-12-01T09:00:00').getTime(); globalThis.Date = class extends R { constructor(...a) { a.length ? super(...a) : super(ts); } static now() { return ts; } }; });
+    check('B9 Nothing changes until the page is foregrounded', (await stageAttr(page)) === 'autumn', await stageAttr(page));
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await page.waitForTimeout(250);
+    check('B10 Coming back to the front across a month boundary (30 Nov to 1 Dec) re-evaluates Auto to Winter and updates the note', (await stageAttr(page)) === 'winter' && /Winter/.test(await page.innerText('#tree-season-note')) && /December to February/.test(await page.innerText('#tree-season-note')), await stageAttr(page));
+    await page.evaluate(() => { const R = Date, ts = new R('2027-03-02T09:00:00').getTime(); globalThis.Date = class extends R { constructor(...a) { a.length ? super(...a) : super(ts); } static now() { return ts; } }; window.dispatchEvent(new Event('focus')); }); await page.waitForTimeout(250);
+    check('B11 Window focus also re-checks (1 Mar gives Spring)', (await stageAttr(page)) === 'spring', await stageAttr(page));
+    await page.evaluate(() => { location.hash = '#/hub'; }); await page.waitForTimeout(800);
+    await page.evaluate(() => { const R = Date, ts = new R('2027-06-05T09:00:00').getTime(); globalThis.Date = class extends R { constructor(...a) { a.length ? super(...a) : super(ts); } static now() { return ts; } }; location.hash = '#/tree'; });
+    await page.waitForSelector('.tree-chart .card', { timeout: 15000 }); await page.waitForTimeout(900);
+    check('B12 Returning to the tree page re-evaluates Auto (5 Jun gives Summer)', (await stageAttr(page)) === 'summer', await stageAttr(page));
+    await ctx.close(); }
+  { const { ctx, page } = await open(browser, world('u1', 'owner', cx), '#/tree', { date: '2026-11-30T23:00:00', prefs: { 'fc-tree-season': 'spring' } });
+    await page.evaluate(() => { const R = Date, ts = new R('2026-12-01T09:00:00').getTime(); globalThis.Date = class extends R { constructor(...a) { a.length ? super(...a) : super(ts); } static now() { return ts; } }; document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); }); await page.waitForTimeout(250);
+    check('B13 A saved manual season is kept (and never overridden) when the page is foregrounded', (await page.inputValue('#tree-season')) === 'spring' && (await stageAttr(page)) === 'spring', await stageAttr(page));
+    await ctx.close(); }
+
   /* C. every season: what shows, and that preferences stay local */
   { const { ctx, page } = await open(browser, world('u1', 'owner', cx), '#/tree');
     const seen = {};
@@ -321,33 +341,24 @@ const animCount = page => page.evaluate(() => document.getAnimations().filter(a 
     await ctx.close();
   }
 
-  /* L. screenshots of the Autumn composition: desktop and phone, animated and static */
-  const SHOT = [['desktop', 1100, 760], ['mobile', 390, 780]];
-  for (const [label, w, h] of SHOT) {
-    for (const anim of [true, false]) {
-      const { ctx, page } = await open(browser, world('u1', 'owner', cx), '#/tree', { w, h, prefs: { 'fc-tree-season': 'autumn', 'fc-tree-anim': anim ? '1' : '0' } });
-      await page.click('button[aria-label="Show the whole tree"]'); await page.waitForTimeout(anim ? 3500 : 1600);
-      await page.evaluate(() => { document.querySelectorAll('header, .topbar, nav.bottom, .tabbar').forEach(e => e.style.setProperty('display', 'none')); const l = document.querySelector('.tree-look'); if (l) l.scrollIntoView({ block: 'start' }); });
-      await page.waitForTimeout(250);
-      const a = await page.locator('.tree-look').boundingBox(), b = await page.locator('.tree-stage').boundingBox();
-      await page.screenshot({ path: path.join(OUT, 'tree-autumn-' + label + (anim ? '' : '-static') + '.png'), clip: { x: Math.max(0, Math.min(a.x, b.x) - 4), y: Math.max(0, a.y - 4), width: Math.min(w, Math.max(a.width, b.width) + 8), height: Math.min(h - 4, b.y + b.height - a.y + 8) } });
-      await ctx.close();
-    }
+  /* L. screenshots of every season: desktop and phone, animated and static; M. dark and reduced-motion (for visual review) */
+  const SEASON_LIST = (process.env.SEASONS || 'spring,summer,autumn,winter').split(',');
+  async function shoot(label, s, o) {
+    const { ctx, page } = await open(browser, world('u1', 'owner', cx), '#/tree', Object.assign({}, o, { prefs: { 'fc-tree-season': s, 'fc-tree-anim': o.anim === false ? '0' : '1' } }));
+    await page.click('button[aria-label="Show the whole tree"]'); await page.waitForTimeout(o.anim === false || o.reduced ? 1600 : 3500);
+    await page.evaluate(() => { document.querySelectorAll('header, .topbar, nav.bottom, .tabbar').forEach(e => e.style.setProperty('display', 'none')); const l = document.querySelector('.tree-look'); if (l) l.scrollIntoView({ block: 'start' }); });
+    await page.waitForTimeout(250);
+    const a = await page.locator('.tree-look').boundingBox(), b = await page.locator('.tree-stage').boundingBox();
+    await page.screenshot({ path: path.join(OUT, 'tree-' + s + '-' + label + '.png'), clip: { x: Math.max(0, Math.min(a.x, b.x) - 4), y: Math.max(0, a.y - 4), width: Math.min(o.w, Math.max(a.width, b.width) + 8), height: Math.min(o.h - 4, b.y + b.height - a.y + 8) } });
+    await ctx.close();
   }
-  check('L1 Autumn screenshots written (desktop and phone, animated and static)', fs.readdirSync(OUT).filter(f => /^tree-autumn-(desktop|mobile)/.test(f)).length >= 4, fs.readdirSync(OUT).join(','));
-
-  /* M. dark appearance and reduced-motion captures (for visual review) */
-  for (const [label, w, h, dark, reduced, seasons] of [['dark-desktop', 1100, 760, true, false, ['autumn']], ['reduced-desktop', 1100, 760, false, true, ['autumn']]]) {
-    for (const s of seasons) {
-      const { ctx, page } = await open(browser, world('u1', 'owner', cx), '#/tree', { w, h, dark, reduced, prefs: { 'fc-tree-season': s } });
-      await page.click('button[aria-label="Show the whole tree"]'); await page.waitForTimeout(1800);
-      await page.evaluate(() => { document.querySelectorAll('header, .topbar, nav.bottom, .tabbar').forEach(e => e.style.setProperty('display', 'none')); const l = document.querySelector('.tree-look'); if (l) l.scrollIntoView({ block: 'start' }); });
-      await page.waitForTimeout(250);
-      const a = await page.locator('.tree-look').boundingBox(), b = await page.locator('.tree-stage').boundingBox();
-      await page.screenshot({ path: path.join(OUT, 'tree-' + s + '-' + label + '.png'), clip: { x: Math.max(0, Math.min(a.x, b.x) - 4), y: Math.max(0, a.y - 4), width: Math.min(w, Math.max(a.width, b.width) + 8), height: Math.min(h - 4, b.y + b.height - a.y + 8) } });
-      await ctx.close();
-    }
+  for (const s of SEASON_LIST) {
+    await shoot('desktop', s, { w: 1100, h: 760 }); await shoot('desktop-static', s, { w: 1100, h: 760, anim: false });
+    await shoot('mobile', s, { w: 390, h: 780 }); await shoot('mobile-static', s, { w: 390, h: 780, anim: false });
+    await shoot('dark-desktop', s, { w: 1100, h: 760, dark: true }); await shoot('dark-mobile-static', s, { w: 390, h: 780, dark: true, anim: false });
+    await shoot('reduced-desktop', s, { w: 1100, h: 760, reduced: true }); await shoot('reduced-mobile', s, { w: 390, h: 780, reduced: true });
   }
+  check('L1 Screenshots written for each season (desktop and phone, animated, static, dark, reduced motion)', SEASON_LIST.every(s => ['desktop', 'desktop-static', 'mobile', 'mobile-static', 'dark-desktop', 'dark-mobile-static', 'reduced-desktop', 'reduced-mobile'].every(l => fs.existsSync(path.join(OUT, 'tree-' + s + '-' + l + '.png')))), fs.readdirSync(OUT).join(','));
 
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

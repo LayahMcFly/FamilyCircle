@@ -8,20 +8,20 @@
   --ta-petal: #f6e8ea; --ta-heart: #d9a94a; --ta-snow: #fbfbf8; --ta-partner: #b8892f; --ta-glow: transparent;
   --ta-card-edge: #b9a78e; --ta-paper: #fcf8ef;
 }
-.tree-stage[data-season="spring"] { --ta-wash-a: #edf4e8; --ta-wash-b: #f5f1ea; --ta-ground: #dfe6cf; --ta-l1: #86b36f; --ta-l2: #a6c98a; --ta-l3: #6f9f60; --ta-petal: #f7e9ec; --ta-heart: #dcae50; }
+.tree-stage[data-season="spring"] { --ta-wash-a: #f1f4ea; --ta-wash-b: #f8f1ee; --ta-ground: #dfe6cf; --ta-l1: #9cc57f; --ta-l2: #b5d495; --ta-l3: #86b36f; --ta-petal: #f6c9d6; --ta-heart: #e6b84e; }
 .tree-stage[data-season="summer"] { --ta-wash-a: #eef2df; --ta-wash-b: #f7f0dc; --ta-ground: #d9dfc0; --ta-bark-1: #5f4636; --ta-bark-2: #44322a; --ta-l1: #3f7a45; --ta-l2: #5a9a52; --ta-l3: #2f6a3e; --ta-glow: #f6d98a; }
 .tree-stage[data-season="autumn"] { --ta-wash-a: #f6ebdb; --ta-wash-b: #f3e6d6; --ta-ground: #e6d3b6; --ta-bark-1: #5a3f30; --ta-bark-2: #43302a; --ta-l1: #c4752f; --ta-l2: #a9502c; --ta-l3: #d3a54a; --ta-rib: rgba(70,30,10,.35); --ta-partner: #a9741f; }
-.tree-stage[data-season="winter"] { --ta-wash-a: #edf0f4; --ta-wash-b: #f4f1ec; --ta-ground: #e3e7ec; --ta-bark-1: #5b4a40; --ta-bark-2: #3f322b; --ta-l1: #8a6a4e; --ta-l2: #75573f; --ta-l3: #9a7a5a; --ta-rib: rgba(40,25,10,.35); --ta-partner: #9a7a33; }
+.tree-stage[data-season="winter"] { --ta-wash-a: #e6ecf3; --ta-wash-b: #f4f1ec; --ta-ground: #e3e7ec; --ta-bark-1: #5b4a40; --ta-bark-2: #3f322b; --ta-l1: #8a6a4e; --ta-l2: #75573f; --ta-l3: #9a7a5a; --ta-rib: rgba(40,25,10,.35); --ta-partner: #9a7a33; --ta-snow-edge: #a9b8c8; }
 
 /* dark appearance: the same palettes, deepened. Written twice like the app's own dark values (follow system, and forced dark). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .tree-stage.ta-stage { --ta-wash-a: #1c2620; --ta-wash-b: #1a1f1e; --ta-ground: #232a22; --ta-bark-1: #7a6150; --ta-bark-2: #5d4a3c; --ta-bark-hi: #9a8068; --ta-vein: #44342a; --ta-twig: #7c6554; --ta-snow: #e9edf0; --ta-card-edge: #6b7680; }
-  :root:not([data-theme="light"]) .tree-stage[data-season="summer"] { --ta-wash-a: #1d2819; --ta-wash-b: #1f2217; --ta-glow: #8a7a3a; }
+  :root:not([data-theme="light"]) .tree-stage[data-season="summer"] { --ta-wash-a: #1d2819; --ta-wash-b: #1f2217; --ta-glow: #5f5628; }
   :root:not([data-theme="light"]) .tree-stage[data-season="autumn"] { --ta-wash-a: #2a2119; --ta-wash-b: #221d18; --ta-ground: #2c241b; }
   :root:not([data-theme="light"]) .tree-stage[data-season="winter"] { --ta-wash-a: #1b222b; --ta-wash-b: #1b1f24; --ta-ground: #222a33; }
 }
 :root[data-theme="dark"] .tree-stage.ta-stage { --ta-wash-a: #1c2620; --ta-wash-b: #1a1f1e; --ta-ground: #232a22; --ta-bark-1: #7a6150; --ta-bark-2: #5d4a3c; --ta-bark-hi: #9a8068; --ta-vein: #44342a; --ta-twig: #7c6554; --ta-snow: #e9edf0; --ta-card-edge: #6b7680; }
-:root[data-theme="dark"] .tree-stage[data-season="summer"] { --ta-wash-a: #1d2819; --ta-wash-b: #1f2217; --ta-glow: #8a7a3a; }
+:root[data-theme="dark"] .tree-stage[data-season="summer"] { --ta-wash-a: #1d2819; --ta-wash-b: #1f2217; --ta-glow: #5f5628; }
 :root[data-theme="dark"] .tree-stage[data-season="autumn"] { --ta-wash-a: #2a2119; --ta-wash-b: #221d18; --ta-ground: #2c241b; }
 :root[data-theme="dark"] .tree-stage[data-season="winter"] { --ta-wash-a: #1b222b; --ta-wash-b: #1b1f24; --ta-ground: #222a33; }
 
@@ -67,22 +67,28 @@
 .ta-lf { color: var(--ta-l1); }
 .ta-lf.l2 { color: var(--ta-l2); } .ta-lf.l3 { color: var(--ta-l3); }
 .ta-rib { fill: none; stroke: var(--ta-rib); stroke-width: .8; stroke-linecap: round; }
-.ta-petal { fill: var(--ta-petal); stroke: color-mix(in srgb, var(--ta-petal) 60%, #b98a96); stroke-width: .35; }
+.ta-petal { fill: var(--ta-petal); stroke: color-mix(in srgb, var(--ta-petal) 55%, #b5667f); stroke-width: .5; }
 .ta-heart { fill: var(--ta-heart); }
 .ta-flakebody { fill: var(--ta-snow); } .ta-petalbody { fill: var(--ta-petal); }
 .ta-bl { display: none; transform-box: fill-box; transform-origin: center; }
-.ta-snow { fill: none; stroke: var(--ta-snow); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 38 6 20 14 9 18; opacity: 0; }
+.ta-snow { fill: none; stroke: var(--ta-snow); stroke-linecap: round; stroke-dasharray: 46 5 24 9 12 14; opacity: 0; }
+.ta-snow-edge { fill: none; stroke: var(--ta-snow-edge, #a9b8c8); stroke-linecap: round; stroke-dasharray: 46 5 24 9 12 14; opacity: 0; }
+.ta-lf.sm { display: none; }
 
 /* what each season shows */
 .tree-stage[data-season="spring"] .ta-bl { display: inline; }
-.tree-stage[data-season="spring"] .ta-lf.mid, .tree-stage[data-season="spring"] .ta-lf.late { display: none; }
+.tree-stage[data-season="spring"] .ta-lf:not(.sp):not(.ta-fl) { display: none; }
+.tree-stage[data-season="summer"] .ta-lf.sm { display: inline; }
 .tree-stage[data-season="autumn"] .ta-lf.late { display: none; }
 .tree-stage[data-season="autumn"] .ta-fallen { display: inline; }
 .tree-stage[data-season="winter"] .ta-lf:not(.keep):not(.ta-fl) { display: none; }
-.tree-stage[data-season="winter"] .ta-snow { opacity: .85; }
+.tree-stage[data-season="winter"] .ta-snow { opacity: .95; }
+.tree-stage[data-season="winter"] .ta-snow-edge { opacity: .55; }
 .tree-stage[data-season="winter"] .ta-groundsnow { opacity: .9; }
-:root[data-theme="dark"] .tree-stage[data-season="winter"] .ta-snow { opacity: .45; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tree-stage[data-season="winter"] .ta-snow { opacity: .45; } }
+:root[data-theme="dark"] .tree-stage[data-season="winter"] .ta-groundsnow { opacity: .4; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tree-stage[data-season="winter"] .ta-groundsnow { opacity: .4; } }
+:root[data-theme="dark"] .tree-stage[data-season="winter"] .ta-snow { opacity: .8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tree-stage[data-season="winter"] .ta-snow { opacity: .8; } }
 
 /* falling leaves, petals and snow: they leave from the tree and fall behind the cards */
 .ta-fl { transform-box: fill-box; transform-origin: center; opacity: 0; display: none; }
