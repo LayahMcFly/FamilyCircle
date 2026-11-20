@@ -112,11 +112,14 @@
 .tree-chart .f3-pcard:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; box-shadow: 0 0 0 2px var(--surface), 0 0 0 6px var(--accent); }
 
 /* appearance controls */
-.tree-look { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 8px 12px; }
-.tree-look select { min-height: 44px; max-width: 100%; }
+.tree-look { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), max-content)); align-items: end; gap: 10px 12px; margin: 8px 12px; }
+.tree-look > div { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; min-width: 0; }
+.tree-look label { display: block; margin: 0; line-height: 1.3; }
+.tree-look select { font-size: 1rem; }
+.tree-look select, .tree-look .btn { box-sizing: border-box; height: 2.75rem; min-height: 2.75rem; margin: 0; max-width: 100%; }
+.tree-look .btn { width: 100%; white-space: normal; line-height: 1.2; }
 .tree-look [hidden] { display: none; }
-.tree-look .btn { min-height: 44px; }
-.tree-look-note { flex: 1 1 100%; margin: 0; }
+.tree-look-note { grid-column: 1 / -1; margin: 0; }
 .main[data-view="tree"] .tree-look { margin-inline: 0; }
 
 /* small screens: people and navigation first, less decoration */

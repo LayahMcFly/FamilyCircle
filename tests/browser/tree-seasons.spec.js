@@ -299,6 +299,28 @@ const animCount = page => page.evaluate(() => document.getAnimations().filter(a 
     check('K5 After leaving the tree, no art, no instance and no animation remain', away.live === 0 && away.art === 0 && away.anims === 0, JSON.stringify(away));
     await ctx.close(); }
 
+  /* N. control row layout: shared grid, same bottom edge and height, note on its own row; wide, phone, and 200% text */
+  for (const [label, w, h, zoom, auto] of [['desktop', 1100, 760, false, false], ['phone', 360, 780, false, false], ['desktop-200', 1100, 760, true, false], ['phone-200', 360, 780, true, false], ['phone-auto', 360, 780, false, true]]) {
+    const { ctx, page } = await open(browser, world('u1', 'owner', cx), '#/tree', { w, h, prefs: { 'fc-tree-season': auto ? 'auto' : 'autumn' } });
+    await page.waitForSelector('#tree-anim');
+    if (zoom) { await page.evaluate(() => document.documentElement.style.setProperty('font-size', '200%', 'important')); await page.waitForTimeout(300); }
+    const m = await page.evaluate(() => {
+      const r = s => document.querySelector(s).getBoundingClientRect();
+      const a = r('#tree-season'), b = r('#tree-anim'), n = r('#tree-season-note'), l = r('label[for="tree-season"]');
+      const kids = [...document.querySelectorAll('.tree-look > div:not([hidden]), .tree-look > p')].map(e => e.getBoundingClientRect());
+      return { aB: a.bottom, bB: b.bottom, aH: a.height, bH: b.height, aT: a.top, bT: b.top, lB: l.bottom, nT: n.top, ctlB: Math.max(a.bottom, b.bottom), sameRow: Math.abs(a.top - b.top) < 4, over: Math.max(...kids.map(k => k.right)) - innerWidth, scrollW: document.documentElement.scrollWidth - innerWidth };
+    });
+    check('N1 ' + label + ': select and toggle have equal height (or toggle wraps taller on its own row)', Math.abs(m.aH - m.bH) < 1.5 || (m.bH > m.aH && !m.sameRow), JSON.stringify(m));
+    check('N2 ' + label + ': on one row, bottom edges match', !m.sameRow || Math.abs(m.aB - m.bB) < 1.5, JSON.stringify(m));
+    check('N3 ' + label + ': label sits above the select', m.lB <= m.aT + 1, JSON.stringify(m));
+    check('N4 ' + label + ': note is on its own row below the controls', m.nT >= m.ctlB - 1, JSON.stringify(m));
+    check('N5 ' + label + ': nothing overflows horizontally', m.over <= 1 && m.scrollW <= 1, JSON.stringify(m));
+    await page.evaluate(() => { document.querySelectorAll('header, .topbar, nav.bottom, .tabbar').forEach(e => e.style.setProperty('display', 'none')); document.querySelector('.tree-look').scrollIntoView({ block: 'start' }); });
+    const bb = await page.locator('.tree-look').boundingBox();
+    await page.screenshot({ path: path.join(OUT, 'controls-' + label + '.png'), clip: { x: 0, y: Math.max(0, bb.y - 6), width: w, height: Math.min(h - Math.max(0, bb.y - 6) - 4, bb.height + 12) } });
+    await ctx.close();
+  }
+
   /* L. screenshots of the Autumn composition: desktop and phone, animated and static */
   const SHOT = [['desktop', 1100, 760], ['mobile', 390, 780]];
   for (const [label, w, h] of SHOT) {
