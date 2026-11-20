@@ -51,7 +51,7 @@ const world = (who, role, people, extra) => Object.assign({ signedIn: true, user
 let PORT; const BASE = () => 'http://127.0.0.1:' + PORT + SUB;
 async function open(browser, mock, hash, o) {
   o = o || {};
-  const ctx = await browser.newContext({ viewport: { width: o.w || 1000, height: o.h || 820 }, reducedMotion: o.reduced ? 'reduce' : 'no-preference', deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ viewport: { width: o.w || 1000, height: o.h || 820 }, reducedMotion: o.reduced ? 'reduce' : 'no-preference', colorScheme: o.dark ? 'dark' : 'light', deviceScaleFactor: 1 });
   const page = await ctx.newPage(); const errors = [], blocked = [], consoleErr = [];
   page.on('pageerror', e => errors.push(String(e))); page.on('console', m => { if (m.type() === 'error') consoleErr.push(m.text()); });
   await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, r => { blocked.push(r.request().url()); r.abort(); });
@@ -115,6 +115,9 @@ const animCount = page => page.evaluate(() => document.getAnimations().filter(a 
     check('C8 The preference is never sent to the backend (no profile field, no write)', logged.length === 0, JSON.stringify(logged));
     await page.reload(); await page.waitForSelector('.tree-chart .card'); await page.waitForTimeout(600);
     check('C9 The chosen season is remembered in this browser', (await stageAttr(page)) === 'winter', await stageAttr(page));
+    await setSeason(page, 'spring'); await page.waitForTimeout(2600);
+    const bl = await page.evaluate(() => { const st = document.querySelector('.tree-stage').getBoundingClientRect(); const pos = [...document.querySelectorAll('.ta-branch .ta-bl')].filter(e => getComputedStyle(e).display !== 'none').map(e => { const r = e.getBoundingClientRect(); return [Math.round((r.left + r.width / 2 - st.left) / 6), Math.round((r.top + r.height / 2 - st.top) / 6), r.left - st.left, r.top - st.top, getComputedStyle(e).opacity]; }); return { n: pos.length, distinct: new Set(pos.map(p => p[0] + ',' + p[1])).size, corner: pos.filter(p => (p[2] < 14 && p[3] < 14) || (p[2] > st.width - 30 && p[3] < 14)).length }; });
+    check('C10 Animated spring: blossoms sit along the branches (not stacked at the corner) after their one-time bloom', bl.n >= 20 && bl.distinct >= bl.n * 0.8 && bl.corner === 0, JSON.stringify(bl));
     await ctx.close(); }
 
   /* D. animation: on/off control, reduced motion, pausing */
@@ -288,6 +291,19 @@ const animCount = page => page.evaluate(() => document.getAnimations().filter(a 
   { const { ctx, page } = await open(browser, world('u1', 'owner', cx), '#/tree', { w: 1100, h: 900, prefs: { 'fc-tree-season': 'autumn' } });
     await page.waitForTimeout(800); await page.screenshot({ path: path.join(OUT, 'tree-page-autumn-desktop-full.png') }); await ctx.close(); }
   check('L1 Screenshots written for four seasons on desktop and phone (animated and static)', fs.readdirSync(OUT).filter(f => /^tree-(spring|summer|autumn|winter)-(desktop|mobile)/.test(f)).length === 16, fs.readdirSync(OUT).join(','));
+
+  /* M. dark appearance and reduced-motion captures (for visual review) */
+  for (const [label, w, h, dark, reduced, seasons] of [['dark-desktop', 1100, 760, true, false, ['spring', 'summer', 'autumn', 'winter']], ['dark-mobile', 390, 780, true, false, ['autumn', 'winter']], ['reduced-desktop', 1100, 760, false, true, ['spring', 'winter']], ['reduced-mobile', 390, 780, false, true, ['summer']]]) {
+    for (const s of seasons) {
+      const { ctx, page } = await open(browser, world('u1', 'owner', cx), '#/tree', { w, h, dark, reduced, prefs: { 'fc-tree-season': s } });
+      await page.click('button[aria-label="Show the whole tree"]'); await page.waitForTimeout(1800);
+      await page.evaluate(() => { document.querySelectorAll('header, .topbar, nav.bottom, .tabbar').forEach(e => e.style.setProperty('display', 'none')); const l = document.querySelector('.tree-look'); if (l) l.scrollIntoView({ block: 'start' }); });
+      await page.waitForTimeout(250);
+      const a = await page.locator('.tree-look').boundingBox(), b = await page.locator('.tree-stage').boundingBox();
+      await page.screenshot({ path: path.join(OUT, 'tree-' + s + '-' + label + '.png'), clip: { x: Math.max(0, Math.min(a.x, b.x) - 4), y: Math.max(0, a.y - 4), width: Math.min(w, Math.max(a.width, b.width) + 8), height: Math.min(h - 4, b.y + b.height - a.y + 8) } });
+      await ctx.close();
+    }
+  }
 
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

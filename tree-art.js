@@ -104,7 +104,9 @@
         var u = el('use', { href: '#ta-lf', class: cls, transform: 'translate(' + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ') rotate(' + a.toFixed(0) + ') scale(' + sc.toFixed(2) + ')' }, g);
         if (i === 1 || i === 3) {
           var b = bez(t, tt + 0.03);
-          var bu = el('use', { href: '#ta-bl', class: 'ta-bl', transform: 'translate(' + b[0].toFixed(1) + ' ' + (b[1] - 3).toFixed(1) + ') scale(' + (0.9 + r() * 0.5).toFixed(2) + ')' }, g);
+          // the position lives on a wrapper: the bloom animation sets a CSS transform on the flower itself, which would replace a transform attribute and drop every flower at the corner
+          var bw = el('g', { transform: 'translate(' + b[0].toFixed(1) + ' ' + (b[1] - 3).toFixed(1) + ') scale(' + (0.9 + r() * 0.5).toFixed(2) + ')' }, g);
+          var bu = el('use', { href: '#ta-bl', class: 'ta-bl' }, bw);
           bu.style.setProperty('--bd', (0.15 * (ti * 5 + i) + r() * 0.5).toFixed(2) + 's');
         }
         void u;
@@ -139,6 +141,16 @@
   }
 
   /* ---------- bark under the real connectors ---------- */
+  // The chart routes parent-child links as square elbows inside the gap between two generations. Redraw each one as a
+  // soft S-curve between the SAME two end points (child and parent/couple marker), with the same vertical tangents, so
+  // it stays inside that gap and keeps meaning the same relationship. Partner links are not touched.
+  function smooth(p) {
+    var len = p.getTotalLength();
+    if (!(len > 8)) return;
+    var a = p.getPointAtLength(0), b = p.getPointAtLength(len), ym = (a.y + b.y) / 2;
+    if (Math.abs(a.x - b.x) < 1.5) { p.setAttribute('d', 'M' + a.x.toFixed(1) + ',' + a.y.toFixed(1) + 'L' + b.x.toFixed(1) + ',' + b.y.toFixed(1)); return; }
+    p.setAttribute('d', 'M' + a.x.toFixed(1) + ',' + a.y.toFixed(1) + 'C' + a.x.toFixed(1) + ',' + ym.toFixed(1) + ' ' + b.x.toFixed(1) + ',' + ym.toFixed(1) + ' ' + b.x.toFixed(1) + ',' + b.y.toFixed(1));
+  }
   function barkFor(path, seed) {
     var len = path.getTotalLength();
     if (!(len > 8)) return null;
@@ -172,6 +184,7 @@
     });
     var step = Math.max(1, Math.ceil(parentLinks.length / MAX_ACCENTS)), accents = 0;
     parentLinks.forEach(function (p, idx) {
+      smooth(p);
       var seed = hash((p.__data__ && p.__data__.id) || ('l' + idx)), b = barkFor(p, seed);
       if (!b) return;
       el('path', { class: 'ta-linkbark', d: b.d }, layer);
@@ -180,8 +193,7 @@
         var rr = rng(seed + 1), dl = Math.sqrt(b.dir[0] * b.dir[0] + b.dir[1] * b.dir[1]) || 1, side = rr() > 0.5 ? 1 : -1;
         var x = b.mid[0] - b.dir[1] / dl * 8 * side, y = b.mid[1] + b.dir[0] / dl * 8 * side, a = Math.atan2(b.dir[1], b.dir[0]) * 180 / Math.PI + 55 * side + (rr() * 20 - 10);
         el('use', { href: '#ta-lf', class: 'ta-lf ta-accent l' + (1 + Math.floor(rr() * 3)), transform: 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') rotate(' + a.toFixed(0) + ') scale(' + (0.55 + rr() * 0.3).toFixed(2) + ')' }, layer);
-        if (idx % (step * 2) === 0) el('use', { href: '#ta-bl', class: 'ta-bl ta-accent', transform: 'translate(' + (x + 5).toFixed(1) + ' ' + (y - 2).toFixed(1) + ') scale(.6)' }, layer);
-        el('path', { class: 'ta-snow ta-linksnow', d: p.getAttribute('d'), transform: 'translate(0 -2.6)' }, layer);
+        if (idx % (step * 2) === 0) el('use', { href: '#ta-bl', class: 'ta-bl ta-accent' }, el('g', { transform: 'translate(' + (x + 5).toFixed(1) + ' ' + (y - 2).toFixed(1) + ') scale(.6)' }, layer));
       }
     });
   }
@@ -244,7 +256,7 @@
       selS.value = prefs.season; selH.value = prefs.hemi; hemiWrap.hidden = prefs.season !== 'auto';
       var on = animating();
       btn.setAttribute('aria-pressed', String(on)); btn.disabled = reduced();
-      btn.textContent = 'Seasonal animation: ' + (reduced() ? 'Off (your device asks for reduced motion)' : on ? 'On' : 'Off');
+      btn.textContent = 'Seasonal animation: ' + (reduced() ? 'Off (reduced motion)' : on ? 'On' : 'Off');
       var months = (prefs.hemi === 'south' ? MONTHS_SOUTH : MONTHS_NORTH)[season];
       note.textContent = prefs.season === 'auto'
         ? 'Auto shows ' + SEASON_LABEL[season] + ' (' + months + ' in the ' + (prefs.hemi === 'south' ? 'Southern' : 'Northern') + ' Hemisphere), using this device’s date. Nothing is sent anywhere.'

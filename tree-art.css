@@ -15,12 +15,12 @@
 
 /* dark appearance: the same palettes, deepened. Written twice like the app's own dark values (follow system, and forced dark). */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .tree-stage.ta-stage { --ta-wash-a: #1c2620; --ta-wash-b: #1a1f1e; --ta-ground: #232a22; --ta-bark-1: #8a6f5a; --ta-bark-2: #6a5444; --ta-bark-hi: #a98d76; --ta-vein: #251a14; --ta-twig: #7c6554; --ta-snow: #e9edf0; --ta-card-edge: #6b7680; }
+  :root:not([data-theme="light"]) .tree-stage.ta-stage { --ta-wash-a: #1c2620; --ta-wash-b: #1a1f1e; --ta-ground: #232a22; --ta-bark-1: #7a6150; --ta-bark-2: #5d4a3c; --ta-bark-hi: #9a8068; --ta-vein: #44342a; --ta-twig: #7c6554; --ta-snow: #e9edf0; --ta-card-edge: #6b7680; }
   :root:not([data-theme="light"]) .tree-stage[data-season="summer"] { --ta-wash-a: #1d2819; --ta-wash-b: #1f2217; --ta-glow: #8a7a3a; }
   :root:not([data-theme="light"]) .tree-stage[data-season="autumn"] { --ta-wash-a: #2a2119; --ta-wash-b: #221d18; --ta-ground: #2c241b; }
   :root:not([data-theme="light"]) .tree-stage[data-season="winter"] { --ta-wash-a: #1b222b; --ta-wash-b: #1b1f24; --ta-ground: #222a33; }
 }
-:root[data-theme="dark"] .tree-stage.ta-stage { --ta-wash-a: #1c2620; --ta-wash-b: #1a1f1e; --ta-ground: #232a22; --ta-bark-1: #8a6f5a; --ta-bark-2: #6a5444; --ta-bark-hi: #a98d76; --ta-vein: #251a14; --ta-twig: #7c6554; --ta-snow: #e9edf0; --ta-card-edge: #6b7680; }
+:root[data-theme="dark"] .tree-stage.ta-stage { --ta-wash-a: #1c2620; --ta-wash-b: #1a1f1e; --ta-ground: #232a22; --ta-bark-1: #7a6150; --ta-bark-2: #5d4a3c; --ta-bark-hi: #9a8068; --ta-vein: #44342a; --ta-twig: #7c6554; --ta-snow: #e9edf0; --ta-card-edge: #6b7680; }
 :root[data-theme="dark"] .tree-stage[data-season="summer"] { --ta-wash-a: #1d2819; --ta-wash-b: #1f2217; --ta-glow: #8a7a3a; }
 :root[data-theme="dark"] .tree-stage[data-season="autumn"] { --ta-wash-a: #2a2119; --ta-wash-b: #221d18; --ta-ground: #2c241b; }
 :root[data-theme="dark"] .tree-stage[data-season="winter"] { --ta-wash-a: #1b222b; --ta-wash-b: #1b1f24; --ta-ground: #222a33; }
@@ -41,7 +41,7 @@
 .ta-bark { fill: var(--ta-bark-1); }
 .ta-barkhi { fill: none; stroke: var(--ta-bark-hi); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 22 9 6 12; opacity: .55; }
 .ta-twig { fill: none; stroke: var(--ta-twig); stroke-width: 2; stroke-linecap: round; }
-.ta-snow { fill: none; stroke: var(--ta-snow); stroke-width: 3.4; stroke-linecap: round; stroke-dasharray: 26 8 14 11 5 9; opacity: 0; }
+.ta-snow { fill: none; stroke: var(--ta-snow); stroke-width: 2.3; stroke-linecap: round; stroke-dasharray: 38 6 20 14 9 18; opacity: 0; }
 .ta-leafbody { fill: currentColor; }
 .ta-lf { color: var(--ta-l1); }
 .ta-lf.l2 { color: var(--ta-l2); } .ta-lf.l3 { color: var(--ta-l3); }
@@ -56,9 +56,9 @@
 .tree-stage[data-season="autumn"] .ta-lf.late { display: none; }
 .tree-stage[data-season="winter"] .ta-lf:not(.keep):not(.ta-accent) { display: none; }
 .tree-stage[data-season="winter"] .ta-accent.ta-lf { display: none; }
-.tree-stage[data-season="winter"] .ta-snow { opacity: .95; }
-.tree-stage[data-season="winter"] .ta-linksnow { opacity: .9; stroke-width: 2.2; }
-.tree-stage:not([data-season="winter"]) .ta-linksnow { display: none; }
+.tree-stage[data-season="winter"] .ta-snow { opacity: .8; }
+:root[data-theme="dark"] .tree-stage[data-season="winter"] .ta-snow { opacity: .4; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tree-stage[data-season="winter"] .ta-snow { opacity: .4; } }
 .tree-stage[data-season="spring"] .ta-accent.ta-bl { display: inline; }
 
 /* falling particles: behind the cards, never over a name */
