@@ -17,3 +17,6 @@ To turn it ON:
 To turn it OFF, change it back to `"on": false` and commit. Open pages notice within 15 seconds and reload by themselves.
 
 The switch only hides the app's screens. It does not stop the server, so your Appwrite and Printify commands keep working.
+
+## Releases and the update notice
+Before committing a frontend change run `node tools/stamp-release.js`; it writes `release.json` and the matching ids in `index.html`. Open pages then offer an "Update available" notice. Details, limits and rollback: see UPDATE-GUIDE.md.
