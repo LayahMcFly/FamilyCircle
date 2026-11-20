@@ -177,7 +177,7 @@
   }
 
   /* ---------- drawing ---------- */
-  // opts: { people, mainId, lens, avatar(person) -> element, onSelect(personId), onUpdate({shown,total}) }
+  // opts: { people, mainId, lens, avatar(person) -> element, onSelect(personId), onUpdate({shown,total}), onRendered(container) (optional: called after every redraw) }
   async function mount(container, opts) {
     await loadLibraries();
     var f3 = window.f3;
@@ -229,7 +229,7 @@
             if (person && opts.avatar) s.appendChild(opts.avatar(person));
           }
         });
-      chart.setAfterUpdate(function () { report(); mark(); });
+      chart.setAfterUpdate(function () { report(); mark(); if (opts.onRendered) { try { opts.onRendered(container); } catch (e) { /* decoration only */ } } });
       chart.updateMainId(main);
       chart.updateTree({ initial: true });
     }

@@ -3505,7 +3505,10 @@
       h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom out', text: '−', onclick: function () { if (ctl) ctl.zoom(0.77); } }),
       h('button', { class: 'tool', type: 'button', 'aria-label': 'Show the whole tree', text: 'Fit', onclick: function () { if (ctl) ctl.fit(); } }),
       mine ? h('button', { class: 'tool', type: 'button', 'aria-label': 'Go back to me in the tree', title: 'Back to me', text: 'Me', onclick: function () { if (ctl) ctl.focus(mine.$id); select(mine.$id); } }) : null);
-    holder.appendChild(h('div', { class: 'tree-stage' }, chartEl, tools));
+    var stageEl = h('div', { class: 'tree-stage' }, chartEl, tools), art = null;
+    if (window.FamilyTreeArt) { try { art = window.FamilyTreeArt.mount({ stage: stageEl, chart: chartEl }); } catch (e) { art = null; } }   // decoration only: if it fails the tree is unchanged
+    if (art) holder.appendChild(art.controls);
+    holder.appendChild(stageEl);
     var count = h('p', { class: 'hint tree-count', 'aria-live': 'polite' });
     holder.appendChild(count);
     holder.appendChild(h('p', { class: 'hint', text: 'Drag to move around. Pinch or use + and − to zoom. Tap a person to centre the tree on them and see their parents, partners and children.' + (mine ? ' Lost? Press “Me” to come back to yourself.' : '') }));
@@ -3597,7 +3600,7 @@
 
     try {
       ctl = await window.FamilyTreeChart.mount(chartEl, {
-        people: people, mainId: startId, lens: 'birth',
+        people: people, mainId: startId, lens: 'birth', onRendered: art ? art.refresh : null,
         avatar: function (person) { return avatarEl(person.userId ? (S.profiles.get(person.userId) || { displayName: person.name }) : { displayName: person.name }); },
         onSelect: function (id) { select(id); },
         onUpdate: function (n) {
@@ -3609,7 +3612,7 @@
       chartEl.appendChild(h('a', { class: 'btn', href: '#/settings/tree', text: 'Open the list view' }));
       return;
     }
-    if (token !== S.nav) { ctl.destroy(); return; }
+    if (token !== S.nav) { ctl.destroy(); if (art) art.destroy(); return; }
     select(startId);
   };
 

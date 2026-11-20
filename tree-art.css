@@ -1,0 +1,127 @@
+/* tree-art.css: seasonal artwork for the Family Tree page only. Every rule is scoped to .tree-stage / .tree-chart / .tree-look (see tree-art.js).
+   No images, no remote files. All art is aria-hidden and pointer-events: none, and sits behind the people. */
+
+.tree-stage.ta-stage {
+  --ta-wash-a: #eef3ea; --ta-wash-b: #f6f3ec; --ta-ground: #e4dccb;
+  --ta-bark-1: #6a5342; --ta-bark-2: #4c392d; --ta-bark-hi: #8b705b; --ta-vein: #3a2b22; --ta-twig: #5b4638;
+  --ta-l1: #7fae6a; --ta-l2: #9bc27f; --ta-l3: #6a9a5b; --ta-rib: rgba(40,60,30,.35);
+  --ta-petal: #f6e8ea; --ta-heart: #d9a94a; --ta-snow: #fbfbf8; --ta-partner: #b8892f; --ta-glow: transparent;
+  --ta-card-edge: #8a7a66;
+}
+.tree-stage[data-season="spring"] { --ta-wash-a: #edf4e8; --ta-wash-b: #f5f1ea; --ta-ground: #dfe6cf; --ta-l1: #86b36f; --ta-l2: #a6c98a; --ta-l3: #6f9f60; --ta-petal: #f7e9ec; --ta-heart: #dcae50; }
+.tree-stage[data-season="summer"] { --ta-wash-a: #eef2df; --ta-wash-b: #f7f0dc; --ta-ground: #d9dfc0; --ta-bark-1: #5f4636; --ta-bark-2: #44322a; --ta-l1: #3f7a45; --ta-l2: #5a9a52; --ta-l3: #2f6a3e; --ta-glow: #f6d98a; }
+.tree-stage[data-season="autumn"] { --ta-wash-a: #f6ebdb; --ta-wash-b: #f3e6d6; --ta-ground: #e6d3b6; --ta-bark-1: #5a3f30; --ta-bark-2: #43302a; --ta-l1: #c4752f; --ta-l2: #a9502c; --ta-l3: #d3a54a; --ta-rib: rgba(70,30,10,.35); --ta-partner: #a9741f; }
+.tree-stage[data-season="winter"] { --ta-wash-a: #edf0f4; --ta-wash-b: #f4f1ec; --ta-ground: #e3e7ec; --ta-bark-1: #5b4a40; --ta-bark-2: #3f322b; --ta-l1: #8a6a4e; --ta-l2: #75573f; --ta-l3: #9a7a5a; --ta-rib: rgba(40,25,10,.35); --ta-partner: #9a7a33; }
+
+/* dark appearance: the same palettes, deepened. Written twice like the app's own dark values (follow system, and forced dark). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tree-stage.ta-stage { --ta-wash-a: #1c2620; --ta-wash-b: #1a1f1e; --ta-ground: #232a22; --ta-bark-1: #8a6f5a; --ta-bark-2: #6a5444; --ta-bark-hi: #a98d76; --ta-vein: #251a14; --ta-twig: #7c6554; --ta-snow: #e9edf0; --ta-card-edge: #6b7680; }
+  :root:not([data-theme="light"]) .tree-stage[data-season="summer"] { --ta-wash-a: #1d2819; --ta-wash-b: #1f2217; --ta-glow: #8a7a3a; }
+  :root:not([data-theme="light"]) .tree-stage[data-season="autumn"] { --ta-wash-a: #2a2119; --ta-wash-b: #221d18; --ta-ground: #2c241b; }
+  :root:not([data-theme="light"]) .tree-stage[data-season="winter"] { --ta-wash-a: #1b222b; --ta-wash-b: #1b1f24; --ta-ground: #222a33; }
+}
+:root[data-theme="dark"] .tree-stage.ta-stage { --ta-wash-a: #1c2620; --ta-wash-b: #1a1f1e; --ta-ground: #232a22; --ta-bark-1: #8a6f5a; --ta-bark-2: #6a5444; --ta-bark-hi: #a98d76; --ta-vein: #251a14; --ta-twig: #7c6554; --ta-snow: #e9edf0; --ta-card-edge: #6b7680; }
+:root[data-theme="dark"] .tree-stage[data-season="summer"] { --ta-wash-a: #1d2819; --ta-wash-b: #1f2217; --ta-glow: #8a7a3a; }
+:root[data-theme="dark"] .tree-stage[data-season="autumn"] { --ta-wash-a: #2a2119; --ta-wash-b: #221d18; --ta-ground: #2c241b; }
+:root[data-theme="dark"] .tree-stage[data-season="winter"] { --ta-wash-a: #1b222b; --ta-wash-b: #1b1f24; --ta-ground: #222a33; }
+
+/* the art layer fills the same box as the chart, behind it */
+.ta { position: absolute; inset: 0; border-radius: 16px; overflow: hidden; pointer-events: none; z-index: 0; contain: strict; }
+.ta, .ta * { pointer-events: none; }
+.ta-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.ta-wash { position: absolute; inset: 0; background:
+  radial-gradient(120% 70% at 8% 0%, var(--ta-glow), transparent 55%),
+  linear-gradient(to bottom, var(--ta-wash-a), var(--ta-wash-b) 62%, var(--ta-ground)); }
+.tree-stage.ta-stage .tree-chart { background: transparent; z-index: 1; border-color: color-mix(in srgb, var(--ta-bark-1) 35%, var(--border)); }
+
+/* frame branches */
+.ta-branch { position: absolute; top: 0; left: 0; width: min(44%, 360px); height: auto; overflow: visible; }
+.ta-right { left: auto; right: 0; transform: scaleX(-1); }
+.ta-low { top: auto; bottom: 0; transform: scaleY(-1) scale(.6); transform-origin: left bottom; opacity: .8; }
+.ta-bark { fill: var(--ta-bark-1); }
+.ta-barkhi { fill: none; stroke: var(--ta-bark-hi); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 22 9 6 12; opacity: .55; }
+.ta-twig { fill: none; stroke: var(--ta-twig); stroke-width: 2; stroke-linecap: round; }
+.ta-snow { fill: none; stroke: var(--ta-snow); stroke-width: 3.4; stroke-linecap: round; stroke-dasharray: 26 8 14 11 5 9; opacity: 0; }
+.ta-leafbody { fill: currentColor; }
+.ta-lf { color: var(--ta-l1); }
+.ta-lf.l2 { color: var(--ta-l2); } .ta-lf.l3 { color: var(--ta-l3); }
+.ta-rib { fill: none; stroke: var(--ta-rib); stroke-width: .8; stroke-linecap: round; }
+.ta-petal { fill: var(--ta-petal); stroke: color-mix(in srgb, var(--ta-petal) 60%, #b98a96); stroke-width: .35; }
+.ta-heart { fill: var(--ta-heart); }
+.ta-bl { display: none; transform-box: fill-box; transform-origin: center; }
+
+/* what each season shows */
+.tree-stage[data-season="spring"] .ta-bl { display: inline; }
+.tree-stage[data-season="spring"] .ta-lf.mid, .tree-stage[data-season="spring"] .ta-lf.late { display: none; }
+.tree-stage[data-season="autumn"] .ta-lf.late { display: none; }
+.tree-stage[data-season="winter"] .ta-lf:not(.keep):not(.ta-accent) { display: none; }
+.tree-stage[data-season="winter"] .ta-accent.ta-lf { display: none; }
+.tree-stage[data-season="winter"] .ta-snow { opacity: .95; }
+.tree-stage[data-season="winter"] .ta-linksnow { opacity: .9; stroke-width: 2.2; }
+.tree-stage:not([data-season="winter"]) .ta-linksnow { display: none; }
+.tree-stage[data-season="spring"] .ta-accent.ta-bl { display: inline; }
+
+/* falling particles: behind the cards, never over a name */
+.ta-fall { position: absolute; inset: 0; overflow: hidden; }
+.ta-p { position: absolute; top: -30px; left: var(--x, 50%); will-change: transform; }
+.ta-pi { display: block; }
+.ta-pi svg { display: block; overflow: visible; }
+.ta-p use { color: var(--ta-l1); }
+.ta-p.c2 use { color: var(--ta-l2); } .ta-p.c3 use { color: var(--ta-l3); }
+.ta-p.k-petal use { color: var(--ta-petal); fill: var(--ta-petal); } .ta-p.k-petal use { fill: var(--ta-petal); }
+.ta-p .ta-flakebody { fill: var(--ta-snow); } .ta-p .ta-petalbody { fill: var(--ta-petal); }
+.tree-stage[data-season="winter"] .ta-p.k-flake { opacity: .9; }
+.ta-still .ta-fall { display: none; }
+
+/* motion: only when the animation is on and the page is visible. Reduced motion turns all of it off. */
+.ta-on .ta-p { animation: ta-fall var(--dur, 22s) linear var(--del, 0s) infinite; }
+.ta-on .ta-pi { animation: ta-sway var(--sd, 5s) ease-in-out infinite alternate; }
+.ta-on .ta-sway { transform-box: fill-box; transform-origin: 0 100%; animation: ta-leaf 6.5s ease-in-out var(--sl, 0s) infinite alternate; }
+.ta-on .ta-sway.sw1 { animation-duration: 8.2s; } .ta-on .ta-sway.sw2 { animation-duration: 5.4s; }
+.ta-on .ta-bl { animation: ta-bloom 1.8s cubic-bezier(.2,.7,.2,1) var(--bd, 0s) both; }
+.ta-paused .ta-p, .ta-paused .ta-pi, .ta-paused .ta-sway, .ta-paused .ta-bl { animation-play-state: paused; }
+@keyframes ta-fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(var(--dx, 40px), calc(var(--ta-h, 600px) + 60px), 0); } }
+@keyframes ta-sway { from { transform: translateX(-9px) rotate(var(--r0, -20deg)); } to { transform: translateX(11px) rotate(var(--r1, 40deg)); } }
+@keyframes ta-leaf { from { transform: rotate(-1.4deg); } to { transform: rotate(1.6deg); } }
+@keyframes ta-bloom { from { transform: scale(.25); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .ta-p, .ta-pi, .ta-sway, .ta-bl { animation: none !important; }
+  .ta-fall { display: none; }
+}
+
+/* bark under the real connectors, and the connectors themselves */
+.tree-stage .ta-bark-layer { transition: opacity .4s ease; }
+.tree-stage.ta-settling .ta-bark-layer { opacity: 0; }
+.ta-linkbark { fill: var(--ta-bark-1); stroke: var(--ta-bark-2); stroke-width: .6; stroke-linejoin: round; }
+.ta-bark-layer .ta-lf { color: var(--ta-l1); } .ta-bark-layer .ta-lf.l2 { color: var(--ta-l2); } .ta-bark-layer .ta-lf.l3 { color: var(--ta-l3); }
+.ta-bark-layer .ta-snow { stroke-dasharray: 9 7 4 10; }
+.tree-stage.ta-stage .tree-chart.f3 .link { stroke: var(--ta-vein); stroke-width: 1.4px; opacity: .85; }
+.tree-stage.ta-stage .tree-chart.f3 .link.f3-path-to-main { stroke: var(--accent); stroke-width: 2.6px; opacity: 1; }
+/* partner connectors: a dashed gold line, never bark. Parent-child connectors have bark and a thin dark line. */
+.tree-stage.ta-stage .tree-chart.f3 .link.f3-partner { stroke: var(--ta-partner); stroke-width: 2.6px; stroke-dasharray: 7 5; stroke-linecap: round; opacity: 1; }
+
+/* people: calm, opaque surfaces over the art; selection and focus do not rely on colour alone */
+.tree-stage.ta-stage .tree-chart .f3-pcard { border-color: var(--ta-card-edge); box-shadow: 0 6px 14px -9px rgba(40,25,10,.55); }
+.tree-stage.ta-stage .tree-chart .card-female .f3-pcard { background: color-mix(in srgb, #e58fb0 22%, var(--surface)); }
+.tree-stage.ta-stage .tree-chart .card-male .f3-pcard { background: color-mix(in srgb, #6fa8dc 22%, var(--surface)); }
+.tree-stage.ta-stage .tree-chart .card-genderless .f3-pcard { background: color-mix(in srgb, #b9a3e3 22%, var(--surface)); }
+.tree-chart .f3-pcard { position: relative; }
+.tree-chart .card.f3-picked .f3-pcard { outline: 3px double var(--accent); outline-offset: 3px; position: relative; }
+.tree-chart .card.f3-picked .f3-pcard::after { content: "\2713"; position: absolute; top: -9px; right: -9px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--on-accent, #fff); font-size: .8rem; font-weight: 700; line-height: 20px; text-align: center; }
+.tree-chart .f3-pcard:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; box-shadow: 0 0 0 2px var(--surface), 0 0 0 6px var(--accent); }
+
+/* appearance controls */
+.tree-look { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 8px 12px; }
+.tree-look select { min-height: 44px; max-width: 100%; }
+.tree-look [hidden] { display: none; }
+.tree-look .btn { min-height: 44px; }
+.tree-look-note { flex: 1 1 100%; margin: 0; }
+.main[data-view="tree"] .tree-look { margin-inline: 0; }
+
+/* small screens: people and navigation first, less decoration */
+@media (max-width: 600px) {
+  .ta-branch { width: 36%; }
+  .ta-low { display: none; }
+  .ta-p:nth-child(n+7) { display: none; }
+  .ta-sway.sw2 { display: none; }
+}
