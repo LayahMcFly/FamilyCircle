@@ -9,7 +9,7 @@ Update this file at every step. Continue by step number. Nothing here enables Ex
 - [x] Step 3: merged as 931ac3d; her manual checks passed (reported 2026-11-19). Sample rules only, see "Step 3" below.
 - [x] Step 4: merged as 786ba31; her manual checks passed (reported 2026-11-19)
 - [x] Step 5: design merged as afe9dbe (`EXCHANGE-BACKEND-DESIGN.md`). It is the current draft only: its section 12 decisions are unresolved and no backend deployment is authorized
-- [~] Step 6: backend code on branch `exchange-step6` (revision 2, source commit 280d5eb), awaiting review. First candidate 22a94df is withdrawn. Not merged, not uploaded, no schema created, Exchange off by default. Details in "Step 6" below.
+- [~] Step 6: backend code, revision 2 (source commit 280d5eb; branch `exchange-step6` tip 0bf99a4). The first candidate 22a94df is withdrawn. Revision 2 IS PRESENT in `main`'s history: GitHub's push record shows `main` fast-forwarded from 87b1cdd to 0bf99a4 on 2026-11-19 at 20:53 UTC. Who asked for that push and whether this exact commit was approved is UNKNOWN; being in `main` is not approval, and its review remains OPEN. Upload of the function and activation of any deployment are UNVERIFIED (no record either way; Appwrite was not checked); this document does not claim either occurred. No schema is recorded as created and Exchange is off by default (nobody is eligible, `persistenceVerified` is never set). The code is wired into the function's action table in `function/src/logic.js` but fails closed. The Pages publish does not include `function/`. Details in "Step 6" below.
 - [ ] Step 7: external changes and dedicated live tests (each needs separate approval)
 - [ ] Step 8: production release and closeout (needs release approval)
 
@@ -19,7 +19,7 @@ Lending, due dates, deposits, returns; optional priced listings; priced family-s
 ## Step 0 findings (2026-11-16, main at 149e0b1, v1.51.99.60)
 - Hub: a "Planned" card for Family Exchange already exists (hub.js). It does not navigate. Do not touch it until Step 8.
 - Preview precedent: `giving-preview/` and `recipes-publishing-preview/` are unlisted folders in the repo root, each with its own page-level CSP (connect-src none), `noindex`, a fake in-memory server and no Hub link.
-- Deployment: no Pages workflow in the repo. All four workflows are manual (`workflow_dispatch`), so a push runs nothing. GitHub Pages appears to publish from `main` directly; I cannot read the Pages settings through the proxy, so a deployment check needs your confirmation or a page fetch.
+- Deployment (corrected 2026-11-21): the "Publish site" workflow (`.github/workflows/publish-site.yml`) runs on every push to `main` (and manually). It builds the site from an explicit allowlist of website files, stamps and validates it, then publishes that one artifact to GitHub Pages; a push to `main` therefore publishes automatically, including the unlisted `exchange-preview/` folder, and never `function/`. The older statement here (no Pages workflow, four manual workflows) was true on 2026-11-16 and is obsolete. Before that workflow existed, Pages built from `main` directly. A Pages publish says nothing about whether any backend function was uploaded or activated.
 - Eligibility: there is NO approved adult mechanism for Exchange. `ageGroup` exists on profiles but "does not limit anything yet". Giving Center has its own per-family `givingAdult` flag (owner counts as adult). Production Exchange stays disabled until you choose the mechanism.
 - Messaging: family-api chat has real DMs with per-family blocks and an "allow DMs" setting. A listing could open or reuse a DM; nothing sends automatically.
 - Reporting: Giving Center has its own report table and moderators (owner or tree admin who is an adult). Chat has no report feature.
@@ -70,7 +70,7 @@ Lending, due dates, deposits, returns; optional priced listings; priced family-s
 ## Open note (2026-11-19)
 - The Hub's planned Family Exchange card text still says "listings, giveaways, services and deals". That is wider than the approved scope (free items and Wanted posts, no deals, services or payments). It needs a wording change with her approval before any release (Step 8). Not changed.
 
-## Step 6 (2026-11-19, branch exchange-step6, revision 2, source commit 280d5eb)
+## Step 6 (2026-11-19, revision 2, source commit 280d5eb; branch exchange-step6; present in main, see the checklist line above)
 Revision 2 replaces the first candidate (22a94df) after an independent inspection found backend issues. The first candidate must not be merged.
 - Files: `function/src/exchange-rules.js`, `function/src/exchange.js`, routing in `function/src/logic.js`, `function/test/exchange.test.js`, plus `EXCHANGE-SCHEMA-PROPOSAL.md` (schema and mechanism, replaces sections 2 and 3 of the design draft). No frontend, Hub, schema, Appwrite or environment change.
 - Persistence: one atomic insert per change into an append-only snapshot chain (`exchangeEvents`, UNIQUE claimKey and opKey). Nothing is applied afterwards, nothing is overwritten, a failed insert changes nothing. Full reasoning is in `EXCHANGE-SCHEMA-PROPOSAL.md`.
